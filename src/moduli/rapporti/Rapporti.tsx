@@ -3,14 +3,14 @@ import { useEffect, useRef } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import "./rapporti.css";
 
-type Props = { me: string; modifica: boolean; gestisce: boolean };
+type Props = { me: string; modifica: boolean; gestisce: boolean; clienti: boolean };
 
 async function logoBmtek(): Promise<string> {
   const blob = await (await fetch("/logo-bmtek.png")).blob();
   return new Promise((ok) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.readAsDataURL(blob); });
 }
 
-export default function Rapporti({ me, modifica, gestisce }: Props) {
+export default function Rapporti({ me, modifica, gestisce, clienti }: Props) {
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -20,7 +20,7 @@ export default function Rapporti({ me, modifica, gestisce }: Props) {
       const [{ avvia }, { creaDb }, logo] = await Promise.all([import("./app.js"), import("./dati.js"), logoBmtek()]);
       if (annullato || !root.current) return;
       ferma = avvia(root.current, {
-        me, modifica, gestisce, logo,
+        me, modifica, gestisce, clienti, logo,
         db: creaDb(supabaseBrowser()),
         jsPDF: async () => (await import("jspdf")).jsPDF,
         downloads: {
@@ -34,7 +34,7 @@ export default function Rapporti({ me, modifica, gestisce }: Props) {
       });
     })();
     return () => { annullato = true; ferma?.(); };
-  }, [me, modifica, gestisce]);
+  }, [me, modifica, gestisce, clienti]);
 
   return (
     <div className="ri" ref={root}>

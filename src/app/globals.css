@@ -84,3 +84,4 @@ select.lv-nessuno{color:var(--muted)}
   .me{flex-direction:row;flex-wrap:wrap;margin-top:0}
   main{padding:20px 16px 40px}
 }
+@media (max-width:820px){.cli-grid{grid-template-columns:minmax(0,1fr)!important}}
