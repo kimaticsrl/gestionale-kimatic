@@ -8,7 +8,19 @@ type Props = { utente: { id: string; nome: string; email: string }; livello: str
 export default function OfferteBmtek({ utente, livello }: Props) {
   const [pronto, setPronto] = useState(false);
   useEffect(() => {
-    (window as unknown as { KIMATIC_CLAUDE: unknown }).KIMATIC_CLAUDE = creaClaude({ supabase: supabaseBrowser(), utente, livello });
+    const sb = supabaseBrowser();
+    const w = window as unknown as { KIMATIC_CLAUDE: unknown; KIMATIC_CLIENTI: () => Promise<unknown[]> };
+    w.KIMATIC_CLAUDE = creaClaude({ supabase: sb, utente, livello });
+    // Elenco dell'Anagrafica clienti, usato dalla scheda offerta per compilare i dati del cliente
+    w.KIMATIC_CLIENTI = async () => {
+      const tutti: unknown[] = [];
+      for (let da = 0; ; da += 1000) {
+        const { data } = await sb.from("clienti").select("id,nome,dati").order("nome").range(da, da + 999);
+        tutti.push(...(data ?? []));
+        if (!data || data.length < 1000) break;
+      }
+      return tutti;
+    };
     setPronto(true);
   }, [utente, livello]);
   if (!pronto) return <div className="empty">Caricamento delle offerte…</div>;
