@@ -12,6 +12,7 @@ const AREE: [string, string, string[]][] = [
   ["rapporti", "Rapporti d'intervento", ["rapporti", "fatture_rapporti"]],
   ["clienti", "Anagrafica clienti", ["clienti"]],
   ["ts", "Troubleshooting", ["ts_casi", "ts_liste"]],
+  ["lettere", "Lettere d'impegno", ["impostazioni"]],
   ["utenti", "Utenti e permessi", ["permessi", "profilo_ruoli", "profili", "regole_propri"]],
 ];
 const AREA_DI: Record<string, string> = Object.fromEntries(AREE.flatMap(([, n, t]) => t.map((x) => [x, n])));
@@ -85,6 +86,7 @@ export default function Registro() {
       case "clienti": return `Cliente ${s(r.nome)}`;
       case "ts_casi": return `Caso ${s(d.titolo) || s(r.id)}`;
       case "ts_liste": return `Elenco ${s(r.id)}`;
+      case "impostazioni": return `Impostazioni ${s(r.id)}`;
       case "permessi": return `Permesso ${s(r.ruolo_id)} → ${s(r.modulo_id)}: ${s(r.livello)}`;
       case "profilo_ruoli": return `Ruolo ${s(r.ruolo_id)} a ${nomeDi(s(r.profilo_id))}`;
       case "profili": return `Utente ${s(r.nome) || s(r.email)}`;

@@ -11,7 +11,7 @@ await db.exec(`
   alter table storage.objects enable row level security;
   create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('test.uid', true), '')::uuid $$;
   grant usage on schema public, auth to authenticated; grant execute on function auth.uid() to authenticated;`);
-for (const f of ['0001_base.sql', '0002_rapporti_intervento.sql', '0004_troubleshooting.sql', '0006_offerte_bmtek.sql', '0008_anagrafica_clienti.sql', '0010_registro_modifiche.sql'])
+for (const f of ['0001_base.sql', '0002_rapporti_intervento.sql', '0004_troubleshooting.sql', '0006_offerte_bmtek.sql', '0008_anagrafica_clienti.sql', '0010_registro_modifiche.sql', '0011_lettere_impegno.sql'])
   await db.exec(fs.readFileSync('supabase/migrations/' + f, 'utf8'));
 await db.exec(`grant select, insert, update, delete on all tables in schema public to authenticated;`);
 const ok = (c, m) => { console.log((c ? 'OK  ' : 'ERR ') + m); if (!c) process.exitCode = 1; };
@@ -53,3 +53,11 @@ await as(com, async () => {
   const r = await q(`select count(*)::int n from registro_modifiche`);
   ok(r.rows[0].n === 0, 'solo gli amministratori leggono il registro');
 });
+
+// Lettere d'impegno: impostazioni condivise
+await as(sara, async () => { await q(`insert into impostazioni(id,modulo_id,dati) values ('lettere-impegno/minimi','lettere-impegno','{"1":1700}')`); });
+await as(com, async () => {
+  ok((await q(`select count(*)::int n from impostazioni`)).rows[0].n === 0, 'il Commerciale non vede le impostazioni delle Lettere');
+  const r = await q(`update impostazioni set dati='{}'`); ok(r.affectedRows === 0, 'il Commerciale non le modifica');
+});
+ok((await q(`select migrato from moduli where id='lettere-impegno'`)).rows[0].migrato === true, 'Lettere d\'impegno segnato come migrato');
