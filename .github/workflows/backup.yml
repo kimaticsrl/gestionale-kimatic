@@ -16,26 +16,43 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: supabase/setup-cli@v1
-        with:
-          version: latest
+      - name: Installa pg_dump
+        run: |
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y >/dev/null
+          sudo apt-get install -y -qq postgresql-client-18 >/dev/null
+          /usr/lib/postgresql/18/bin/pg_dump --version
 
       - name: Copia del database
         env:
           DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
-          DB_URL="$(printf '%s' "$DB_URL" | tr -d '[:space:]')"
-          echo "::add-mask::$DB_URL"
-          if [ -z "$DB_URL" ]; then echo "Manca il segreto SUPABASE_DB_URL"; exit 1; fi
-          case "$DB_URL" in *"["*|*"]"*) echo "Nel segreto SUPABASE_DB_URL ci sono ancora le parentesi quadre: toglile"; exit 1;; esac
-          set -o pipefail
-          # Forma dell'indirizzo, con lettere e numeri nascosti (serve solo a capire gli errori)
-          printf '%s' "$DB_URL" | sed -E 's#^(postgres(ql)?://postgres\.[a-z]+):[^@]*@#\1:<password>@#' | sed -E 's#<password>#PW#; s#[A-Za-z0-9]#x#g'; echo
-          pulisci() { sed -E 's#postgres(ql)?://[^[:space:]]*#<indirizzo nascosto>#g; s#password=[^[:space:]]*#password=<nascosta>#g'; }
+          # Scompone l'indirizzo in host, porta, utente e password senza mai stamparlo
+          python3 - <<'PY'
+          import os, re, sys, urllib.parse as u
+          s = re.sub(r"\s+", "", os.environ.get("DB_URL", ""))
+          m = re.match(r"^postgres(?:ql)?://([^:]+):(.*)@([^@/:]+):(\d+)/([^?]*)", s)
+          if not m:
+              print("::error::Il segreto SUPABASE_DB_URL non ha la forma postgresql://utente:password@host:porta/postgres", file=sys.stdout)
+              sys.exit(1)
+          utente, pw, host, porta, db = m.groups()
+          pw = u.unquote(pw)
+          if pw.startswith("[") and pw.endswith("]"):
+              print("::error::Nel segreto ci sono ancora le parentesi quadre intorno alla password", file=sys.stdout)
+              sys.exit(1)
+          print(f"::add-mask::{pw}")
+          with open(os.environ["GITHUB_ENV"], "a") as f:
+              for k, v in dict(PGHOST=host, PGPORT=porta, PGUSER=utente, PGPASSWORD=pw, PGDATABASE=db or "postgres").items():
+                  f.write(f"{k}={v}\n")
+          PY
+
+      - name: Esporta
+        run: |
+          D=/usr/lib/postgresql/18/bin
           mkdir backup
-          supabase db dump --db-url "$DB_URL" -f backup/1_ruoli.sql --role-only 2>&1 | pulisci
-          supabase db dump --db-url "$DB_URL" -f backup/2_struttura.sql 2>&1 | pulisci
-          supabase db dump --db-url "$DB_URL" -f backup/3_dati.sql --use-copy --data-only 2>&1 | pulisci
+          # Copia completa, da ripristinare con pg_restore
+          $D/pg_dump -Fc --no-owner --no-privileges -n public -n auth -n storage -f backup/gestionale.dump
+          # Copia leggibile dei soli dati del gestionale
+          $D/pg_dump --data-only --no-owner -n public -f backup/dati_gestionale.sql
           ls -la backup
           echo "GIORNO=$(TZ=Europe/Rome date +%F)" >> "$GITHUB_ENV"
 
