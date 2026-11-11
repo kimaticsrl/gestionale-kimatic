@@ -44,3 +44,4 @@ node scripts/test-rapporti.mjs                                   # prova le rego
 | Modulo | Pagina | Note |
 | --- | --- | --- |
 | Rapporti d'intervento | `/moduli/rapporti-intervento` | Il Tecnico service vede e modifica solo i propri rapporti; dopo la firma del cliente il rapporto è bloccato (solo chi Gestisce lo riapre). La fatturazione e l'anagrafica clienti sono di chi Gestisce. |
+| Kimatic Troubleshooting | `/moduli/troubleshooting` | Foto e PDF nell'archivio file privato `troubleshooting` di Supabase. Elimina un caso chi Gestisce o chi l'ha creato. Import da email/WhatsApp e traduzione automatica non ancora attivi (richiedono Claude via API). |
