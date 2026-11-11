@@ -24,9 +24,12 @@ jobs:
         env:
           DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
+          DB_URL="$(printf '%s' "$DB_URL" | tr -d '[:space:]')"
+          echo "::add-mask::$DB_URL"
           if [ -z "$DB_URL" ]; then echo "Manca il segreto SUPABASE_DB_URL"; exit 1; fi
+          case "$DB_URL" in *"["*|*"]"*) echo "Nel segreto SUPABASE_DB_URL ci sono ancora le parentesi quadre: toglile"; exit 1;; esac
           mkdir backup
-          supabase db dump --db-url "$DB_URL" -f backup/1_ruoli.sql --role-only
+          supabase db dump --db-url "$DB_URL" -f backup/1_ruoli.sql --role-only >/dev/null 2>&1 || { echo "Copia non riuscita: controlla indirizzo e password nel segreto SUPABASE_DB_URL"; exit 1; }
           supabase db dump --db-url "$DB_URL" -f backup/2_struttura.sql
           supabase db dump --db-url "$DB_URL" -f backup/3_dati.sql --use-copy --data-only
           ls -la backup
