@@ -1,0 +1,39 @@
+# Backup notturno del database Supabase.
+# Serve il segreto SUPABASE_DB_URL (Settings → Secrets and variables → Actions):
+# la stringa «Session pooler» di Supabase (pulsante Connect), con la password del database.
+name: Backup notturno
+
+on:
+  schedule:
+    - cron: "17 1 * * *"   # ogni notte alle 2:17 (ora italiana d'inverno)
+  workflow_dispatch: {}    # e a mano, dal pulsante «Run workflow»
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Copia del database
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$DB_URL" ]; then echo "Manca il segreto SUPABASE_DB_URL"; exit 1; fi
+          mkdir backup
+          supabase db dump --db-url "$DB_URL" -f backup/1_ruoli.sql --role-only
+          supabase db dump --db-url "$DB_URL" -f backup/2_struttura.sql
+          supabase db dump --db-url "$DB_URL" -f backup/3_dati.sql --use-copy --data-only
+          ls -la backup
+          echo "GIORNO=$(TZ=Europe/Rome date +%F)" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backup-${{ env.GIORNO }}
+          path: backup/
+          retention-days: 30

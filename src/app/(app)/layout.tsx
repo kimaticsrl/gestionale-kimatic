@@ -18,7 +18,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ...(reparti ?? [])
       .filter((r) => mods.some((m) => m.reparto_id === r.id))
       .map((r) => ({ href: `/reparto/${r.id}`, label: r.nome, colore: `var(--${r.id})`, n: mods.filter((m) => m.reparto_id === r.id).length })),
-    ...(admin ? ["sep" as const, { href: "/admin/utenti", label: "Utenti" }, { href: "/admin/permessi", label: "Permessi" }] : []),
+    ...(admin ? ["sep" as const, { href: "/admin/utenti", label: "Utenti" }, { href: "/admin/permessi", label: "Permessi" }, { href: "/admin/backup", label: "Backup" }] : []),
   ];
 
   return (
