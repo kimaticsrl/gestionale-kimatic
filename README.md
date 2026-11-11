@@ -25,7 +25,7 @@ la prima volta si entra da «Primo accesso» e si sceglie una password.
 
 ## Prima installazione
 
-1. Supabase → SQL Editor: eseguire `supabase/migrations/0001_base.sql`.
+1. Supabase → SQL Editor: eseguire in ordine i file in `supabase/migrations/`.
 2. Supabase → Authentication → Sign In / Providers → Email: disattivare «Confirm email».
 3. Vercel: importare il repository e impostare le variabili di `.env.example`.
 
@@ -36,4 +36,11 @@ cp .env.example .env.local
 npm install
 npm run dev
 node scripts/test-schema.mjs supabase/migrations/0001_base.sql   # prova le regole di accesso
+node scripts/test-rapporti.mjs                                   # prova le regole dei Rapporti d'intervento
 ```
+
+## Moduli migrati
+
+| Modulo | Pagina | Note |
+| --- | --- | --- |
+| Rapporti d'intervento | `/moduli/rapporti-intervento` | Il Tecnico service vede e modifica solo i propri rapporti; dopo la firma del cliente il rapporto è bloccato (solo chi Gestisce lo riapre). La fatturazione e l'anagrafica clienti sono di chi Gestisce. |
