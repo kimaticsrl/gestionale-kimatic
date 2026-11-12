@@ -1,0 +1,28 @@
+/* Modulo Non conformità fornitori */
+.nc .fl{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px 12px}
+.nc label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);font-weight:500;min-width:0}
+.nc label.f.w{grid-column:1/-1}
+.nc input,.nc select,.nc textarea{font:inherit;font-size:14.5px;color:var(--fg);padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--surface);width:100%;min-width:0}
+.nc textarea{min-height:70px;resize:vertical}
+.nc input:disabled,.nc select:disabled,.nc textarea:disabled{background:var(--bg);color:var(--fg);opacity:1}
+.nc .stati{display:flex;flex-wrap:wrap;gap:6px}
+.nc .stati button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 12px;cursor:pointer;font-size:13px}
+.nc .stati button[aria-pressed=true]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.nc .st{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.nc .st-aperta{background:color-mix(in srgb,var(--danger) 18%,transparent)}
+.nc .st-in-gestione{background:color-mix(in srgb,var(--pro) 25%,transparent)}
+.nc .st-attesa-fornitore{background:color-mix(in srgb,var(--acq) 22%,transparent)}
+.nc .st-chiusa{background:color-mix(in srgb,var(--ok) 22%,transparent)}
+.nc .st-annullata{background:transparent;border:1px solid var(--line);color:var(--muted)}
+.nc .g-critica{color:var(--danger);font-weight:600}
+.nc tbody tr{cursor:pointer}
+.nc tbody tr:hover{background:var(--bg)}
+.nc .foto{display:flex;flex-wrap:wrap;gap:8px}
+.nc .foto figure{margin:0;position:relative;width:120px;height:90px;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--bg)}
+.nc .foto img{width:100%;height:100%;object-fit:cover;display:block}
+.nc .foto button{position:absolute;top:3px;right:3px;border:0;border-radius:4px;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;font-size:12px;padding:1px 6px}
+.nc .sez{display:flex;flex-direction:column;gap:12px}
+.nc .sez h2{display:flex;align-items:center;gap:8px}
+.nc .nota{font-size:13px;color:var(--muted);margin:0}
+.nc .tot{font-family:var(--f-mono);font-weight:600}
+@media (max-width:640px){.nc .hide-s{display:none}}

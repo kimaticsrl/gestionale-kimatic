@@ -8,9 +8,9 @@ const TABELLE: [string, string][] = [
   ["reparti", "id"], ["moduli", "id"], ["ruoli", "id"], ["permessi", "ruolo_id"], ["regole_propri", "modulo_id"],
   ["profili", "id"], ["profilo_ruoli", "profilo_id"], ["inviti", "email"],
   ["clienti", "id"], ["rapporti", "id"], ["fatture_rapporti", "rapporto_id"],
-  ["ts_casi", "id"], ["ts_liste", "id"], ["bm_docs", "id"], ["cost_docs", "id"], ["impostazioni", "id"], ["registro_modifiche", "id"],
+  ["ts_casi", "id"], ["ts_liste", "id"], ["bm_docs", "id"], ["cost_docs", "id"], ["nc", "id"], ["impostazioni", "id"], ["registro_modifiche", "id"],
 ];
-const ARCHIVI = ["troubleshooting"];
+const ARCHIVI = ["troubleshooting", "non-conformita"];
 
 export default function Backup() {
   const [foto, setFoto] = useState(true);
