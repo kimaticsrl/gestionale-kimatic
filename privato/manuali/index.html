@@ -1,0 +1,406 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<script>/* Gestionale Kimatic: catalogo, PDF, utente e download arrivano dal gestionale (pagina che contiene il modulo) */
+window.claude=(window.parent&&window.parent.KIMATIC_MAN)||{use:async function(){return null}};
+</script>
+<title>Catalogo manuali BMTEK</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: technical-register sheet — header strip, category tabs, one matrix per category (machines × languages) */
+:root{
+  --bg:#f3f5f8; --surface:#ffffff; --ink:#152033; --muted:#5d6a7e; --line:#d7dde6; --line-strong:#b7c1cf;
+  --accent:#1f5fae; --accent-soft:#e3ecf8;
+  --ok:#1d7a46; --ok-bg:#e2f3e8; --draft:#9a6200; --draft-bg:#fdf0d5; --old:#b42318; --old-bg:#fde4e1;
+  --orig:#1f5fae; --orig-bg:#e3ecf8; --empty:#8a95a6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif; --f-body:"Public Sans","Segoe UI",Arial,sans-serif; --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1520; --surface:#172030; --ink:#e6ebf3; --muted:#9aa7ba; --line:#2a364a; --line-strong:#3c4a61;
+  --accent:#6ea3ec; --accent-soft:#1d2d47;
+  --ok:#6fd39a; --ok-bg:#163526; --draft:#f0bc5e; --draft-bg:#3a2c10; --old:#ff8a7f; --old-bg:#3f1a17;
+  --orig:#8cb8f2; --orig-bg:#1d2d47; --empty:#6c788b; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1520; --surface:#172030; --ink:#e6ebf3; --muted:#9aa7ba; --line:#2a364a; --line-strong:#3c4a61;
+  --accent:#6ea3ec; --accent-soft:#1d2d47;
+  --ok:#6fd39a; --ok-bg:#163526; --draft:#f0bc5e; --draft-bg:#3a2c10; --old:#ff8a7f; --old-bg:#3f1a17;
+  --orig:#8cb8f2; --orig-bg:#1d2d47; --empty:#6c788b; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45}
+.wrap{max-width:1180px;margin:0 auto;padding-block:28px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:22px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;border-bottom:2px solid var(--ink);padding-bottom:14px}
+.eyebrow{font-family:var(--f-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+h1{font-family:var(--f-display);font-weight:800;font-size:clamp(26px,4vw,36px);margin:4px 0 0;letter-spacing:-.01em;text-wrap:balance}
+.stats{display:flex;gap:22px;flex-wrap:wrap}
+.stat{display:flex;flex-direction:column}
+.stat b{font-family:var(--f-display);font-size:26px;font-variant-numeric:tabular-nums;line-height:1}
+.stat span{font-size:12px;color:var(--muted)}
+.stat.alert b{color:var(--old)}
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{font:600 13px var(--f-body);letter-spacing:.04em;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);padding:7px 12px;border-radius:4px;cursor:pointer}
+.tab[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.tab .n{font-family:var(--f-mono);font-weight:500;opacity:.7;margin-left:6px}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-radius:4px;padding:7px 10px;min-width:0}
+input:focus-visible,select:focus-visible,button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn{font:600 13px var(--f-body);border:1px solid var(--accent);background:var(--accent);color:#fff;padding:8px 14px;border-radius:4px;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--accent)}
+.btn.danger{background:transparent;color:var(--old);border-color:var(--old)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.dot{width:10px;height:10px;border-radius:2px;display:inline-block}
+#list{display:flex;flex-direction:column;gap:44px}
+section.cat{display:flex;flex-direction:column;gap:10px}
+section.cat h2{font-family:var(--f-display);font-weight:800;font-size:19px;letter-spacing:.12em;margin:0;display:flex;align-items:baseline;gap:12px;padding:10px 0 8px;border-top:3px solid var(--ink);border-bottom:1px solid var(--line-strong)}
+section.cat h2 small{font-family:var(--f-mono);font-weight:500;font-size:12px;letter-spacing:0;color:var(--muted)}
+section.cat h2 .catedit{margin-left:auto;font-family:var(--f-body);font-size:12px;letter-spacing:0;font-weight:600}
+.tablebox{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:6px}
+table{border-collapse:collapse;width:100%;min-width:560px}
+th,td{border-bottom:1px solid var(--line);padding:9px 10px;text-align:left;vertical-align:middle}
+thead th{font:600 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);background:var(--bg);white-space:nowrap}
+thead th.lang{text-align:center;width:88px}
+tbody tr:last-child td{border-bottom:0}
+td.model{min-width:180px}
+td.model b{font-family:var(--f-display);font-weight:700;font-size:15px;display:block}
+td.model .code{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+td.model button{all:unset;cursor:pointer;display:block}
+td.model button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+td.note{font-size:13px;color:var(--muted);min-width:140px}
+td.lc{text-align:center;padding:6px}
+.chip{all:unset;box-sizing:border-box;cursor:pointer;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;width:74px;min-height:42px;border-radius:4px;border:1px solid transparent;font-family:var(--f-mono);font-size:13px;font-variant-numeric:tabular-nums;line-height:1.1}
+.chip small{font-family:var(--f-body);font-size:10.5px;opacity:.85;margin-top:2px}
+.chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.s-originale{background:var(--orig-bg);color:var(--orig);border-color:var(--orig)}
+.s-ok{background:var(--ok-bg);color:var(--ok)}
+.s-bozza{background:var(--draft-bg);color:var(--draft)}
+.s-aggiornare{background:var(--old-bg);color:var(--old)}
+.s-vuota{color:var(--empty);border:1px dashed var(--line-strong)}
+.chip.behind{box-shadow:inset 0 -3px 0 var(--old)}
+.chip .pdf{font-family:var(--f-mono);font-size:9px;letter-spacing:.06em;margin-top:2px;padding:0 4px;border-radius:2px;background:currentColor}
+.chip .pdf b{color:var(--surface);font-weight:500}
+.views{display:flex;gap:0;border:1px solid var(--line-strong);border-radius:4px;overflow:hidden}
+.views button{font:600 12px var(--f-body);border:0;background:var(--surface);color:var(--muted);padding:7px 12px;cursor:pointer}
+.views button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
+.filebox{border:1px solid var(--line);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:8px;background:var(--bg)}
+.filebox .fname{font-family:var(--f-mono);font-size:12px;word-break:break-all}
+.filebox .fbtns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.filebox a{color:var(--accent);font-size:13px;font-weight:600}
+.hist{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+.hist div{display:flex;justify-content:space-between;gap:8px;align-items:center}
+td.mono{font-family:var(--f-mono);font-size:12px;white-space:nowrap}
+td.dl{white-space:nowrap}
+.linkbtn{all:unset;cursor:pointer;color:var(--accent);font-weight:600;font-size:13px}
+.linkbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.empty{background:var(--surface);border:1px dashed var(--line-strong);border-radius:6px;padding:28px;text-align:center;color:var(--muted)}
+.panel{position:fixed;inset:0;background:rgba(10,16,26,.45);display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}
+.card{background:var(--surface);color:var(--ink);border-radius:8px;max-width:440px;width:100%;padding:20px;display:flex;flex-direction:column;gap:12px;border:1px solid var(--line-strong)}
+.card h3{font-family:var(--f-display);margin:0;font-size:19px}
+.card label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:600}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.card .foot{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:4px}
+.msg{font-size:13px;color:var(--old);min-height:1em}
+.banner{font-size:13px;background:var(--accent-soft);color:var(--ink);padding:10px 12px;border-radius:4px}
+@media (max-width:520px){.row2{grid-template-columns:1fr}.stats{gap:16px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Kimatic · Documentazione tecnica</div>
+      <h1>Catalogo manuali BMTEK</h1>
+    </div>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <div class="banner" id="banner" hidden></div>
+
+  <div class="toolbar">
+    <div class="tabs" id="tabs" role="toolbar" aria-label="Categorie"></div>
+    <div class="actions">
+      <div class="views" role="group" aria-label="Vista">
+        <button id="vTab" aria-pressed="true">Tabella lingue</button>
+        <button id="vArc" aria-pressed="false">Archivio PDF</button>
+      </div>
+      <input id="q" type="search" placeholder="Cerca macchina…" aria-label="Cerca macchina">
+      <button class="btn" id="addMachine">+ Macchina</button>
+      <button class="btn ghost" id="addCat">+ Categoria</button>
+      <button class="btn ghost" id="addLang">+ Lingua</button>
+    </div>
+  </div>
+
+  <div class="legend" aria-label="Legenda stati">
+    <span><i class="dot s-originale" style="border:1px solid"></i>Originale</span>
+    <span><i class="dot s-ok"></i>Tradotto / approvato</span>
+    <span><i class="dot s-bozza"></i>Bozza da revisionare</span>
+    <span><i class="dot s-aggiornare"></i>Da aggiornare</span>
+    <span><i class="dot" style="box-shadow:inset 0 -3px 0 var(--old);background:var(--line)"></i>Revisione più vecchia dell'originale</span>
+  </div>
+
+  <main id="list"><div class="empty">Caricamento del catalogo…</div></main>
+</div>
+
+<div class="panel" id="panel" hidden>
+  <form class="card" id="form"></form>
+</div>
+
+<script>
+const STATI = {originale:"Originale", ok:"Tradotto", bozza:"Bozza", aggiornare:"Da aggiornare"};
+let db = null, readOnly = false, assets = null, downloads = null, view = "tab";
+const fmtSize = b => b ? (b/1048576).toFixed(1).replace(".", ",") + " MB" : "";
+async function downloadPdf(pdf, btn){
+  const label = btn?.textContent;
+  try {
+    if (btn) { btn.disabled = true; btn.textContent = "Preparo il file…"; }
+    const res = await fetch("/api/manuali/" + pdf.id);
+    if (!res.ok) throw new Error("File non trovato nell'archivio.");
+    const blob = await res.blob();
+    if (!downloads) throw new Error("Download non disponibile in questa vista: usa “Apri”.");
+    await downloads.save({filename: pdf.nome || "manuale.pdf", data: blob});
+  } catch (e) {
+    if (e?.code === "declined") return;
+    alertMsg(e?.message || "Download non riuscito.");
+  } finally { if (btn) { btn.disabled = false; btn.textContent = label; } }
+}
+function alertMsg(t){ const b = $("#banner"); b.hidden = false; b.textContent = t; }
+let config = {categorie: [], lingue: ["IT","EN"]};
+let machines = [];
+let activeCat = "TUTTE";
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const revNum = r => { const n = parseInt(String(r||"").replace(/\D/g,""),10); return isNaN(n) ? null : n; };
+
+function origLang(m){ return m.originale || "IT"; }
+function behind(m, L){
+  const o = m.lingue?.[origLang(m)], c = m.lingue?.[L];
+  if (!o || !c || L === origLang(m)) return false;
+  const a = revNum(o.rev), b = revNum(c.rev);
+  return a !== null && b !== null && b < a;
+}
+
+function render(){
+  const q = $("#q").value.trim().toLowerCase();
+  const cats = [...config.categorie];
+  machines.forEach(m => { if (m.categoria && !cats.includes(m.categoria)) cats.push(m.categoria); });
+  const langs = [...config.lingue];
+  machines.forEach(m => Object.keys(m.lingue||{}).forEach(L => { if (!langs.includes(L)) langs.push(L); }));
+  // stats
+  let nTr = 0, nOld = 0;
+  machines.forEach(m => Object.entries(m.lingue||{}).forEach(([L,v]) => { nTr++; if (v.stato==="aggiornare" || behind(m,L)) nOld++; }));
+  $("#stats").innerHTML = `
+    <div class="stat"><b>${machines.length}</b><span>macchine</span></div>
+    <div class="stat"><b>${cats.length}</b><span>categorie</span></div>
+    <div class="stat"><b>${nTr}</b><span>manuali per lingua</span></div>
+    <div class="stat ${nOld? "alert":""}"><b>${nOld}</b><span>da aggiornare</span></div>`;
+  // tabs
+  const counts = c => machines.filter(m => m.categoria === c).length;
+  $("#tabs").innerHTML = [["TUTTE", machines.length], ...cats.map(c => [c, counts(c)])]
+    .map(([c,n]) => `<button class="tab" data-cat="${esc(c)}" aria-pressed="${c===activeCat}">${esc(c)}<span class="n">${n}</span></button>`).join("");
+  // list
+  const show = activeCat === "TUTTE" ? cats : cats.filter(c => c === activeCat);
+  $("#vTab").setAttribute("aria-pressed", view === "tab"); $("#vArc").setAttribute("aria-pressed", view === "arc");
+  if (view === "arc") { renderArchive(show, langs, q); ["#addMachine","#addCat","#addLang"].forEach(s => $(s).disabled = readOnly || !db); return; }
+  const html = show.map(c => {
+    const ms = machines.filter(m => m.categoria === c && (!q || (m.modello+" "+(m.codice||"")+" "+(m.note||"")).toLowerCase().includes(q)))
+      .sort((a,b) => a.modello.localeCompare(b.modello));
+    if (q && !ms.length) return "";
+    const body = ms.length ? ms.map(m => `<tr>
+        <td class="model"><button data-edit="${esc(m.id)}" title="Modifica macchina"><b>${esc(m.modello)}</b><span class="code">${esc(m.codice||"")}</span></button></td>
+        ${langs.map(L => { const v = m.lingue?.[L];
+          if (!v) return `<td class="lc"><button class="chip s-vuota" data-cell="${esc(m.id)}|${esc(L)}" aria-label="${esc(m.modello)} ${L}: non disponibile">—</button></td>`;
+          const b = behind(m,L);
+          return `<td class="lc"><button class="chip s-${esc(v.stato||"ok")}${b?" behind":""}" data-cell="${esc(m.id)}|${esc(L)}" title="${esc(STATI[v.stato]||"")}${v.data?" · "+esc(v.data):""}${b?" · revisione più vecchia dell'originale":""}${v.note?" · "+esc(v.note):""}">rev ${esc(v.rev||"?")}<small>${esc(v.data||STATI[v.stato]||"")}</small>${v.pdf?`<span class="pdf"><b>PDF</b></span>`:""}</button></td>`; }).join("")}
+        <td class="note">${esc(m.note||"")}</td></tr>`).join("")
+      : `<tr><td colspan="${langs.length+2}" style="color:var(--muted);font-size:13px">Nessuna macchina in questa categoria. Usa “+ Macchina” per aggiungerne una.</td></tr>`;
+    return `<section class="cat"><h2>${esc(c)} <small>${ms.length} ${ms.length===1?"macchina":"macchine"}</small>${db && !readOnly ? `<button class="linkbtn catedit" data-catedit="${esc(c)}" aria-label="Modifica categoria ${esc(c)}">Modifica</button>` : ""}</h2>
+      <div class="tablebox"><table><thead><tr><th>Macchina</th>${langs.map(L=>`<th class="lang">${esc(L)}</th>`).join("")}<th>Note</th></tr></thead><tbody>${body}</tbody></table></div></section>`;
+  }).join("");
+  $("#list").innerHTML = html || (machines.length || cats.length
+      ? `<div class="empty">Nessun risultato per “${esc(q)}”.</div>`
+      : `<div class="empty">Il catalogo è vuoto. Aggiungi una categoria e poi la prima macchina.</div>`);
+  ["#addMachine","#addCat","#addLang"].forEach(s => $(s).disabled = readOnly || !db);
+}
+
+function renderArchive(show, langs, q){
+  const rows = [];
+  machines.filter(m => show.includes(m.categoria) && (!q || (m.modello+" "+(m.codice||"")).toLowerCase().includes(q)))
+    .sort((a,b) => (a.categoria+a.modello).localeCompare(b.categoria+b.modello))
+    .forEach(m => langs.forEach(L => { const v = m.lingue?.[L]; if (!v) return;
+      if (v.pdf) rows.push({m, L, rev: v.rev, data: v.data, stato: STATI[v.stato] || "", pdf: v.pdf, cur: true});
+      (v.storico || []).forEach(h => h.pdf && rows.push({m, L, rev: h.rev, data: h.data, stato: "Revisione superata", pdf: h.pdf, cur: false}));
+    }));
+  if (!rows.length) { $("#list").innerHTML = `<div class="empty">Nessun PDF in archivio${q?" per questa ricerca":""}. Apri una casella lingua nella “Tabella lingue” e carica il PDF del manuale.</div>`; return; }
+  $("#list").innerHTML = `<section class="cat"><h2>ARCHIVIO PDF <small>${rows.length} file</small></h2><div class="tablebox"><table>
+    <thead><tr><th>Categoria</th><th>Macchina</th><th>Lingua</th><th>Rev.</th><th>Data</th><th>Stato</th><th>File</th><th></th></tr></thead><tbody>
+    ${rows.map((r,i) => `<tr${r.cur?"":` style="opacity:.7"`}><td class="mono">${esc(r.m.categoria)}</td><td class="model"><b>${esc(r.m.modello)}</b><span class="code">${esc(r.m.codice||"")}</span></td>
+      <td class="mono">${esc(r.L)}</td><td class="mono">${esc(r.rev)}</td><td class="mono">${esc(r.data||"")}</td><td style="font-size:13px">${esc(r.stato)}</td>
+      <td class="mono">${esc(r.pdf.nome||"")}<br><span style="color:var(--muted)">${fmtSize(r.pdf.size)}</span></td>
+      <td class="dl"><button class="linkbtn" data-dl="${i}">Scarica</button> · <a class="linkbtn" href="/api/manuali/${esc(r.pdf.id)}" target="_blank" rel="noopener">Apri</a></td></tr>`).join("")}
+    </tbody></table></div></section>`;
+  $("#list").querySelectorAll("[data-dl]").forEach(b => b.onclick = () => downloadPdf(rows[+b.dataset.dl].pdf, b));
+}
+
+function openPanel(html, onSubmit){
+  const f = $("#form"); f.innerHTML = html + `<div class="msg" id="msg"></div>`;
+  $("#panel").hidden = false;
+  f.querySelector("input,select")?.focus();
+  f.onsubmit = async e => { e.preventDefault();
+    const sb = f.querySelector("button:not([type])"); if (sb) sb.disabled = true;
+    try { await onSubmit(new FormData(f)); closePanel(); }
+    catch(err){ $("#msg").style.color = ""; $("#msg").textContent = errText(err); if (sb) sb.disabled = false; if (err?.code === "invalid_argument") { readOnly = true; render(); } } };
+  f.querySelector("[data-close]")?.addEventListener("click", closePanel);
+}
+function closePanel(){ $("#panel").hidden = true; $("#form").innerHTML = ""; }
+function errText(e){
+  if (e?.code === "invalid_argument") return "Non hai i permessi per modificare il catalogo.";
+  if (e?.code === "quota_exceeded") return "Spazio del catalogo esaurito: elimina qualche voce.";
+  return e?.message || "Salvataggio non riuscito, riprova.";
+}
+const foot = (extra="") => `<div class="foot"><div>${extra}</div><div style="display:flex;gap:8px"><button type="button" class="btn ghost" data-close>Annulla</button><button class="btn" ${readOnly?"disabled":""}>Salva</button></div></div>`;
+
+function editCell(id, L){
+  const m = machines.find(x => x.id === id); if (!m) return;
+  const v = m.lingue?.[L] || {rev: m.lingue?.[origLang(m)]?.rev || "01", data:"", stato:"bozza", note:""};
+  const exists = !!m.lingue?.[L];
+  openPanel(`<h3>${esc(m.modello)} · ${esc(L)}</h3>
+    <div class="row2"><label>Revisione<input name="rev" required value="${esc(v.rev)}"></label>
+    <label>Data<input name="data" placeholder="mm - aaaa" value="${esc(v.data)}"></label></div>
+    <label>Stato<select name="stato">${Object.entries(STATI).map(([k,t])=>`<option value="${k}" ${k===v.stato?"selected":""}>${t}</option>`).join("")}</select></label>
+    <label>Note<input name="note" value="${esc(v.note||"")}"></label>
+    <div class="filebox">
+      ${v.pdf ? `<div class="fname">${esc(v.pdf.nome||"manuale.pdf")} · ${fmtSize(v.pdf.size)}</div>
+        <div class="fbtns"><button type="button" class="btn" id="dlpdf">Scarica PDF</button><a href="/api/manuali/${esc(v.pdf.id)}" target="_blank" rel="noopener">Apri in una nuova scheda</a></div>`
+        : `<div style="font-size:13px;color:var(--muted)">Nessun PDF in archivio per questa lingua.</div>`}
+      ${assets && !readOnly ? `<label>${v.pdf ? "Sostituisci con un nuovo PDF" : "Carica il PDF del manuale"}<input type="file" name="file" accept="application/pdf,.pdf"></label>
+        <div style="font-size:12px;color:var(--muted)">Se cambi il numero di revisione, il PDF precedente resta nello storico.</div>` : ""}
+      ${(v.storico||[]).length ? `<div class="hist"><b>Revisioni precedenti</b>${v.storico.map((h,k) => `<div><span>rev ${esc(h.rev)} · ${esc(h.data||"")}</span>${h.pdf?`<button type="button" class="linkbtn" data-hist="${k}">Scarica</button>`:""}</div>`).join("")}</div>` : ""}
+    </div>
+    ${foot(exists && !readOnly ? `<button type="button" class="btn danger" id="del">Rimuovi lingua</button>` : "")}`,
+    async fd => {
+      const lingue = JSON.parse(JSON.stringify(m.lingue||{}));
+      const prev = lingue[L] || {};
+      const next = {...prev, rev: fd.get("rev").trim(), data: fd.get("data").trim(), stato: fd.get("stato"), note: fd.get("note").trim()};
+      const file = fd.get("file");
+      if (file && file.size) {
+        if (file.type && file.type !== "application/pdf") throw new Error("Carica un file PDF.");
+        $("#msg").style.color = "var(--muted)"; $("#msg").textContent = "Caricamento del PDF in corso…";
+        let up;
+        try { up = await assets.upload(file, {type: "application/pdf"}); }
+        catch (e) { $("#msg").style.color = ""; throw new Error(e?.code === "too_large" ? "Il PDF supera 50 MB: comprimilo e riprova." : e?.code === "quota_or_state" ? "Spazio dell'archivio esaurito." : "Caricamento non riuscito, riprova."); }
+        if (prev.pdf && prev.rev !== next.rev) next.storico = [{rev: prev.rev, data: prev.data || "", pdf: prev.pdf}, ...(prev.storico || [])];
+        next.pdf = {id: up.id, nome: file.name, size: up.sizeBytes};
+      }
+      lingue[L] = next;
+      await db.doc("macchine/"+id).update({lingue, aggiornato: new Date().toISOString()});
+    });
+  $("#dlpdf")?.addEventListener("click", e => downloadPdf(v.pdf, e.currentTarget));
+  $("#form").querySelectorAll("[data-hist]").forEach(b => b.addEventListener("click", () => downloadPdf(v.storico[+b.dataset.hist].pdf, b)));
+  $("#del")?.addEventListener("click", async () => {
+    const lingue = JSON.parse(JSON.stringify(m.lingue||{})); delete lingue[L];
+    const {id: _omit, ...rest} = JSON.parse(JSON.stringify(m));
+    try { await db.doc("macchine/"+id).set({...rest, lingue, aggiornato: new Date().toISOString()}); closePanel(); }
+    catch(err){ $("#msg").textContent = errText(err); }
+  });
+}
+
+function editMachine(id){
+  const m = id ? machines.find(x => x.id === id) : null;
+  const cats = [...new Set([...config.categorie, ...machines.map(x=>x.categoria).filter(Boolean)])];
+  openPanel(`<h3>${m ? "Modifica macchina" : "Nuova macchina"}</h3>
+    <label>Modello<input name="modello" required value="${esc(m?.modello||"")}"></label>
+    <div class="row2"><label>Categoria<select name="categoria" required>${cats.map(c=>`<option ${c===(m?.categoria||(activeCat!=="TUTTE"?activeCat:""))?"selected":""}>${esc(c)}</option>`).join("")}</select></label>
+    <label>Codice documento<input name="codice" value="${esc(m?.codice||"")}"></label></div>
+    <label>Lingua originale<input name="originale" value="${esc(m?.originale||"IT")}" maxlength="5"></label>
+    <label>Note<input name="note" value="${esc(m?.note||"")}"></label>
+    ${foot(m && !readOnly ? `<button type="button" class="btn danger" id="delm">Elimina macchina</button>` : "")}`,
+    async fd => {
+      const body = {modello: fd.get("modello").trim(), categoria: fd.get("categoria"), codice: fd.get("codice").trim(),
+        originale: fd.get("originale").trim().toUpperCase() || "IT", note: fd.get("note").trim(), aggiornato: new Date().toISOString()};
+      if (m) await db.doc("macchine/"+m.id).update(body);
+      else await db.collection("macchine").add({...body, lingue: {}});
+    });
+  if (!cats.length) $("#msg").textContent = "Crea prima una categoria.";
+  $("#delm")?.addEventListener("click", async e => {
+    if (e.currentTarget.dataset.armed !== "1") { e.currentTarget.dataset.armed = "1"; e.currentTarget.textContent = "Conferma eliminazione"; return; }
+    try { await db.doc("macchine/"+m.id).delete(); closePanel(); } catch(err){ $("#msg").textContent = errText(err); }
+  });
+}
+
+function addToConfig(field, label, transform){
+  openPanel(`<h3>Nuova ${label}</h3><label>Nome<input name="v" required></label>${foot()}`, async fd => {
+    const v = transform(fd.get("v"));
+    if (!v) return;
+    const next = {...config, [field]: [...new Set([...(config[field]||[]), v])]};
+    await db.doc("config/main").set(next);
+  });
+}
+
+function editCategory(old){
+  const used = machines.filter(m => m.categoria === old);
+  openPanel(`<h3>Modifica categoria</h3>
+    <label>Nome<input name="v" required value="${esc(old)}"></label>
+    <label>Posizione nell'elenco<select name="pos">${(config.categorie.includes(old) ? config.categorie : [...config.categorie, old]).map((c, i, a) => `<option value="${i}" ${c === old ? "selected" : ""}>${i + 1}${i === 0 ? " (prima)" : i === a.length - 1 ? " (ultima)" : ""}</option>`).join("")}</select></label>
+    <div style="font-size:12px;color:var(--muted)">${used.length ? `Il nuovo nome verrà applicato anche alle ${used.length} macchine di questa categoria.` : "Nessuna macchina in questa categoria."}</div>
+    ${foot(!used.length && !readOnly ? `<button type="button" class="btn danger" id="delcat">Elimina categoria</button>` : "")}`,
+    async fd => {
+      const nv = fd.get("v").trim().toUpperCase();
+      if (!nv) return;
+      const cats = [...config.categorie];
+      if (!cats.includes(old)) cats.push(old);
+      const pos = Math.max(0, Math.min(cats.length - 1, parseInt(fd.get("pos"), 10) || 0));
+      const rest = cats.filter(c => c !== old && c !== nv);
+      rest.splice(pos, 0, nv);
+      const same = nv === old && rest.join("|") === cats.join("|");
+      if (same) return;
+      await db.doc("config/main").set({...config, categorie: rest});
+      if (nv === old) return;
+      for (const m of used) {
+        $("#msg").style.color = "var(--muted)"; $("#msg").textContent = `Aggiorno ${m.modello}…`;
+        await db.doc("macchine/" + m.id).update({categoria: nv, aggiornato: new Date().toISOString()});
+      }
+      if (activeCat === old) activeCat = nv;
+    });
+  $("#delcat")?.addEventListener("click", async e => {
+    if (e.currentTarget.dataset.armed !== "1") { e.currentTarget.dataset.armed = "1"; e.currentTarget.textContent = "Conferma eliminazione"; return; }
+    try { await db.doc("config/main").set({...config, categorie: config.categorie.filter(c => c !== old)}); if (activeCat === old) activeCat = "TUTTE"; closePanel(); }
+    catch(err){ $("#msg").textContent = errText(err); }
+  });
+}
+
+document.addEventListener("click", e => {
+  const ce = e.target.closest("[data-catedit]"); if (ce) { editCategory(ce.dataset.catedit); return; }
+  const t = e.target.closest("[data-cat],[data-cell],[data-edit]"); if (!t) return;
+  if (t.dataset.cat) { activeCat = t.dataset.cat; render(); }
+  else if (t.dataset.cell) { const [id,L] = t.dataset.cell.split("|"); editCell(id,L); }
+  else if (t.dataset.edit) editMachine(t.dataset.edit);
+});
+$("#panel").addEventListener("click", e => { if (e.target.id === "panel") closePanel(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#panel").hidden) closePanel(); });
+$("#q").addEventListener("input", render);
+$("#vTab").onclick = () => { view = "tab"; render(); };
+$("#vArc").onclick = () => { view = "arc"; render(); };
+$("#addMachine").onclick = () => editMachine(null);
+$("#addCat").onclick = () => addToConfig("categorie", "categoria", s => s.trim().toUpperCase());
+$("#addLang").onclick = () => addToConfig("lingue", "lingua (codice, es. DE)", s => s.trim().toUpperCase().slice(0,5));
+render();
+
+(async () => {
+  db = await claude.use("db").catch(() => null);
+  if (!db) {
+    $("#banner").hidden = false;
+    $("#banner").textContent = "Il catalogo non è raggiungibile: ricarica la pagina.";
+    $("#list").innerHTML = `<div class="empty">Catalogo non disponibile in questa vista.</div>`;
+    return;
+  }
+  try { const user = await claude.use("user"); if (user) { const c = await user.can("data.write"); if (c === false) readOnly = true; } } catch {}
+  [assets, downloads] = await Promise.all([claude.use("assets").catch(() => null), claude.use("downloads").catch(() => null)]);
+  if (readOnly) { $("#banner").hidden = false; $("#banner").textContent = "Stai consultando il catalogo in sola lettura."; }
+  db.doc("config/main").onSnapshot(s => { if (s.exists) { const d = s.data(); config = {categorie: [...(d.categorie||[])], lingue: [...(d.lingue||["IT","EN"])]}; } render(); }, () => {});
+  db.collection("macchine").onSnapshot(s => { machines = s.docs.map(d => ({id: d.id, ...d.data()})); render(); },
+    e => { $("#banner").hidden = false; $("#banner").textContent = "Aggiornamento in tempo reale interrotto: ricarica la pagina."; });
+})();
+</script>
+
+</body></html>

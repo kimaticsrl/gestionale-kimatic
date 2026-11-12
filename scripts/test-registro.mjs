@@ -11,7 +11,7 @@ await db.exec(`
   alter table storage.objects enable row level security;
   create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('test.uid', true), '')::uuid $$;
   grant usage on schema public, auth to authenticated; grant execute on function auth.uid() to authenticated;`);
-for (const f of ['0001_base.sql', '0002_rapporti_intervento.sql', '0004_troubleshooting.sql', '0006_offerte_bmtek.sql', '0008_anagrafica_clienti.sql', '0010_registro_modifiche.sql', '0011_lettere_impegno.sql', '0012_costificatore.sql', '0015_non_conformita.sql', '0018_nc_numerazione.sql'])
+for (const f of ['0001_base.sql', '0002_rapporti_intervento.sql', '0004_troubleshooting.sql', '0006_offerte_bmtek.sql', '0008_anagrafica_clienti.sql', '0010_registro_modifiche.sql', '0011_lettere_impegno.sql', '0012_costificatore.sql', '0015_non_conformita.sql', '0018_nc_numerazione.sql', '0019_catalogo_manuali.sql'])
   await db.exec(fs.readFileSync('supabase/migrations/' + f, 'utf8'));
 await db.exec(`grant select, insert, update, delete on all tables in schema public to authenticated;`);
 const ok = (c, m) => { console.log((c ? 'OK  ' : 'ERR ') + m); if (!c) process.exitCode = 1; };
@@ -94,4 +94,13 @@ await as(mag, async () => {
 await as(op, async () => {
   let e = ''; try { await q(`update nc set dati = dati || '{"difetto":"z"}' where id=$1`, [nc1.id]); } catch (x) { e = x.message; }
   ok(e.includes('già in gestione'), 'una volta in gestione la segnalazione è bloccata');
+});
+
+// Catalogo manuali
+await db.exec(fs.readFileSync('/mnt/user-data/outputs/0020_import_catalogo_manuali.sql', 'utf8'));
+ok((await q(`select count(*)::int n from man_docs`)).rows[0].n === 10, 'catalogo importato: config + 9 macchine');
+await as(op, async () => {
+  ok((await q(`select count(*)::int n from man_docs`)).rows[0].n === 10, 'l\'Operativo (Legge) consulta il catalogo');
+  let e = false; try { await q(`update man_docs set dati='{}' where id='rpg'`); const r = await q(`select dati from man_docs where id='rpg'`); e = Object.keys(r.rows[0].dati).length > 0; } catch { e = true; }
+  ok(e, 'l\'Operativo non modifica il catalogo');
 });
