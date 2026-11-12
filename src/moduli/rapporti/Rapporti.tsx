@@ -20,9 +20,21 @@ export default function Rapporti({ me, nome, modifica, gestisce, clienti }: Prop
     (async () => {
       const [{ avvia }, { creaDb }, logo] = await Promise.all([import("./app.js"), import("./dati.js"), logoBmtek()]);
       if (annullato || !root.current) return;
+      const sb = supabaseBrowser();
       ferma = avvia(root.current, {
         me, nome, modifica, gestisce, clienti, logo,
-        db: creaDb(supabaseBrowser()),
+        db: creaDb(sb),
+        // anagrafica articoli (da SAM): descrizione delle parti sostituite dal codice
+        async articolo(cod: string) {
+          const c = cod.trim(); if (!c) return null;
+          const { data } = await sb.from("articoli").select("codice,descrizione").ilike("codice", c.replace(/[%_\\]/g, "\\$&")).limit(1);
+          return data?.[0] ?? null;
+        },
+        async cercaArticoli(q: string) {
+          const p = '"%' + q.trim().replace(/[%_"\\]/g, "") + '%"';
+          const { data } = await sb.from("articoli").select("codice,descrizione").or(`codice.ilike.${p},descrizione.ilike.${p}`).order("codice").limit(20);
+          return data ?? [];
+        },
         jsPDF: async () => (await import("jspdf")).jsPDF,
         downloads: {
           async save({ filename, data }: { filename: string; data: Blob }) {

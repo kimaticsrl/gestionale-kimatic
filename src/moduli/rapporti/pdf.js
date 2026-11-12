@@ -46,14 +46,69 @@ export const RI = (function () {
     return { giorni: (r.giorni || []).length, ord, ext, ordU, extU, ordG, extG, km, viaggio, viaggioU, training, ricambi: (r.ric || []).filter(x => x.cod || x.des).length };
   }
 
-  const LAB = {
-    it: { title: "RAPPORTO D' INTERVENTO", man: 'MANUTENZIONE', inst: 'INSTALLAZIONE' },
-    en: { title: 'MAINTENANCE VISIT REPORT', man: 'MAINTENANCE', inst: 'INSTALLATION' }
+  /* testi del modulo C00007_23 in quattro lingue: la lingua del cliente affiancata all'inglese
+     (italiano / inglese come il modulo originale); in inglese solo inglese */
+  const T = {
+    title:   ["RAPPORTO D' INTERVENTO", 'MAINTENANCE VISIT REPORT', "RAPPORT D'INTERVENTION", 'INFORME DE INTERVENCIÓN'],
+    man:     ['MANUTENZIONE', 'MAINTENANCE', 'MAINTENANCE', 'MANTENIMIENTO'],
+    inst:    ['INSTALLAZIONE', 'INSTALLATION', 'INSTALLATION', 'INSTALACIÓN'],
+    days:    [['LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB', 'DOM'], ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'], ['LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM', 'DIM'], ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM']],
+    week:    ['Settimana {a} di {b}', 'Week {a} of {b}', 'Semaine {a} sur {b}', 'Semana {a} de {b}'],
+    range:   ['dal {a} al {b}', 'from {a} to {b}', 'du {a} au {b}', 'del {a} al {b}'],
+    hDate:   ['Data Intervento', 'Date of the visit', "Date de l'intervention", 'Fecha de la intervención'],
+    hTec:    ['Nome Tecnico/i Bmtek', 'Name of technician/s Bmtek', 'Nom du/des technicien(s) Bmtek', 'Nombre técnico/s Bmtek'],
+    hCli:    ['Ragione sociale', 'Company name', 'Raison sociale', 'Razón social'],
+    hInd:    ['Indirizzo', 'Address', 'Adresse', 'Dirección'],
+    hCon:    ['Persona di riferimento cliente', 'Customer contact person', 'Contact chez le client', 'Persona de contacto del cliente'],
+    hMat:    ['NUMERO DI SERIE MACCHINA', 'SERIAL NUMBER OF THE MACHINE', 'NUMÉRO DE SÉRIE DE LA MACHINE', 'NÚMERO DE SERIE DE LA MÁQUINA'],
+    hOre:    ['Ore lavoro macchina', 'Working hours machine', 'Heures de travail machine', 'Horas de trabajo máquina'],
+    hSac:    ['Conteggio sacchi', 'Bags counter', 'Compteur de sacs', 'Contador de bolsas'],
+    travel:  ['VIAGGIO', 'TRAVEL', 'VOYAGE', 'VIAJE'],
+    training:['TRAINING', 'TRAINING', 'FORMATION', 'FORMACIÓN'],
+    date:    ['Data', 'Date', 'Date', 'Fecha'],
+    from:    ['Dalle ore', 'From time', 'Heure de début', 'Hora de inicio'],
+    to:      ['Alle ore', 'To time', 'Heure de fin', 'Hora de fin'],
+    km:      ['Km totali percorsi', 'Total km travelled', 'Km totaux parcourus', 'Km totales recorridos'],
+    nt:      ['Nr. Tecnici', 'Nr. Technicians', 'Nb de techniciens', 'N.º de técnicos'],
+    name:    ['Nome', 'Name', 'Nom', 'Nombre'],
+    sign:    ['Firma', 'Signature', 'Signature', 'Firma'],
+    assist:  ['ASSISTENZA-INSTALLAZIONE-TRAINING', 'MAINTENANCE-INSTALLATION-TRAINING', 'ASSISTANCE-INSTALLATION-FORMATION', 'ASISTENCIA-INSTALACIÓN-FORMACIÓN'],
+    ord:     ['ORE ORDINARIE', 'ORDINARY HRS', 'HEURES NORMALES', 'HORAS ORDINARIAS'],
+    ext:     ['ORE EXTRA (DOPO 8 ore lavorative)', 'EXTRA HRS (AFTER 8 working hours)', 'HEURES SUPPL. (APRÈS 8 heures de travail)', 'HORAS EXTRA (TRAS 8 horas de trabajo)'],
+    fascia:  ['Dalle ore / Alle ore', 'From time / To time', 'De / À', 'Desde / Hasta'],
+    totOrd:  ['TOTALE ORE ORDINARIE', 'TOTAL STANDARD HRS', 'TOTAL HEURES NORMALES', 'TOTAL HORAS ORDINARIAS'],
+    gar:     ['IN GARANZIA', 'UNDER WARRANTY', 'SOUS GARANTIE', 'EN GARANTÍA'],
+    totExt:  ['TOT. ORE STRAORDINARIE', 'TOTAL EXTRA HRS', 'TOTAL HEURES SUPPL.', 'TOTAL HORAS EXTRA'],
+    resp:    ['FIRMA RESPONSABILE', 'SIGNATURE RESPONSIBLE', 'SIGNATURE RESPONSABLE', 'FIRMA RESPONSABLE'],
+    yes:     ['SI', 'YES', 'OUI', 'SÍ'],
+    no:      ['NO', 'NO', 'NON', 'NO'],
+    vFirma:  ['v. firma finale', 'see final signature', 'voir signature finale', 'ver firma final'],
+    sTec:    ['Firma del tecnico', 'Signature of the technician', 'Signature du technicien', 'Firma del técnico'],
+    sCli:    ['Timbro e firma del cliente', 'Stamp and signature of the customer', 'Cachet et signature du client', 'Sello y firma del cliente'],
+    desc:    ['DESCRIZIONE INTERVENTO (eventuali note)', 'INTERVENTION DESCRIPTION (possible notes)', "DESCRIPTION DE L'INTERVENTION (remarques éventuelles)", 'DESCRIPCIÓN DE LA INTERVENCIÓN (posibles notas)'],
+    descSeg: ['DESCRIZIONE INTERVENTO (segue)', 'INTERVENTION DESCRIPTION (continued)', "DESCRIPTION DE L'INTERVENTION (suite)", 'DESCRIPCIÓN DE LA INTERVENCIÓN (continuación)'],
+    note:    ['Note', 'Notes', 'Remarques', 'Notas'],
+    cont:    ['(continua nella pagina seguente)', '(continued on the next page)', '(suite à la page suivante)', '(continúa en la página siguiente)'],
+    parts:   ['Codice parti sostituite', 'Part code replaced', 'Code des pièces remplacées', 'Código de piezas sustituidas'],
+    qty:     ['Q.tà', 'Q.ty', 'Qté', 'Cant.'],
+    partGar: ['Parte in garanzia', 'Part in warranty', 'Pièce sous garantie', 'Pieza en garantía'],
+    acc:     ['La firma sul presente documento implica l’accettazione senza riserve dei lavori eseguiti', 'The signature on the present document implies the acceptance without reservations of the performed jobs', 'La signature du présent document implique l’acceptation sans réserve des travaux effectués', 'La firma del presente documento implica la aceptación sin reservas de los trabajos realizados'],
+    fatt:    ['Il servizio corrisposto sarà fatturato a fine mese', 'The offered service will be invoiced at the end of the month', 'Le service rendu sera facturé à la fin du mois', 'El servicio prestado se facturará a final de mes'],
+    elettr:  ['Firma elettronica raccolta su dispositivo il {a} alle {b} – impronta del rapporto SHA-256: ', 'Electronic signature collected on device on {a} at {b} – report fingerprint SHA-256: ', 'Signature électronique recueillie sur appareil le {a} à {b} – empreinte du rapport SHA-256 : ', 'Firma electrónica recogida en dispositivo el {a} a las {b} – huella del informe SHA-256: '],
   };
-  const DAYS = [['LUN', 'MON'], ['MAR', 'TUE'], ['MER', 'WED'], ['GIO', 'THU'], ['VEN', 'FRI'], ['SAB', 'SAT'], ['DOM', 'SUN']];
+  const LINGUE = ['IT', 'EN', 'FR', 'ES'];
+  const testi = (lingua) => {
+    const i = Math.max(0, LINGUE.indexOf(String(lingua || 'IT').toUpperCase()));
+    const solo = (k) => T[k][i];                                                  // solo la lingua del cliente
+    const righe = (k) => (i === 1 || T[k][i] === T[k][1] ? [T[k][1]] : [T[k][i], T[k][1]]); // lingua cliente + inglese
+    const P = (k, sep = ' / ') => righe(k).join(sep);
+    const F = (k, a, b) => solo(k).replace('{a}', a).replace('{b}', b);
+    return { i, solo, righe, P, F };
+  };
   const FOOT = 'KIMATIC S.R.L. Via G. Matteotti 26, 40057 Loc. CADRIANO di Granarolo dell’Emilia (BO)  Tel.: +39 051 6926178 – e-mail: sales@bmtek.it  P.IVA / C.F.: 03286631209';
 
   function build(jsPDF, r, logo) {
+    const X = testi(r.lingua), DAYS = T.days[X.i];
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const W = 297, L = 8, R = 289, CW = R - L;
     const line = (x1, y1, x2, y2, w) => { doc.setLineWidth(w || 0.2); doc.line(x1, y1, x2, y2); };
@@ -72,9 +127,9 @@ export const RI = (function () {
     const signRow = (y, h) => {
       box(L, y, CW, h);
       line(L + 70, y, L + 70, y + h); line(L + 175, y, L + 175, y + h);
-      txt('Data / Date', L + 35, y + 3.5, { al: 'center', sz: 7 });
-      txt('Firma del tecnico / Signature of the technician', L + 122.5, y + 3.5, { al: 'center', sz: 7 });
-      txt('Timbro e firma del cliente / Stamp and signature of the customer', L + 232, y + 3.5, { al: 'center', sz: 7 });
+      txt(X.P('date'), L + 35, y + 3.5, { al: 'center', sz: 7 });
+      txt(fit(X.P('sTec'), 103, 7), L + 122.5, y + 3.5, { al: 'center', sz: 7 });
+      txt(fit(X.P('sCli'), 110, 7), L + 232, y + 3.5, { al: 'center', sz: 7 });
       const f = r.firma || {};
       if (f.ts) txt(fd(f.ts.slice(0, 10)) + '  ' + f.ts.slice(11, 16), L + 35, y + h / 2 + 3, { al: 'center', sz: 10 });
       if (f.tec) try { doc.addImage(f.tec, 'PNG', L + 92, y + 4.5, 60, h - 9); } catch (e) {}
@@ -87,41 +142,43 @@ export const RI = (function () {
     const weeks = []; giorni.forEach(g => { const n = d2n(g.d), mo = n - dow(n); let wk = weeks.find(w => w.mo === mo); if (!wk) weeks.push(wk = { mo, days: {} }); (wk.days[dow(n)] ??= []).push(g); });
     if (!weeks.length) weeks.push({ mo: null, days: {} });
     const dates = giorni.map(g => g.d);
-    const dataInt = dates.length ? (dates.length === 1 ? fd(dates[0]) : 'dal ' + fd(dates[0]) + ' al ' + fd(dates[dates.length - 1])) : '';
+    const dataInt = dates.length ? (dates.length === 1 ? fd(dates[0]) : X.F('range', fd(dates[0]), fd(dates[dates.length - 1]))) : '';
 
     weeks.forEach((wk, wi) => {
       if (wi) doc.addPage();
       // intestazione
       box(L, 4, CW, 30);
       if (logo) try { doc.addImage(logo, 'PNG', L + 2, 6, 47, 25); } catch (e) {}
-      txt(LAB.it.title, 148, 15, { sz: 15, i: 1, al: 'center' });
-      txt(LAB.en.title, 148, 23, { sz: 15, i: 1, al: 'center' });
+      const tit = X.righe('title');
+      if (tit.length > 1) { txt(tit[0], 148, 15, { sz: 15, i: 1, al: 'center' }); txt(tit[1], 148, 23, { sz: 15, i: 1, al: 'center' }); }
+      else txt(tit[0], 148, 19, { sz: 15, i: 1, al: 'center' });
       txt('C00007_23', R - 2, 8, { sz: 7, al: 'right' });
-      [['man', 'MANUTENZIONE / MAINTENANCE', 12], ['inst', 'INSTALLAZIONE / INSTALLATION', 18]].forEach(([k, lab, y]) => {
+      [['man', X.P('man'), 12], ['inst', X.P('inst'), 18]].forEach(([k, lab, y]) => {
         box(212, y - 3, 3.4, 3.4, 0.3); if (t === k) { line(212.4, y - 2.6, 215, y, 0.4); line(215, y - 2.6, 212.4, y, 0.4); }
         txt(lab, 217, y, { sz: 9, b: 1 });
       });
       txt('Nr. ' + (r.num || ''), 217, 27, { sz: 8.5, b: 1 });
-      if (weeks.length > 1) txt('Settimana ' + (wi + 1) + ' di ' + weeks.length, 217, 31.5, { sz: 7 });
+      if (weeks.length > 1) txt(X.F('week', wi + 1, weeks.length), 217, 31.5, { sz: 7 });
       // righe anagrafiche
-      const H = [['Data Intervento / Date of the visit', dataInt], ['Nome Tecnico/i Bmtek - Name of technician/s Bmtek', r.tecnici], ['Ragione sociale / Company name', r.cli && r.cli.nome], ['Indirizzo / Address', r.cli && r.cli.indirizzo], ['Persona di riferimento cliente / Customer contact person', r.cli && r.cli.contatto], ['NUMERO DI SERIE MACCHINA / SERIAL NUMBER OF THE MACHINE', [r.matr, r.macDesc].filter(Boolean).join('  –  ')], ['Ore lavoro macchina / Working hours machine', r.oreMac], ['Conteggio sacchi / Bags counter', r.sacchi]];
-      let y = 34; H.forEach(([k, v]) => { box(L, y, CW, 4.6); txt(k, L + 1.5, y + 3.4, { sz: 7.5 }); txt(fit(v, CW - 112, 8.5), L + 110, y + 3.4, { sz: 8.5, b: 1 }); y += 4.6; });
+      const H = [[X.P('hDate'), dataInt], [X.P('hTec'), r.tecnici], [X.P('hCli'), r.cli && r.cli.nome], [X.P('hInd'), r.cli && r.cli.indirizzo], [X.P('hCon'), r.cli && r.cli.contatto], [X.P('hMat'), [r.matr, r.macDesc].filter(Boolean).join('  –  ')], [X.P('hOre'), r.oreMac], [X.P('hSac'), r.sacchi]];
+      let y = 34; H.forEach(([k, v]) => { box(L, y, CW, 4.6); txt(fit(k, 106, 7.5), L + 1.5, y + 3.4, { sz: 7.5 }); txt(fit(v, CW - 112, 8.5), L + 110, y + 3.4, { sz: 8.5, b: 1 }); y += 4.6; });
       // viaggio + training
       y += 0.6; const half = CW / 2;
       box(L, y, CW, 5.2); line(L + half + 10, y, L + half + 10, y + 5.2);
-      txt('VIAGGIO / TRAVEL', L + (half + 10) / 2, y + 3.7, { b: 1, al: 'center', sz: 8 }); txt('TRAINING', L + half + 10 + (half - 10) / 2, y + 3.7, { b: 1, al: 'center', sz: 8 });
+      txt(X.P('travel'), L + (half + 10) / 2, y + 3.7, { b: 1, al: 'center', sz: 8 }); txt(X.P('training'), L + half + 10 + (half - 10) / 2, y + 3.7, { b: 1, al: 'center', sz: 8 });
       y += 5.2;
       const cV = [L, L + 12, L + 34, L + 61, L + 88, L + 118, L + half + 10];
       const cT = [L + half + 10, L + half + 34, L + half + 61, L + half + 85, L + half + 116, R];
       const hh = 7;
       box(L, y, CW, hh); [...cV.slice(1), ...cT.slice(1, -1)].forEach(x => line(x, y, x, y + hh));
-      ['Data/Date', 'Dalle ore / From time', 'Alle ore / to time', 'Km totali percorsi', 'Nr. Tecnici /\nNr. Technicians'].forEach((s, i) => txt(s, (cV[i + 1] + cV[i + 2]) / 2, y + (s.includes('\n') ? 2.8 : 4.4), { sz: 6.5, al: 'center' }));
-      ['Data/Date', 'Dalle ore / From time', 'Alle ore / To time', 'Nome / Name', 'Firma / Signature'].forEach((s, i) => txt(s, (cT[i] + cT[i + 1]) / 2, y + 4.4, { sz: 6.5, al: 'center' }));
+      const cella = (k, x1, x2, yy, h, sz) => { const L2 = X.righe(k); L2.forEach((q, j) => txt(fit(q, x2 - x1 - 1, sz), (x1 + x2) / 2, yy + (L2.length > 1 ? h / 2 - 0.6 + j * 2.6 : h / 2 + 1.2), { sz, al: 'center' })); };
+      ['date', 'from', 'to', 'km', 'nt'].forEach((k, i) => cella(k, cV[i + 1], cV[i + 2], y, hh, 6));
+      ['date', 'from', 'to', 'name', 'sign'].forEach((k, i) => cella(k, cT[i], cT[i + 1], y, hh, 6));
       y += hh;
       const rh = 4.75;
       for (let d = 0; d < 7; d++) {
         box(L, y, CW, rh); [...cV.slice(1), ...cT.slice(1, -1)].forEach(x => line(x, y, x, y + rh));
-        txt(DAYS[d][0] + '/' + DAYS[d][1], L + 1.2, y + 3.3, { sz: 5.5, b: 1, i: 1 });
+        txt(DAYS[d] + (X.i === 1 ? '' : '/' + T.days[1][d]), L + 1.2, y + 3.3, { sz: 5.5, b: 1, i: 1 });
         const gs = wk.days[d] || []; const g = gs[0];
         if (g) {
           const va = g.v || {}, vr = g.vr || {}, tr = g.tr || {};
@@ -135,28 +192,29 @@ export const RI = (function () {
         y += rh;
       }
       // assistenza
-      box(L, y, CW, 5.2); txt('ASSISTENZA-INSTALLAZIONE-TRAINING/MAINTENANCE-INSTALLATION-TRAINING', W / 2, y + 3.7, { b: 1, al: 'center', sz: 8 }); y += 5.2;
+      box(L, y, CW, 5.2); txt(X.P('assist', '/'), W / 2, y + 3.7, { b: 1, al: 'center', sz: 8 }); y += 5.2;
       box(L, y, CW, 5); line(L + half + 10, y, L + half + 10, y + 5);
-      txt('ORE ORDINARIE/ ORDINARY HRS', L + (half + 10) / 2, y + 3.5, { b: 1, al: 'center', sz: 6.5 });
-      txt('ORE EXTRA/ EXTRA HRS  (DOPO 8 ore lavorative - AFTER 8 working hours)', L + half + 10 + (half - 10) / 2, y + 3.5, { b: 1, al: 'center', sz: 6.5 }); y += 5;
+      txt(X.P('ord'), L + (half + 10) / 2, y + 3.5, { b: 1, al: 'center', sz: 6.5 });
+      txt(fit(X.P('ext'), half - 12, 6.5), L + half + 10 + (half - 10) / 2, y + 3.5, { b: 1, al: 'center', sz: 6.5 }); y += 5;
       const cO = [L, L + 12, L + 34, L + 61, L + 88, L + 118, L + half + 10];
       const cE = [L + half + 10, L + half + 33, L + half + 60, L + half + 80, L + half + 114, R];
       const h2 = 8.5;
       box(L, y, CW, h2); [...cO.slice(1), ...cE.slice(1, -1)].forEach(x => line(x, y, x, y + h2));
-      [['Data/Date'], ['Dalle ore / Alle ore', 'From time / To time'], ['Dalle ore / Alle ore', 'From time / To time'], ['TOTALE ORE ORDINARIE', 'TOTAL STANDARD HRS'], ['IN GARANZIA/', 'UNDER WARRANTY']].forEach((s, i) => s.forEach((q, j) => txt(q, (cO[i + 1] + cO[i + 2]) / 2, y + (s.length > 1 ? 3.3 + j * 3 : 5), { sz: 5.8, al: 'center' })));
-      [['Dalle ore / Alle ore', 'From time / To time'], ['TOT. ORE STRAORDINARIE/', 'TOTAL EXTRA HRS'], ['IN GARANZIA/', 'UNDER WARRANTY'], ['FIRMA RESPONSABILE/', 'SIGNATURE RESPONSIBLE'], ['Nr. Tecnici/', 'Nr. Technicians']].forEach((s, i) => s.forEach((q, j) => txt(q, (cE[i] + cE[i + 1]) / 2, y + 3.3 + j * 3, { sz: 5.3, al: 'center' })));
+      const cella2 = (k, x1, x2, sz) => { const L2 = X.righe(k); L2.forEach((q, j) => txt(fit(q, x2 - x1 - 1, sz), (x1 + x2) / 2, y + (L2.length > 1 ? 3.3 + j * 3 : 5), { sz, al: 'center' })); };
+      ['date', 'fascia', 'fascia', 'totOrd', 'gar'].forEach((k, i) => cella2(k, cO[i + 1], cO[i + 2], 5.8));
+      ['fascia', 'totExt', 'gar', 'resp', 'nt'].forEach((k, i) => cella2(k, cE[i], cE[i + 1], 5.3));
       y += h2;
       for (let d = 0; d < 7; d++) {
         box(L, y, CW, rh); [...cO.slice(1), ...cE.slice(1, -1)].forEach(x => line(x, y, x, y + rh));
-        txt(DAYS[d][0] + '/' + DAYS[d][1], L + 1.2, y + 3.3, { sz: 5.5, b: 1, i: 1 });
+        txt(DAYS[d] + (X.i === 1 ? '' : '/' + T.days[1][d]), L + 1.2, y + 3.3, { sz: 5.5, b: 1, i: 1 });
         const g = (wk.days[d] || [])[0];
         const c = (x1, x2, s, o) => txt(s, (x1 + x2) / 2, y + 3.4, Object.assign({ sz: 7.5, al: 'center' }, o || {}));
         if (g) {
           const s = split(g), rr = a => a.map(x => hm(x[0]) + ' / ' + hm(x[1]));
           const o = rr(s.ord), e = rr(s.ext);
           if (s.tot) {
-            c(cO[1], cO[2], fd(g.d)); c(cO[2], cO[3], o[0] || ''); c(cO[3], cO[4], o.slice(1).join(' ; '), { sz: o.length > 2 ? 5.5 : 7.5 }); c(cO[4], cO[5], hrs(s.tOrd), { b: 1 }); c(cO[5], cO[6], g.gar ? 'SI' : 'NO');
-            if (s.tExt) { c(cE[0], cE[1], e.join(' ; '), { sz: e.length > 1 ? 5.5 : 7.5 }); c(cE[1], cE[2], hrs(s.tExt), { b: 1 }); c(cE[2], cE[3], g.gar ? 'SI' : 'NO'); c(cE[3], cE[4], r.firma && r.firma.cli ? 'v. firma finale' : '', { sz: 6 }); }
+            c(cO[1], cO[2], fd(g.d)); c(cO[2], cO[3], o[0] || ''); c(cO[3], cO[4], o.slice(1).join(' ; '), { sz: o.length > 2 ? 5.5 : 7.5 }); c(cO[4], cO[5], hrs(s.tOrd), { b: 1 }); c(cO[5], cO[6], X.solo(g.gar ? 'yes' : 'no'));
+            if (s.tExt) { c(cE[0], cE[1], e.join(' ; '), { sz: e.length > 1 ? 5.5 : 7.5 }); c(cE[1], cE[2], hrs(s.tExt), { b: 1 }); c(cE[2], cE[3], X.solo(g.gar ? 'yes' : 'no')); c(cE[3], cE[4], r.firma && r.firma.cli ? X.solo('vFirma') : '', { sz: 6 }); }
             c(cE[4], cE[5], g.nt || '');
           }
         } else { c(cO[2], cO[3], '/', { c: '#888888' }); c(cO[3], cO[4], '/', { c: '#888888' }); c(cE[0], cE[1], '/', { c: '#888888' }); }
@@ -168,7 +226,7 @@ export const RI = (function () {
 
     // pagina 2: descrizione, ricambi
     doc.addPage();
-    box(L, 4, CW, 6); txt('DESCRIZIONE INTERVENTO (eventuali note) / INTERVENTION DESCRIPTION (possible notes)', W / 2, 8.2, { b: 1, al: 'center', sz: 8.5 });
+    box(L, 4, CW, 6); txt(fit(X.P('desc'), CW - 4, 8.5), W / 2, 8.2, { b: 1, al: 'center', sz: 8.5 });
     const ric = (r.ric || []).filter(x => x.cod || x.des);
     const ricRows = Math.max(9, ric.length);
     const ricTop = 200 - 22 - 12 - 5 - ricRows * 4.5;
@@ -176,35 +234,35 @@ export const RI = (function () {
     const lines = [];
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
     giorni.forEach(g => { if (!String(g.att || '').trim()) return; const wrapped = doc.splitTextToSize(String(g.att).trim(), CW - 30); wrapped.forEach((l, i) => lines.push([i ? '' : fd(g.d), l])); });
-    if (String(r.note || '').trim()) { lines.push(['', '']); doc.splitTextToSize('Note: ' + String(r.note).trim(), CW - 30).forEach((l, i) => lines.push(['', l])); }
+    if (String(r.note || '').trim()) { lines.push(['', '']); doc.splitTextToSize(X.solo('note') + ': ' + String(r.note).trim(), CW - 30).forEach((l, i) => lines.push(['', l])); }
     const lh = 4.4, avail = Math.floor((ricTop - 10.5) / lh);
     let y = 10;
     for (let i = 0; i < avail; i++) { line(L, y + lh, R, y + lh, 0.1); y += lh; }
     line(L, 10, L, ricTop); line(R, 10, R, ricTop);
     const shown = lines.slice(0, avail);
     shown.forEach((l, i) => { if (l[0]) txt(l[0], L + 2, 10 + lh * (i + 1) - 1.1, { sz: 7.5, b: 1 }); txt(l[1], L + 24, 10 + lh * (i + 1) - 1.1, { sz: 8.5 }); });
-    if (lines.length > avail) txt('(continua nella pagina seguente)', R - 2, 10 + lh * avail - 1.1, { sz: 7, i: 1, al: 'right' });
+    if (lines.length > avail) txt(X.solo('cont'), R - 2, 10 + lh * avail - 1.1, { sz: 7, i: 1, al: 'right' });
     // ricambi
     y = ricTop; const c1 = L + 200, c2 = L + 222;
     box(L, y, CW, 5); line(c1, y, c1, y + 5); line(c2, y, c2, y + 5);
-    txt('Codice parte sostituite  /  Part code replaced', (L + c1) / 2, y + 3.6, { b: 1, al: 'center', sz: 8.5 }); txt('Q.ty', (c1 + c2) / 2, y + 3.6, { b: 1, al: 'center', sz: 8.5 }); txt('Parte in garanzia / Part in warranty', (c2 + R) / 2, y + 3.6, { b: 1, al: 'center', sz: 8.5 });
+    txt(X.P('parts', '  /  '), (L + c1) / 2, y + 3.6, { b: 1, al: 'center', sz: 8.5 }); txt(fit(X.P('qty', '/'), c2 - c1 - 1, 8.5), (c1 + c2) / 2, y + 3.6, { b: 1, al: 'center', sz: 8.5 }); txt(fit(X.P('partGar'), R - c2 - 1, 8.5), (c2 + R) / 2, y + 3.6, { b: 1, al: 'center', sz: 8.5 });
     y += 5;
     for (let i = 0; i < ricRows; i++) {
       box(L, y, CW, 4.5, 0.1); line(c1, y, c1, y + 4.5, 0.1); line(c2, y, c2, y + 4.5, 0.1);
-      const x = ric[i]; if (x) { txt(fit([x.cod, x.des].filter(Boolean).join('  –  '), c1 - L - 4, 8), L + 2, y + 3.3, { sz: 8 }); txt(x.q, (c1 + c2) / 2, y + 3.3, { al: 'center', sz: 8 }); txt(x.gar ? 'SI' : 'NO', (c2 + R) / 2, y + 3.3, { al: 'center', sz: 8 }); }
+      const x = ric[i]; if (x) { txt(fit([x.cod, x.des].filter(Boolean).join('  –  '), c1 - L - 4, 8), L + 2, y + 3.3, { sz: 8 }); txt(x.q, (c1 + c2) / 2, y + 3.3, { al: 'center', sz: 8 }); txt(X.solo(x.gar ? 'yes' : 'no'), (c2 + R) / 2, y + 3.3, { al: 'center', sz: 8 }); }
       y += 4.5;
     }
     signRow(y, 200 - 12 - y);
     y = 200 - 12; box(L, y, CW, 12);
-    txt('La firma sul presente documento implica l’accettazione senza riserve dei lavori eseguiti  /  The signature on the present document implicates the acceptance without reservations of the  performed jobs', L + 1.5, y + 3.4, { sz: 6.3 });
-    txt('Il servizio corrisposto sarà fatturato a fine mese  /  The offered service will be invoiced at the end of the month', L + 1.5, y + 6.8, { sz: 6.3 });
-    if (r.firma && r.firma.hash) txt('Firma elettronica raccolta su dispositivo il ' + fd(r.firma.ts.slice(0, 10)) + ' alle ' + r.firma.ts.slice(11, 16) + ' – impronta del rapporto SHA-256: ' + r.firma.hash, L + 1.5, y + 10.4, { sz: 5.6, c: '#444444' });
+    txt(fit(X.P('acc', '  /  '), CW - 3, 6.3), L + 1.5, y + 3.4, { sz: 6.3 });
+    txt(fit(X.P('fatt', '  /  '), CW - 3, 6.3), L + 1.5, y + 6.8, { sz: 6.3 });
+    if (r.firma && r.firma.hash) txt(X.F('elettr', fd(r.firma.ts.slice(0, 10)), r.firma.ts.slice(11, 16)) + r.firma.hash, L + 1.5, y + 10.4, { sz: 5.6, c: '#444444' });
     footer();
     // eventuale pagina di continuazione
     if (lines.length > avail) {
       let rest = lines.slice(avail);
       while (rest.length) {
-        doc.addPage(); box(L, 4, CW, 6); txt('DESCRIZIONE INTERVENTO (segue) / INTERVENTION DESCRIPTION (continued)', W / 2, 8.2, { b: 1, al: 'center', sz: 8.5 });
+        doc.addPage(); box(L, 4, CW, 6); txt(fit(X.P('descSeg'), CW - 4, 8.5), W / 2, 8.2, { b: 1, al: 'center', sz: 8.5 });
         const per = Math.floor((196 - 10) / lh); let yy = 10;
         rest.slice(0, per).forEach(l => { line(L, yy + lh, R, yy + lh, 0.1); if (l[0]) txt(l[0], L + 2, yy + lh - 1.1, { sz: 7.5, b: 1 }); txt(l[1], L + 24, yy + lh - 1.1, { sz: 8.5 }); yy += lh; });
         rest = rest.slice(per); footer();

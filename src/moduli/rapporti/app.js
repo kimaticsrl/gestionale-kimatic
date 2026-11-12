@@ -14,6 +14,38 @@ const toast=m=>{const t=TOAST;t.textContent=m;t.hidden=false;clearTimeout(toast.
 const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 const GG=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
 const H=n=>RI.hrs(n)+' h';
+const LINGUE=[['IT','Italiano'],['EN','Inglese'],['FR','Francese'],['ES','Spagnolo']];
+/* testi che legge il cliente al momento della firma */
+const FIRMA={
+  IT:{testo:"Mostra al cliente il riepilogo (puoi aprire l'anteprima PDF). Con la firma il cliente accetta senza riserve i lavori eseguiti; il servizio sarà fatturato a fine mese.",tec:'Nome del tecnico che firma',cli:'Nome e cognome di chi firma per il cliente',canc:'Cancella'},
+  EN:{testo:'Please check the summary (the PDF preview is available). By signing, the customer accepts the performed jobs without reservations; the service will be invoiced at the end of the month.',tec:'Name of the technician signing',cli:'Full name of the person signing for the customer',canc:'Clear'},
+  FR:{testo:"Veuillez vérifier le récapitulatif (l'aperçu PDF est disponible). Par sa signature, le client accepte sans réserve les travaux effectués ; le service sera facturé à la fin du mois.",tec:'Nom du technicien qui signe',cli:'Nom et prénom du signataire pour le client',canc:'Effacer'},
+  ES:{testo:'Revise el resumen (puede abrir la vista previa en PDF). Con su firma, el cliente acepta sin reservas los trabajos realizados; el servicio se facturará a final de mes.',tec:'Nombre del técnico que firma',cli:'Nombre y apellidos de quien firma por el cliente',canc:'Borrar'},
+};
+/* lingua del modulo proposta dal cliente: quella dell'anagrafica, altrimenti dal paese */
+function linguaCli(c){
+  const l=String(c&&c.lingua||'').trim().toUpperCase().slice(0,2);
+  if(LINGUE.some(([k])=>k===l))return l;
+  const p=String(c&&c.paese||'').toLowerCase();
+  if(!p||/ital|san marino|vatican/.test(p))return'IT';
+  if(/fran|belg|lussemb|luxemb|monaco|svizzera|suisse|tunisi|maroc|marocco|algeri|senegal|costa d.avorio|camerun/.test(p))return'FR';
+  if(/spagn|spain|espa|messic|mexic|argentin|cile|chile|colombia|per[uù]|ecuador|venezuel|urugua|paragua|bolivi|guatemal|costa rica|panam|cuba|dominican/.test(p))return'ES';
+  return'EN';
+}
+/* descrizione della parte dal codice articolo (anagrafica SAM) */
+let ART_T=null;
+async function compilaParte(i,cod){
+  if(!CTX.articolo||!CUR||!CUR.ric||!CUR.ric[i])return;
+  let a=null;try{a=await CTX.articolo(cod)}catch(e){}
+  const x=CUR&&CUR.ric&&CUR.ric[i];if(!x||x.cod!==cod)return;
+  if(!a){if(cod.trim()&&!x.des)toast('Codice '+cod.trim()+' non trovato nell\'anagrafica articoli: scrivi tu la descrizione');return}
+  if(x.des&&x.des!==x.desAuto)return; // descrizione scritta a mano: non la tocco
+  x.cod=a.codice;x.des=a.descrizione;x.desAuto=a.descrizione;queueSave();render();
+}
+function suggerisciArticoli(q){
+  clearTimeout(ART_T);if(!CTX.cercaArticoli||String(q).trim().length<3)return;
+  ART_T=setTimeout(async()=>{let L=[];try{L=await CTX.cercaArticoli(q)}catch(e){}const dl=ROOT.querySelector('#dl-art');if(dl)dl.innerHTML=L.map(a=>`<option value="${esc(a.codice)}">${esc(a.descrizione)}</option>`).join('')},250);
+}
 const rid=()=>Math.random().toString(36).slice(2,8);
 
 let db=null,ME=null,ADMIN=false,CAN_EDIT=false,DL=null,BOOT=true,LOGO=null;
@@ -32,7 +64,7 @@ const range=r=>{const d=(r.giorni||[]).map(g=>g.d).filter(Boolean).sort();return
 
 /* ---------- impronta per riconoscere modifiche dopo la firma ---------- */
 const canon=v=>Array.isArray(v)?'['+v.map(canon).join(',')+']':(v&&typeof v==='object')?'{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canon(v[k])).join(',')+'}':JSON.stringify(v??null);
-const content=r=>({num:r.num,tipo:r.tipo,cli:r.cli,matr:r.matr,macDesc:r.macDesc,oreMac:r.oreMac,sacchi:r.sacchi,tecnici:r.tecnici,giorni:r.giorni,ric:r.ric,note:r.note,firma:{cli:r.firma&&r.firma.cli,cliNome:r.firma&&r.firma.cliNome,tec:r.firma&&r.firma.tec,tecNome:r.firma&&r.firma.tecNome,ts:r.firma&&r.firma.ts}});
+const content=r=>({num:r.num,tipo:r.tipo,cli:r.cli,matr:r.matr,macDesc:r.macDesc,oreMac:r.oreMac,sacchi:r.sacchi,tecnici:r.tecnici,giorni:r.giorni,ric:r.ric,note:r.note,...(r.lingua?{lingua:r.lingua}:{}),firma:{cli:r.firma&&r.firma.cli,cliNome:r.firma&&r.firma.cliNome,tec:r.firma&&r.firma.tec,tecNome:r.firma&&r.firma.tecNome,ts:r.firma&&r.firma.ts}});
 async function digest(r){if(!(window.crypto&&crypto.subtle))return'';const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canon(content(r))));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
 const INTEG={};
 async function checkInteg(r){if(!r.firma||!r.firma.hash)return;const h=await digest(r);if(!h)return;const ok=h===r.firma.hash;if(INTEG[r.id]!==ok){INTEG[r.id]=ok;render()}}
@@ -42,7 +74,7 @@ function newRap(){
   const d=new Date(),yy=String(d.getFullYear()).slice(2),md=String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
   const id='r'+Date.now().toString(36)+rid();
   return{id,num:'RI-'+yy+md+'-'+rid().slice(0,3).toUpperCase(),tipo:'man',cli:{id:'',nome:'',indirizzo:'',contatto:''},matr:'',macDesc:'',oreMac:'',sacchi:'',tecnici:CTX.nome||'',
-    giorni:[{id:rid(),d:today(),v:{},vr:{},tr:{},f:[{da:'08:00',a:'12:00'},{da:'13:00',a:'17:00'}],nt:'1',gar:false,att:''}],ric:[],note:'',by:ME||'',cr:new Date().toISOString()};
+    giorni:[{id:rid(),d:today(),v:{},vr:{},tr:{},f:[{da:'08:00',a:'12:00'},{da:'13:00',a:'17:00'}],nt:'1',gar:false,att:''}],ric:[],note:'',lingua:'IT',by:ME||'',cr:new Date().toISOString()};
 }
 function queueSave(){DIRTY=true;setSync('Modifiche da salvare…');clearTimeout(ST);ST=setTimeout(flush,700)}
 async function flush(){
@@ -107,13 +139,14 @@ function vEdit(){
     <label>Descrizione macchina<input id="f-mde" data-k="macDesc" value="${esc(r.macDesc)}"${dis}></label>
     <label>Ore lavoro macchina<input id="f-ore" data-k="oreMac" inputmode="numeric" value="${esc(r.oreMac)}"${dis}></label>
     <label>Conteggio sacchi<input id="f-sac" data-k="sacchi" inputmode="numeric" value="${esc(r.sacchi)}"${dis}></label>
+    <label>Lingua del modulo<select id="f-lin" data-k="lingua"${dis}>${LINGUE.map(([k,l])=>`<option value="${k}"${(r.lingua||'IT')===k?' selected':''}>${l}</option>`).join('')}</select>${r.linguaAuto&&r.linguaAuto===r.lingua?'<span class="note">proposta dal cliente</span>':''}</label>
    </div>
    <datalist id="dl-cli">${cliOpts()}</datalist><datalist id="dl-mac">${macOpts()}</datalist>
    ${r.cli.nome&&!r.cli.id?`<p class="note" style="margin:8px 0 0">Cliente non presente in anagrafica: i dati restano su questo rapporto. ${CTX.clienti?'Puoi aggiungerlo dalla sezione Clienti.':'Chi gestisce l\'Anagrafica clienti può aggiungerlo.'}</p>`:''}
   </section>`;
   const days=(r.giorni||[]).map((g,i)=>vDay(g,i,dis)).join('');
   const giorn=`<section class="panel"><h2>Giornate <small>una scheda per ogni giorno di trasferta, da compilare a fine giornata</small></h2><div style="display:flex;flex-direction:column;gap:12px">${days||'<div class="empty">Nessuna giornata.</div>'}</div>${ro?'':`<div class="row" style="margin-top:12px"><button type="button" data-act="addday">+ Aggiungi giornata</button></div>`}</section>`;
-  const ric=`<section class="panel"><h2>Parti sostituite</h2>${(r.ric||[]).length?`<div class="tw"><table class="ric"><thead><tr><th>Codice</th><th>Descrizione</th><th class="n">Q.tà</th><th>In garanzia</th><th></th></tr></thead><tbody>${r.ric.map((x,i)=>`<tr><td><input id="rc${i}" data-k="ric.${i}.cod" value="${esc(x.cod)}" aria-label="Codice"${dis}></td><td><input id="rd${i}" data-k="ric.${i}.des" value="${esc(x.des)}" aria-label="Descrizione"${dis}></td><td style="width:80px"><input id="rq${i}" data-k="ric.${i}.q" value="${esc(x.q)}" inputmode="decimal" aria-label="Quantità"${dis}></td><td><label class="chk"><input id="rg${i}" type="checkbox" data-k="ric.${i}.gar" ${x.gar?'checked':''}${dis}> sì</label></td><td>${ro?'':`<button type="button" class="sm dng" data-delric="${i}" aria-label="Elimina riga">✕</button>`}</td></tr>`).join('')}</tbody></table></div>`:'<p class="note" style="margin:0">Nessuna parte sostituita.</p>'}${ro?'':'<div class="row" style="margin-top:10px"><button type="button" data-act="addric">+ Aggiungi parte</button></div>'}</section>`;
+  const ric=`<section class="panel"><h2>Parti sostituite</h2>${(r.ric||[]).length?`<div class="tw"><table class="ric"><thead><tr><th>Codice</th><th>Descrizione</th><th class="n">Q.tà</th><th>In garanzia</th><th></th></tr></thead><tbody>${r.ric.map((x,i)=>`<tr><td><input id="rc${i}" list="dl-art" data-k="ric.${i}.cod" value="${esc(x.cod)}" aria-label="Codice" autocomplete="off"${dis}></td><td><input id="rd${i}" data-k="ric.${i}.des" value="${esc(x.des)}" aria-label="Descrizione"${dis}>${x.desAuto&&x.desAuto===x.des?'<span class="note">dall\'anagrafica articoli</span>':''}</td><td style="width:80px"><input id="rq${i}" data-k="ric.${i}.q" value="${esc(x.q)}" inputmode="decimal" aria-label="Quantità"${dis}></td><td><label class="chk"><input id="rg${i}" type="checkbox" data-k="ric.${i}.gar" ${x.gar?'checked':''}${dis}> sì</label></td><td>${ro?'':`<button type="button" class="sm dng" data-delric="${i}" aria-label="Elimina riga">✕</button>`}</td></tr>`).join('')}</tbody></table></div>`:'<p class="note" style="margin:0">Nessuna parte sostituita.</p>'}<datalist id="dl-art"></datalist>${ro?'':'<div class="row" style="margin-top:10px"><button type="button" data-act="addric">+ Aggiungi parte</button></div>'}</section>`;
   const note=`<section class="panel"><h2>Note finali</h2><textarea id="f-note" data-k="note" placeholder="Osservazioni, consigli al cliente, attività da programmare"${dis}>${esc(r.note)}</textarea></section>`;
   const sum=`<div class="sum"><div><span>Giornate</span><b>${t.giorni}</b></div><div><span>Ore ordinarie (uomo)</span><b>${RI.hrs(t.ordU)}</b></div><div><span>Ore extra (uomo)</span><b>${RI.hrs(t.extU)}</b></div><div><span>Di cui in garanzia</span><b>${RI.hrs(t.ordG+t.extG)}</b></div><div><span>Viaggio (uomo)</span><b>${RI.hrs(t.viaggioU)}</b></div><div><span>Km</span><b>${t.km}</b></div></div>`;
   let fir;
@@ -123,9 +156,9 @@ function vEdit(){
   else{const miss=[];if(!r.cli.nome)miss.push('la ragione sociale');if(!(r.giorni||[]).length)miss.push('almeno una giornata');if(!r.tecnici)miss.push('il nome dei tecnici');
    fir=`<section class="panel confirm"><h2 style="color:var(--fg);margin:0">Firma del rapporto</h2>${sum}
     ${miss.length?`<div class="banner warn">Prima della firma manca ${miss.join(', ')}.</div>`:''}
-    <p style="margin:0">Mostra al cliente il riepilogo (puoi aprire l'anteprima PDF). Con la firma il cliente accetta senza riserve i lavori eseguiti; il servizio sarà fatturato a fine mese.</p>
-    <div class="sigw"><div class="sig"><label class="lab">Nome del tecnico che firma<input id="s-tn" value="${esc((r.tecnici||'').split(',')[0].trim())}"></label><canvas id="pad-tec" width="900" height="300" aria-label="Firma del tecnico"></canvas><div class="row"><button type="button" class="sm" data-clr="pad-tec">Cancella</button></div></div>
-    <div class="sig"><label class="lab">Nome e cognome di chi firma per il cliente<input id="s-cn" value="${esc(r.cli.contatto)}"></label><canvas id="pad-cli" width="900" height="300" aria-label="Firma del cliente"></canvas><div class="row"><button type="button" class="sm" data-clr="pad-cli">Cancella</button></div></div></div>
+    <p style="margin:0">${FIRMA[r.lingua||'IT'].testo}</p>
+    <div class="sigw"><div class="sig"><label class="lab">${FIRMA[r.lingua||'IT'].tec}<input id="s-tn" value="${esc((r.tecnici||'').split(',')[0].trim())}"></label><canvas id="pad-tec" width="900" height="300" aria-label="Firma del tecnico"></canvas><div class="row"><button type="button" class="sm" data-clr="pad-tec">${FIRMA[r.lingua||'IT'].canc}</button></div></div>
+    <div class="sig"><label class="lab">${FIRMA[r.lingua||'IT'].cli}<input id="s-cn" value="${esc(r.cli.contatto)}"></label><canvas id="pad-cli" width="900" height="300" aria-label="Firma del cliente"></canvas><div class="row"><button type="button" class="sm" data-clr="pad-cli">${FIRMA[r.lingua||'IT'].canc}</button></div></div></div>
     <div class="row"><button type="button" class="pri" data-act="conferma"${miss.length?' disabled':''}>Conferma le firme</button><button type="button" data-act="pdf">Anteprima PDF</button><button type="button" data-act="nofirma">Annulla</button></div></section>`}
   return head+ban+dati+giorn+ric+note+fir+(ro?'':`<div class="row"><span class="sp"></span>${!r.firma&&(r.by===ME||ADMIN)?'<button type="button" class="sm dng" data-act="elimina">Elimina rapporto</button>':''}</div>`);
 }
@@ -188,7 +221,9 @@ function onField(e){
   if(el.type==='radio'&&!el.checked)return;
   setK(CUR,k,v);
   if(k==='cli.nome'&&e.type==='change'){const hit=Object.entries(S.clienti).find(([,c])=>c.nome.toLowerCase()===String(v).trim().toLowerCase());
-    if(hit){const[id,c]=hit;CUR.cli={id,nome:c.nome,indirizzo:CUR.cli.indirizzo||indCompleto(c),contatto:CUR.cli.contatto||c.contatto||''}}else CUR.cli.id='';queueSave();render();return}
+    if(hit){const[id,c]=hit;CUR.cli={id,nome:c.nome,indirizzo:CUR.cli.indirizzo||indCompleto(c),contatto:CUR.cli.contatto||c.contatto||''};const l=linguaCli(c);if(!CUR.lingua||CUR.lingua===CUR.linguaAuto||CUR.lingua==='IT'){CUR.lingua=l}CUR.linguaAuto=l}else CUR.cli.id='';queueSave();render();return}
+  if(k==='lingua'){queueSave();render();return}
+  const mc=/^ric\.(\d+)\.cod$/.exec(k);if(mc){if(e.type==='input')suggerisciArticoli(v);else{queueSave();compilaParte(+mc[1],String(v));return}}
   if(k==='matr'&&e.type==='change'){const c=S.clienti[CUR.cli.id];const m=c&&(c.commesse||[]).flatMap(x=>x.macchine||[]).find(m=>m.matr===v);if(m&&!CUR.macDesc){CUR.macDesc=m.desc;const f=$('#f-mde');if(f)f.value=m.desc}}
   const mi=/^giorni\.(\d+)\.(f|nt|d)/.exec(k);if(mi){const c=$('#calc'+mi[1]);if(c)c.innerHTML=calcTxt(CUR.giorni[+mi[1]]);if(mi[2]==='d'&&e.type==='change')render()}
   if(e.type==='input'||el.type==='checkbox'||el.type==='radio'||el.type==='date'||el.type==='time')queueSave();
