@@ -29,6 +29,8 @@ export function nomiTecnici(s) {
 }
 
 const ore = (min) => Math.round(min / 6) / 10; // in ore, al decimo
+const MESI = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+export const nomeMese = (m) => MESI[+m.slice(5, 7) - 1] + ' ' + m.slice(0, 4); // 'AAAA-MM'
 
 // Il cliente è all'estero? Dal paese dell'Anagrafica clienti o, se manca, dall'indirizzo del rapporto
 const ITALIA = /\b(ital[iy]a?|italy)\b/i;
@@ -101,14 +103,16 @@ export async function creaExcel(ExcelJS, righe, da, a) {
     cols.forEach((c, i) => { ws.getColumn(i + 1).width = c[1]; });
   };
 
-  const R = riepilogo(righe);
+  // riepilogo per mese e per tecnico (un periodo può comprendere più mesi)
+  const R = [...new Set(righe.map((x) => x.data.slice(0, 7)))].sort()
+    .flatMap((m) => riepilogo(righe.filter((x) => x.data.startsWith(m))).map((t) => ({ ...t, mese: nomeMese(m) })));
   const w1 = wb.addWorksheet('Riepilogo per tecnico', { views: [{ state: 'frozen', ySplit: 4 }] });
   intest(w1, 'Report ore tecnici – riepilogo');
-  testata(w1, [['Tecnico', 26], ['Giornate', 10], ['Ore lavoro', 11], ['di cui ordinarie', 12], ['Straordinario (oltre 8 h/giorno)', 15], ['di cui sab./dom./festivi', 13], ['Ore viaggio', 11], ['Notti fuori Italia (indennità)', 14], ['Notti fuori estero (indennità)', 14]]);
-  R.forEach((t) => w1.addRow([t.tecnico, t.giornate, t.lavoro, t.ordinarie, t.straordinario, t.festivi, t.viaggio, t.nottiIt, t.nottiEst]));
-  const tot = w1.addRow(['Totale', ...['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'].map((c) => ({ formula: `SUM(${c}5:${c}${4 + R.length})` }))]);
+  testata(w1, [['Mese', 15], ['Tecnico', 26], ['Giornate', 10], ['Ore lavoro', 11], ['di cui ordinarie', 12], ['Straordinario (oltre 8 h/giorno)', 15], ['di cui sab./dom./festivi', 13], ['Ore viaggio', 11], ['Notti fuori Italia (indennità)', 14], ['Notti fuori estero (indennità)', 14]]);
+  R.forEach((t) => w1.addRow([t.mese, t.tecnico, t.giornate, t.lavoro, t.ordinarie, t.straordinario, t.festivi, t.viaggio, t.nottiIt, t.nottiEst]));
+  const tot = w1.addRow(['Totale periodo', '', ...['C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'].map((c) => ({ formula: `SUM(${c}5:${c}${4 + R.length})` }))]);
   tot.font = { bold: true };
-  [3, 4, 5, 6, 7].forEach((c) => { w1.getColumn(c).numFmt = '0.0'; });
+  [4, 5, 6, 7, 8].forEach((c) => { w1.getColumn(c).numFmt = '0.0'; });
 
   const w2 = wb.addWorksheet('Dettaglio giornate', { views: [{ state: 'frozen', ySplit: 4 }] });
   intest(w2, 'Report ore tecnici – dettaglio giornate');
@@ -131,7 +135,6 @@ export function pdfReport(jsPDF, r, logo, paeseDi) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const L = 12, R = 198, W = R - L, FONDO = 282;
   const righe = righeReport([{ dati: r }], '0000-01-01', '9999-12-31', paeseDi ? () => paeseDi(r) : null);
-  const tot = riepilogo(righe);
   const num = (n) => (n ? String(Math.round(n * 10) / 10).replace('.', ',') : '–');
   const t = (s, x, y, o = {}) => { doc.setFont('helvetica', o.b ? 'bold' : 'normal'); doc.setFontSize(o.sz || 8.5); doc.setTextColor(o.c || '#1b1b1b'); doc.text(String(s ?? ''), x, y, { align: o.al || 'left', maxWidth: o.mw }); };
   const taglia = (s, w, sz) => { doc.setFontSize(sz); let x = String(s ?? ''); if (doc.getTextWidth(x) <= w) return x; while (x && doc.getTextWidth(x + '…') > w) x = x.slice(0, -1); return x + '…'; };
@@ -184,20 +187,35 @@ export function pdfReport(jsPDF, r, logo, paeseDi) {
 
   if (!righe.length) { t('Nessuna giornata compilata in questo rapporto.', L, y, { sz: 10 }); }
   else {
-    tabella('Giornate', [
-      { t: 'Data', w: 18, v: (d) => RI.fd(d.data) }, { t: 'Giorno', w: 22, v: (d) => d.festivo && d.festivo !== d.giorno ? `${d.giorno} (${d.festivo})` : d.giorno },
-      { t: 'Tecnico', w: 40, v: (d) => d.tecnico }, { t: 'Lavoro', w: 16, n: 1, v: (d) => num(d.lavoro) }, { t: 'Ordinarie', w: 18, n: 1, v: (d) => num(d.ordinarie) },
-      { t: 'Straord.', w: 17, n: 1, v: (d) => num(d.straordinario) }, { t: 'Ore viaggio', w: 21, n: 1, v: (d) => num(d.viaggio) },
-      { t: 'Notte fuori', w: 34, v: (d) => (d.notte ? (d.estero ? '   sì – estero' : '   sì – Italia') : '   no') },
-    ], righe, { evidenzia: (d) => !!d.festivo });
+    // Un intervento a cavallo di due mesi viene diviso per mese (ogni mese da una nuova pagina)
+    const mesi = [...new Set(righe.map((d) => d.data.slice(0, 7)))].sort();
+    if (mesi.length > 1) {
+      t(`Intervento a cavallo di ${mesi.length} mesi: giornate e totali sono divisi per mese.`, L, y - 4, { sz: 8.5, c: '#1f3a5f', b: true });
+      y += 3;
+    }
+    mesi.forEach((m, mi) => {
+      const rm = righe.filter((d) => d.data.startsWith(m)), totm = riepilogo(rm);
+      const nm = mesi.length > 1 ? ' – ' + nomeMese(m) : '';
+      if (mesi.length > 1) {
+        if (mi > 0) { doc.addPage(); testata(); }
+        doc.setFillColor('#e1ecf4'); doc.rect(L, y - 5, W, 8, 'F');
+        t(nomeMese(m).toUpperCase(), L + 2, y + 0.5, { b: true, sz: 11, c: '#1f3a5f' }); y += 9;
+      }
+      tabella('Giornate' + nm, [
+        { t: 'Data', w: 18, v: (d) => RI.fd(d.data) }, { t: 'Giorno', w: 22, v: (d) => d.festivo && d.festivo !== d.giorno ? `${d.giorno} (${d.festivo})` : d.giorno },
+        { t: 'Tecnico', w: 40, v: (d) => d.tecnico }, { t: 'Lavoro', w: 16, n: 1, v: (d) => num(d.lavoro) }, { t: 'Ordinarie', w: 18, n: 1, v: (d) => num(d.ordinarie) },
+        { t: 'Straord.', w: 17, n: 1, v: (d) => num(d.straordinario) }, { t: 'Ore viaggio', w: 21, n: 1, v: (d) => num(d.viaggio) },
+        { t: 'Notte fuori', w: 34, v: (d) => (d.notte ? (d.estero ? '   sì – estero' : '   sì – Italia') : '   no') },
+      ], rm, { evidenzia: (d) => !!d.festivo });
 
-    tabella('Totali per tecnico', [
-      { t: 'Tecnico', w: 34, v: (d) => d.tecnico }, { t: 'Giornate', w: 14, n: 1, v: (d) => d.giornate }, { t: 'Lavoro', w: 14, n: 1, v: (d) => num(d.lavoro) },
-      { t: 'Ordinarie', w: 15, n: 1, v: (d) => num(d.ordinarie) }, { t: 'Straord.', w: 15, n: 1, v: (d) => num(d.straordinario) },
-      { t: 'Sab/dom/fest.', w: 19, n: 1, v: (d) => num(d.festivi) }, { t: 'Ore viaggio', w: 20, n: 1, v: (d) => num(d.viaggio) },
-      { t: 'Indenn. Italia', w: 27, n: 1, v: (d) => (d.nottiIt ? `${d.nottiIt} ${d.nottiIt === 1 ? 'notte' : 'notti'}` : '–') },
-      { t: 'Indenn. estero', w: 28, n: 1, v: (d) => (d.nottiEst ? `${d.nottiEst} ${d.nottiEst === 1 ? 'notte' : 'notti'}` : '–') },
-    ], tot, { grassetto: () => true });
+      tabella('Totali per tecnico' + nm, [
+        { t: 'Tecnico', w: 34, v: (d) => d.tecnico }, { t: 'Giornate', w: 14, n: 1, v: (d) => d.giornate }, { t: 'Lavoro', w: 14, n: 1, v: (d) => num(d.lavoro) },
+        { t: 'Ordinarie', w: 15, n: 1, v: (d) => num(d.ordinarie) }, { t: 'Straord.', w: 15, n: 1, v: (d) => num(d.straordinario) },
+        { t: 'Sab/dom/fest.', w: 19, n: 1, v: (d) => num(d.festivi) }, { t: 'Ore viaggio', w: 20, n: 1, v: (d) => num(d.viaggio) },
+        { t: 'Indenn. Italia', w: 27, n: 1, v: (d) => (d.nottiIt ? `${d.nottiIt} ${d.nottiIt === 1 ? 'notte' : 'notti'}` : '–') },
+        { t: 'Indenn. estero', w: 28, n: 1, v: (d) => (d.nottiEst ? `${d.nottiEst} ${d.nottiEst === 1 ? 'notte' : 'notti'}` : '–') },
+      ], totm, { grassetto: () => true });
+    });
 
     const avvisi = [...new Set(righe.filter((d) => d.avvisi).map((d) => `${RI.fd(d.data)}: ${d.avvisi}`))];
     if (avvisi.length) {

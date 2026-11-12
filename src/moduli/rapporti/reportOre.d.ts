@@ -5,3 +5,4 @@ export function riepilogo(righe: unknown[]): any[];
 export function festivo(iso: string): string;
 export function nomiTecnici(s: string): string[];
 export function pdfReport(jsPDF: unknown, r: unknown, logo: string | null, paeseDi?: (r: any) => string): { output(t: "blob"): Blob };
+export const nomeMese: (m: string) => string;
