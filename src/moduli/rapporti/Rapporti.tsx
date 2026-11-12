@@ -2,6 +2,7 @@
 import { useEffect, useRef } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import "./rapporti.css";
+import ReportOre from "./ReportOre";
 
 type Props = { me: string; modifica: boolean; gestisce: boolean; clienti: boolean };
 
@@ -37,12 +38,13 @@ export default function Rapporti({ me, modifica, gestisce, clienti }: Props) {
   }, [me, modifica, gestisce, clienti]);
 
   return (
-    <div className="ri" ref={root}>
+    <div className="ri" ref={root} style={{ position: "relative" }}>
       <div className="bar">
         <img src="/logo-bmtek.png" alt="BMTEK" />
         <h1>Rapporti d&apos;intervento</h1>
         <nav className="tabs" data-ri="tabs" aria-label="Sezioni del modulo" />
         <span className="sp" />
+        {gestisce && <ReportOre />}
         <span className="sync" data-ri="sync">Connessione…</span>
       </div>
       <div data-ri="app"><div className="empty">Caricamento dei rapporti…</div></div>

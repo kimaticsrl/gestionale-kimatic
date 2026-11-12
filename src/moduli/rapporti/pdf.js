@@ -201,5 +201,13 @@ export const RI = (function () {
     }
     return doc;
   }
-  return { build, split, totals, tm, hm, hrs, fd, d2n, n2s, dow, DUR };
+  /* notte fuori sede: scelta del tecnico; se non indicata, sì quando il giorno dopo
+     c'è un'altra giornata dello stesso rapporto (il tecnico non è rientrato) */
+  function notte(r, g) {
+    if (g.notte === true || g.notte === false) return g.notte;
+    const n = d2n(g.d); if (n == null) return false;
+    return (r.giorni || []).some(x => d2n(x.d) === n + 1);
+  }
+
+  return { build, split, totals, notte, tm, hm, hrs, fd, d2n, n2s, dow, DUR };
 })();
