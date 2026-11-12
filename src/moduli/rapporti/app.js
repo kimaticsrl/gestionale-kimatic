@@ -125,7 +125,7 @@ function cliOpts(){return Object.entries(S.clienti).sort((a,b)=>a[1].nome.locale
 function macOpts(){const c=S.clienti[CUR.cli.id];if(!c)return'';return (c.commesse||[]).flatMap(k=>(k.macchine||[]).filter(m=>/^\d/.test(m.matr||'')).map(m=>`<option value="${esc(m.matr)}">${esc(m.desc+' · comm. '+k.num)}</option>`)).join('')}
 function vEdit(){
   const r=CUR,lk=locked(),ro=lk||!CAN_EDIT,dis=ro?' disabled':'',t=RI.totals(r),st=stato(r);
-  const head=`<div class="top"><button type="button" data-act="back">← Interventi</button><h2>${esc(r.cli.nome||'Nuovo intervento')}</h2><span class="mono" style="color:var(--mut)">${esc(r.num)}</span>${pill(r)}<span class="sp"></span>${(r.giorni||[]).length?`<button type="button" data-act="orepdf">Report ore (PDF)</button>`:''}${lk?`<button type="button" class="pri" data-act="pdf">Scarica PDF</button>`:''}</div>`;
+  const head=`<div class="top"><button type="button" data-act="back">← Interventi</button><h2>${esc(r.cli.nome||'Nuovo intervento')}</h2><span class="mono" style="color:var(--mut)">${esc(r.num)}</span>${pill(r)}<span class="sp"></span>${(r.giorni||[]).length?`<button type="button" data-act="orepdf">Report ore (PDF)</button>`:''}${lk?`<button type="button" data-act="invia">Invia al cliente</button><button type="button" class="pri" data-act="pdf">Scarica PDF</button>`:''}</div>`;
   const ban=st==='dafatt'?`<div class="banner warn"><b>Firmato dal cliente il ${RI.fd(r.firma.ts.slice(0,10))} alle ${r.firma.ts.slice(11,16)}.</b> È nella coda «Da fatturare». Il rapporto ora è in sola lettura.${INTEG[r.id]===false?' <b>Attenzione: il contenuto è stato modificato dopo la firma.</b>':''}${ADMIN?' <span class="sp"></span><button type="button" class="sm dng" data-act="riapri">Riapri e annulla la firma</button>':''}</div>`
     :st==='fatturato'?`<div class="banner ok"><b>Fatturato</b>${S.fatture[r.id].nf?' · fattura '+esc(S.fatture[r.id].nf):''}${S.fatture[r.id].df?' del '+RI.fd(S.fatture[r.id].df):''}</div>`:'';
   const dati=`<section class="panel"><h2>Dati intervento</h2>
@@ -253,6 +253,7 @@ ROOT.addEventListener('click',async e=>{
     case'nofirma':UI.sign=false;render();break;
     case'conferma':await doSign(b);break;
     case'pdf':await doPdf(CUR);break;
+    case'invia':await doInvia(CUR);break;
     case'elimina':if(!confirmTwice(b,'Tocca di nuovo per eliminare il rapporto'))return;try{await db.doc('rapporti/'+CUR.id).delete();delete S.rapporti[CUR.id];DIRTY=false;CUR=null;UI.open=null;saveUI();render();toast('Rapporto eliminato')}catch(err){toast('Non riesco a eliminarlo: riprova')}break;
     case'riapri':if(!confirmTwice(b,'Tocca di nuovo: la firma del cliente verrà cancellata'))return;delete CUR.firma;CUR.riaperto=new Date().toISOString();DIRTY=true;await flush();render();toast('Rapporto riaperto: andrà firmato di nuovo');break;
     case'pdfid':await doPdf(S.rapporti[d.id]);break;
@@ -298,6 +299,34 @@ async function doPdf(r){
     const nm=(r.num+' '+(r.cli&&r.cli.nome||'')+(r.firma?'':' BOZZA')).replace(/[\\/:*?"<>|]+/g,' ').trim()+'.pdf';
     await DL.save({filename:nm,data:blob})}
   catch(e){if(e&&e.code==='declined')return;toast('Non riesco a creare il PDF: '+(e&&e.message||'errore'))}
+}
+
+/* ---------- invio al cliente dal dispositivo del tecnico ---------- */
+const MAILT={
+  IT:{s:'Rapporto d\'intervento',b:'Gentile cliente,\nin allegato il rapporto d\'intervento {n} firmato.\n\nCordiali saluti\nKimatic'},
+  EN:{s:'Service report',b:'Dear customer,\nplease find attached the signed service report {n}.\n\nBest regards\nKimatic'},
+  FR:{s:'Rapport d\'intervention',b:'Madame, Monsieur,\nveuillez trouver ci-joint le rapport d\'intervention {n} signé.\n\nCordialement\nKimatic'},
+  ES:{s:'Informe de intervención',b:'Estimado cliente:\nadjuntamos el informe de intervención {n} firmado.\n\nAtentamente\nKimatic'}};
+async function doInvia(r){
+  if(!r||!r.firma||!r.firma.ts){toast('Si può inviare solo un rapporto firmato');return}
+  const an=S.clienti[r.cli&&r.cli.id]||{},to=(an.email||'').trim();
+  const T=MAILT[r.lingua]||MAILT.IT,sub=T.s+' '+r.num+' – '+(r.cli.nome||''),body=T.b.replace('{n}',r.num);
+  let file=null;
+  try{const jsPDF=await CTX.jsPDF();const blob=RI.build(jsPDF,r,LOGO).output('blob');
+    const nm=(r.num+' '+(r.cli&&r.cli.nome||'')).replace(/[\\/:*?"<>|]+/g,' ').trim()+'.pdf';
+    file=new File([blob],nm,{type:'application/pdf'})}
+  catch(e){toast('Non riesco a creare il PDF: '+(e&&e.message||'errore'));return}
+  /* telefono/tablet: il foglio di condivisione apre la posta con il PDF già allegato */
+  if(navigator.canShare&&navigator.canShare({files:[file]})){
+    if(to){try{await navigator.clipboard.writeText(to)}catch(e){}}
+    try{await navigator.share({files:[file],title:sub,text:body});
+      toast(to?'Scegli l\'app di posta; l\'indirizzo '+to+' è già copiato: incollalo nel destinatario':'Scegli l\'app di posta. Nell\'anagrafica del cliente manca l\'e-mail')}
+    catch(e){if(e&&e.name==='AbortError')return;toast('Condivisione non riuscita: '+(e&&e.message||'errore'))}
+    return}
+  /* computer: salva il PDF e apre la mail già compilata, l'allegato va aggiunto a mano */
+  if(DL){try{await DL.save({filename:file.name,data:file})}catch(e){if(e&&e.code==='declined')return}}
+  location.href='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(sub)+'&body='+encodeURIComponent(body);
+  toast('PDF scaricato: allegalo alla mail che si è aperta'+(to?'':' (manca l\'e-mail del cliente)'));
 }
 
 /* report ore del singolo rapporto, per l'ufficio amministrativo */
