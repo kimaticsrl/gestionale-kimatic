@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { creaClaude } from "@/moduli/offerte-bmtek/shim";
+import ImportaManuali from "./ImportaManuali";
 
 type Utente = { id: string; nome: string; email: string };
 const nuovoId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
@@ -10,8 +11,10 @@ const nuovoId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b)
 // i PDF nell'archivio file privato «manuali» (un file <id>.pdf per ogni manuale).
 export default function Manuali({ livello, utente }: { livello: string; utente: Utente }) {
   const [pronto, setPronto] = useState(false);
+  const [importa, setImporta] = useState(false);
+  const [chiave, setChiave] = useState(0);
+  const [sb] = useState(() => supabaseBrowser());
   useEffect(() => {
-    const sb = supabaseBrowser();
     const base = creaClaude({ supabase: sb, utente, livello, tabella: "man_docs", capacita: ["db", "user", "downloads"] }) as { use: (n: string) => Promise<unknown> };
     const assets = {
       async upload(file: File) {
@@ -26,10 +29,18 @@ export default function Manuali({ livello, utente }: { livello: string; utente: 
       use: async (n: string) => (n === "assets" ? (puo ? assets : null) : base.use(n)),
     };
     setPronto(true);
-  }, [livello, utente]);
+  }, [livello, utente, sb]);
   if (!pronto) return <div className="empty">Caricamento…</div>;
   return (
-    <iframe src="/manuali/index.html" title="Catalogo manuali BMTEK"
+    <>
+      {livello === "gestisce" && !importa && (
+        <div className="row" style={{ justifyContent: "flex-end", marginBottom: 8 }}>
+          <button className="btn sec" onClick={() => setImporta(true)}>Importa cartella di manuali</button>
+        </div>
+      )}
+      {importa && <ImportaManuali sb={sb} chiudi={() => setImporta(false)} fatto={() => setChiave((k) => k + 1)} />}
+    <iframe key={chiave} src="/manuali/index.html" title="Catalogo manuali BMTEK"
       style={{ width: "100%", height: "calc(100vh - 56px)", border: "1px solid var(--line)", borderRadius: 10, background: "#fff" }} />
+    </>
   );
 }
