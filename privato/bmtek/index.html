@@ -1852,7 +1852,7 @@ init();
 })();
 </script>
 
-<script>/* Gestionale Kimatic: clienti dall'Anagrafica clienti. Scegliendo il cliente si compilano indirizzo, paese, referente, e-mail e lingua (solo i campi vuoti). */
+<script>/* Gestionale Kimatic: clienti dall'Anagrafica clienti. Scegliendo il cliente si compilano indirizzo, CAP e città, paese, referente, e-mail e lingua (solo i campi vuoti). */
 (function(){var P=window.parent;if(!P||!P.KIMATIC_CLIENTI)return;var C=[];
 var norm=function(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,' ').trim()};
 var es=function(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})};
@@ -1864,7 +1864,7 @@ document.addEventListener('change',function(e){var t=e.target;if(!t||!t.matches|
  setTimeout(function(){var q=function(x){return document.querySelector(x)};
   var vuoto=['0','1','2'].every(function(i){var f=q('input[data-ad="'+i+'"]');return !f||!f.value.trim()});
   var metti=function(sel,v){var f=q(sel);if(!f||f.disabled||!v||f.value.trim())return;f.value=v;f.dispatchEvent(new Event('input',{bubbles:true}));f.dispatchEvent(new Event('change',{bubbles:true}))};
-  metti('input[data-ad="0"]',d.indirizzo);metti('input[data-ad="2"]',d.paese);metti('input[data-o="rifC"]',d.contatto);metti('input[data-o="mailC"]',d.email);
+  metti('input[data-ad="0"]',d.indirizzo);var cc=[d.cap,d.citta].filter(Boolean).join(' ');metti('input[data-ad="1"]',cc&&cc+(d.provincia&&(!d.paese||/ital/i.test(d.paese))?' ('+d.provincia+')':''));metti('input[data-ad="2"]',d.paese);metti('input[data-o="rifC"]',d.contatto);metti('input[data-o="mailC"]',d.email);
   var l=q('select[data-o="lang"]');if(vuoto&&l&&!l.disabled&&d.lingua&&l.value!==d.lingua&&l.querySelector('option[value="'+d.lingua+'"]')){l.value=d.lingua;l.dispatchEvent(new Event('change',{bubbles:true}))}
  },0)});
 })();</script>

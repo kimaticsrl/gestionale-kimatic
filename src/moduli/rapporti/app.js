@@ -154,11 +154,17 @@ function adesso(k){
   setK(CUR,k,hh+':'+mm);
   if(/\.(v|vr)\.(da|a)$/.test(k)){let tz='';try{tz=Intl.DateTimeFormat().resolvedOptions().timeZone||''}catch(e){}setK(CUR,k+'Off',-d.getTimezoneOffset());setK(CUR,k+'Tz',tz)}
 }
+/* indirizzo completo dall'anagrafica: via, CAP città (provincia), paese se estero */
+function indCompleto(c){
+  const it=!c.paese||/ital/i.test(c.paese),pr=c.provincia&&it?' ('+c.provincia+')':'';
+  const cc=[c.cap,c.citta].filter(Boolean).join(' ');
+  return [c.indirizzo,cc?cc+pr:'',it?'':c.paese].filter(Boolean).join(', ');
+}
 /* km dalla sede all'indirizzo del cliente (percorso stradale, sola andata) */
 const KM={};
 async function calcolaKm(p,silenzioso){
   const c=CUR.cli||{},an=S.clienti[c.id]||{};
-  const ind=[c.indirizzo||an.indirizzo,an.provincia,an.paese].filter(Boolean).join(', ');
+  const ind=[c.indirizzo||an.indirizzo,!/\d{4,5}/.test(c.indirizzo||'')?[an.cap,an.citta].filter(Boolean).join(' '):'',an.provincia,an.paese].filter(Boolean).join(', ');
   if(!(c.indirizzo||an.indirizzo)){if(!silenzioso)toast('Manca l\'indirizzo del cliente: inseriscilo nei dati del rapporto');return}
   try{
     if(!KM[ind]){const res=await fetch('/api/km?'+new URLSearchParams({indirizzo:ind,nome:c.nome||''}));const j=await res.json();if(!res.ok)throw new Error(j.errore||'non calcolati');KM[ind]=j}
@@ -182,7 +188,7 @@ function onField(e){
   if(el.type==='radio'&&!el.checked)return;
   setK(CUR,k,v);
   if(k==='cli.nome'&&e.type==='change'){const hit=Object.entries(S.clienti).find(([,c])=>c.nome.toLowerCase()===String(v).trim().toLowerCase());
-    if(hit){const[id,c]=hit;CUR.cli={id,nome:c.nome,indirizzo:CUR.cli.indirizzo||c.indirizzo||'',contatto:CUR.cli.contatto||c.contatto||''}}else CUR.cli.id='';queueSave();render();return}
+    if(hit){const[id,c]=hit;CUR.cli={id,nome:c.nome,indirizzo:CUR.cli.indirizzo||indCompleto(c),contatto:CUR.cli.contatto||c.contatto||''}}else CUR.cli.id='';queueSave();render();return}
   if(k==='matr'&&e.type==='change'){const c=S.clienti[CUR.cli.id];const m=c&&(c.commesse||[]).flatMap(x=>x.macchine||[]).find(m=>m.matr===v);if(m&&!CUR.macDesc){CUR.macDesc=m.desc;const f=$('#f-mde');if(f)f.value=m.desc}}
   const mi=/^giorni\.(\d+)\.(f|nt|d)/.exec(k);if(mi){const c=$('#calc'+mi[1]);if(c)c.innerHTML=calcTxt(CUR.giorni[+mi[1]]);if(mi[2]==='d'&&e.type==='change')render()}
   if(e.type==='input'||el.type==='checkbox'||el.type==='radio'||el.type==='date'||el.type==='time')queueSave();

@@ -4,13 +4,13 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 
 type Macchina = { matr: string; desc: string };
 type Commessa = { num: string; chiusa?: boolean; macchine: Macchina[] };
-type Dati = { codice_sam?: string; ragione_sociale?: string; paese?: string; provincia?: string; cellulare?: string; agente?: string; cliente_dal?: string; indirizzo?: string; contatto?: string; email?: string; telefono?: string; piva?: string; lingua?: string; note?: string; fonti?: string[]; commesse?: Commessa[] };
+type Dati = { cap?: string; citta?: string; codice_sam?: string; ragione_sociale?: string; paese?: string; provincia?: string; cellulare?: string; agente?: string; cliente_dal?: string; indirizzo?: string; contatto?: string; email?: string; telefono?: string; piva?: string; lingua?: string; note?: string; fonti?: string[]; commesse?: Commessa[] };
 type Cliente = { id: string; nome: string; dati: Dati };
 type Offerta = { id: string; num: string; cliente: string; cr: string; addr?: string[]; rifC?: string; mailC?: string; lang?: string };
 type Rapporto = { id: string; numero: string; firma_ts: string | null; creato_il: string; cli: { id?: string; nome?: string } | null };
 type Caso = { id: string; titolo: string; cliente: string; data: string };
 
-const CAMPI: [keyof Dati, string][] = [["codice_sam", "Codice SAM"], ["ragione_sociale", "Ragione sociale completa"], ["indirizzo", "Indirizzo"], ["provincia", "Provincia"], ["paese", "Paese"], ["piva", "P.IVA / VAT"], ["contatto", "Persona di riferimento"], ["email", "E-mail"], ["telefono", "Telefono"], ["cellulare", "Cellulare"], ["agente", "Agente"], ["lingua", "Lingua documenti"], ["cliente_dal", "In SAM dal"]];
+const CAMPI: [keyof Dati, string][] = [["codice_sam", "Codice SAM"], ["ragione_sociale", "Ragione sociale completa"], ["indirizzo", "Indirizzo"], ["cap", "CAP"], ["citta", "Città"], ["provincia", "Provincia"], ["paese", "Paese"], ["piva", "P.IVA / VAT"], ["contatto", "Persona di riferimento"], ["email", "E-mail"], ["telefono", "Telefono"], ["cellulare", "Cellulare"], ["agente", "Agente"], ["lingua", "Lingua documenti"], ["cliente_dal", "In SAM dal"]];
 const norm = (s: string) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\b(srl|s\.r\.l\.|spa|s\.p\.a\.|ltd|llc|gmbh|sa|sas|snc|oy|ab|uab)\b/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 const simile = (a: string, b: string) => { const x = norm(a), y = norm(b); return !!x && !!y && (x === y || (x.length > 3 && y.includes(x)) || (y.length > 3 && x.includes(y))); };
 const slug = (s: string) => norm(s).replace(/ /g, "-") || "c" + Date.now().toString(36);
@@ -45,7 +45,7 @@ export default function Clienti({ gestisce }: { gestisce: boolean }) {
 
   const lista = useMemo(() => {
     const n = norm(q);
-    return clienti.filter((c) => !n || norm([c.nome, c.dati.ragione_sociale, c.dati.codice_sam, c.dati.piva, c.dati.paese, c.dati.contatto, c.dati.indirizzo, ...(c.dati.commesse || []).flatMap((k) => [k.num, ...(k.macchine || []).map((m) => m.matr)])].join(" ")).includes(n));
+    return clienti.filter((c) => !n || norm([c.nome, c.dati.ragione_sociale, c.dati.codice_sam, c.dati.piva, c.dati.paese, c.dati.citta, c.dati.cap, c.dati.contatto, c.dati.indirizzo, ...(c.dati.commesse || []).flatMap((k) => [k.num, ...(k.macchine || []).map((m) => m.matr)])].join(" ")).includes(n));
   }, [clienti, q]);
 
   // Clienti presenti nelle offerte ma non ancora in anagrafica
@@ -105,7 +105,7 @@ export default function Clienti({ gestisce }: { gestisce: boolean }) {
             {carico ? <p className="sub">Caricamento…</p> : lista.map((x) => (
               <button key={x.id} type="button" className="btn sec" onClick={() => { setSel(x.id); setEd(null); setMsg(""); }}
                 style={{ justifyContent: "flex-start", textAlign: "left", flexDirection: "column", alignItems: "flex-start", gap: 0, fontWeight: 500, borderColor: sel === x.id ? "var(--accent)" : "var(--line)", background: sel === x.id ? "var(--accent-soft)" : "transparent", color: "var(--fg)" }}>
-                <b>{x.nome}</b><small style={{ color: "var(--muted)" }}>{[x.dati.paese, (x.dati.commesse || []).length ? (x.dati.commesse || []).length + " commesse" : "", x.dati.contatto].filter(Boolean).join(" · ") || "—"}</small>
+                <b>{x.nome}</b><small style={{ color: "var(--muted)" }}>{[[x.dati.citta, x.dati.paese].filter(Boolean).join(", "), (x.dati.commesse || []).length ? (x.dati.commesse || []).length + " commesse" : "", x.dati.contatto].filter(Boolean).join(" · ") || "—"}</small>
               </button>
             ))}
             {!carico && !lista.length && <p className="sub">Nessun cliente.</p>}
