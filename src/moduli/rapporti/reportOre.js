@@ -114,3 +114,96 @@ export async function creaExcel(ExcelJS, righe, da, a) {
 
   return new Blob([await wb.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
+
+// PDF del report ore di un singolo rapporto (A4 verticale)
+export function pdfReport(jsPDF, r, logo) {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const L = 12, R = 198, W = R - L, FONDO = 282;
+  const righe = righeReport([{ dati: r }], '0000-01-01', '9999-12-31');
+  const tot = riepilogo(righe);
+  const num = (n) => (n ? String(Math.round(n * 10) / 10).replace('.', ',') : '–');
+  const t = (s, x, y, o = {}) => { doc.setFont('helvetica', o.b ? 'bold' : 'normal'); doc.setFontSize(o.sz || 8.5); doc.setTextColor(o.c || '#1b1b1b'); doc.text(String(s ?? ''), x, y, { align: o.al || 'left', maxWidth: o.mw }); };
+  const taglia = (s, w, sz) => { doc.setFontSize(sz); let x = String(s ?? ''); if (doc.getTextWidth(x) <= w) return x; while (x && doc.getTextWidth(x + '…') > w) x = x.slice(0, -1); return x + '…'; };
+  let y = 14;
+
+  function testata() {
+    if (logo) { try { doc.addImage(logo, 'PNG', L, 8, 34, 11); } catch (e) { /* senza logo */ } }
+    t("REPORT ORE D'INTERVENTO", R, 13, { b: true, sz: 13, al: 'right' });
+    t(`${r.num || ''} · ${r.firma ? 'firmato dal cliente' : 'in compilazione'}`, R, 18.5, { sz: 9, al: 'right', c: '#555555' });
+    doc.setDrawColor('#1f3a5f'); doc.setLineWidth(0.6); doc.line(L, 22, R, 22);
+    y = 28;
+  }
+  function nuovaPagina(spazio) { if (y + spazio > FONDO) { doc.addPage(); testata(); } }
+
+  testata();
+  // Dati dell'intervento
+  const date = (r.giorni || []).map((g) => g.d).filter(Boolean).sort();
+  const periodo = date.length ? (date.length === 1 ? RI.fd(date[0]) : `dal ${RI.fd(date[0])} al ${RI.fd(date[date.length - 1])}`) : '–';
+  const info = [
+    ['Cliente', r.cli?.nome], ['Indirizzo', r.cli?.indirizzo], ['Tipo', r.tipo === 'inst' ? 'Installazione' : 'Manutenzione'],
+    ['Macchina', [r.macDesc, r.matr && 'matr. ' + r.matr].filter(Boolean).join(' – ')], ['Periodo', periodo], ['Tecnici', r.tecnici],
+  ];
+  info.forEach(([k, v], i) => {
+    const x = i % 2 ? L + W / 2 : L, yy = y + Math.floor(i / 2) * 6;
+    t(k, x, yy, { sz: 7.5, c: '#666666' }); t(taglia(v || '–', W / 2 - 24, 9), x + 20, yy, { sz: 9 });
+  });
+  y += 22;
+
+  // Tabella generica con intestazione ripetuta a ogni pagina
+  function tabella(titolo, cols, dati, opz = {}) {
+    nuovaPagina(22);
+    t(titolo, L, y, { b: true, sz: 10.5 }); y += 4;
+    const intest = () => {
+      doc.setFillColor('#1f3a5f'); doc.rect(L, y, W, 7, 'F');
+      let x = L; cols.forEach((c) => { t(c.t, c.n ? x + c.w - 1.5 : x + 1.5, y + 4.7, { b: true, sz: 7.3, c: '#ffffff', al: c.n ? 'right' : 'left' }); x += c.w; });
+      y += 7;
+    };
+    intest();
+    dati.forEach((d, i) => {
+      if (y + 6.2 > FONDO) { doc.addPage(); testata(); intest(); }
+      if (opz.evidenzia && opz.evidenzia(d)) { doc.setFillColor('#fff6dc'); doc.rect(L, y, W, 6.2, 'F'); }
+      else if (i % 2) { doc.setFillColor('#f3f5f7'); doc.rect(L, y, W, 6.2, 'F'); }
+      let x = L;
+      cols.forEach((c) => { const v = c.v(d); t(taglia(v, c.w - 3, 8), c.n ? x + c.w - 1.5 : x + 1.5, y + 4.2, { sz: 8, al: c.n ? 'right' : 'left', b: opz.grassetto && opz.grassetto(d) }); x += c.w; });
+      y += 6.2;
+    });
+    doc.setDrawColor('#c9d1d9'); doc.setLineWidth(0.2); doc.line(L, y, R, y);
+    y += 8;
+  }
+
+  if (!righe.length) { t('Nessuna giornata compilata in questo rapporto.', L, y, { sz: 10 }); }
+  else {
+    tabella('Giornate', [
+      { t: 'Data', w: 18, v: (d) => RI.fd(d.data) }, { t: 'Giorno', w: 22, v: (d) => d.festivo && d.festivo !== d.giorno ? `${d.giorno} (${d.festivo})` : d.giorno },
+      { t: 'Tecnico', w: 34, v: (d) => d.tecnico }, { t: 'Lavoro', w: 14, n: 1, v: (d) => num(d.lavoro) }, { t: 'Ordinarie', w: 16, n: 1, v: (d) => num(d.ordinarie) },
+      { t: 'Straord.', w: 15, n: 1, v: (d) => num(d.straordinario) }, { t: 'Viaggio', w: 15, n: 1, v: (d) => num(d.viaggio) }, { t: 'Km', w: 12, n: 1, v: (d) => d.km || '–' },
+      { t: 'Training', w: 15, n: 1, v: (d) => num(d.training) }, { t: 'Notte fuori', w: 25, v: (d) => (d.notte ? '   sì – indennità' : '   no') },
+    ], righe, { evidenzia: (d) => !!d.festivo });
+
+    tabella('Totali per tecnico', [
+      { t: 'Tecnico', w: 40, v: (d) => d.tecnico }, { t: 'Giornate', w: 15, n: 1, v: (d) => d.giornate }, { t: 'Lavoro', w: 16, n: 1, v: (d) => num(d.lavoro) },
+      { t: 'Ordinarie', w: 17, n: 1, v: (d) => num(d.ordinarie) }, { t: 'Straord.', w: 17, n: 1, v: (d) => num(d.straordinario) },
+      { t: 'Sab/dom/fest.', w: 21, n: 1, v: (d) => num(d.festivi) }, { t: 'Viaggio', w: 16, n: 1, v: (d) => num(d.viaggio) }, { t: 'Km', w: 14, n: 1, v: (d) => d.km || '–' },
+      { t: 'Indennità trasferta', w: 30, n: 1, v: (d) => (d.notti ? `${d.notti} ${d.notti === 1 ? 'notte' : 'notti'}` : '–') },
+    ], tot, { grassetto: () => true });
+
+    const avvisi = [...new Set(righe.filter((d) => d.avvisi).map((d) => `${RI.fd(d.data)}: ${d.avvisi}`))];
+    if (avvisi.length) {
+      nuovaPagina(10 + avvisi.length * 5);
+      t('Da verificare', L, y, { b: true, sz: 10.5, c: '#b3261e' }); y += 5;
+      avvisi.forEach((a) => { nuovaPagina(6); t('• ' + a, L + 2, y, { sz: 8.5, mw: W - 4 }); y += 5; });
+      y += 3;
+    }
+    nuovaPagina(14);
+    t("Ore in ore e decimi (7,5 = 7 ore e 30 minuti). Straordinario: ore oltre le 8 nella stessa giornata. Notte fuori: indicata dal tecnico o, se non indicata, quando il giorno dopo c'è un'altra giornata dello stesso rapporto.", L, y, { sz: 7.3, c: '#666666', mw: W });
+  }
+
+  const n = doc.getNumberOfPages();
+  const oggi = new Date().toLocaleDateString('it-IT');
+  for (let p = 1; p <= n; p++) {
+    doc.setPage(p);
+    t(`Kimatic S.r.l. · report generato il ${oggi}`, L, 290, { sz: 7, c: '#888888' });
+    t(`Pagina ${p} di ${n}`, R, 290, { sz: 7, c: '#888888', al: 'right' });
+  }
+  return doc;
+}

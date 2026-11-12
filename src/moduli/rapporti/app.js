@@ -2,6 +2,7 @@
 // Modulo Rapporti d'intervento: interfaccia portata dalla versione su claude.ai.
 // Stessa logica e stessi dati; il salvataggio passa da Supabase (vedi dati.js).
 import { RI } from './pdf.js';
+import { pdfReport } from './reportOre.js';
 
 export function avvia(ROOT, CTX) {
 const APP = ROOT.querySelector('[data-ri=app]'), TABS = ROOT.querySelector('[data-ri=tabs]'), SYNC = ROOT.querySelector('[data-ri=sync]'), TOAST = ROOT.querySelector('[data-ri=toast]');
@@ -92,7 +93,7 @@ function cliOpts(){return Object.entries(S.clienti).sort((a,b)=>a[1].nome.locale
 function macOpts(){const c=S.clienti[CUR.cli.id];if(!c)return'';return (c.commesse||[]).flatMap(k=>(k.macchine||[]).filter(m=>/^\d/.test(m.matr||'')).map(m=>`<option value="${esc(m.matr)}">${esc(m.desc+' · comm. '+k.num)}</option>`)).join('')}
 function vEdit(){
   const r=CUR,lk=locked(),ro=lk||!CAN_EDIT,dis=ro?' disabled':'',t=RI.totals(r),st=stato(r);
-  const head=`<div class="top"><button type="button" data-act="back">← Interventi</button><h2>${esc(r.cli.nome||'Nuovo intervento')}</h2><span class="mono" style="color:var(--mut)">${esc(r.num)}</span>${pill(r)}<span class="sp"></span>${lk?`<button type="button" class="pri" data-act="pdf">Scarica PDF</button>`:''}</div>`;
+  const head=`<div class="top"><button type="button" data-act="back">← Interventi</button><h2>${esc(r.cli.nome||'Nuovo intervento')}</h2><span class="mono" style="color:var(--mut)">${esc(r.num)}</span>${pill(r)}<span class="sp"></span>${(r.giorni||[]).length?`<button type="button" data-act="orepdf">Report ore (PDF)</button>`:''}${lk?`<button type="button" class="pri" data-act="pdf">Scarica PDF</button>`:''}</div>`;
   const ban=st==='dafatt'?`<div class="banner warn"><b>Firmato dal cliente il ${RI.fd(r.firma.ts.slice(0,10))} alle ${r.firma.ts.slice(11,16)}.</b> È nella coda «Da fatturare». Il rapporto ora è in sola lettura.${INTEG[r.id]===false?' <b>Attenzione: il contenuto è stato modificato dopo la firma.</b>':''}${ADMIN?' <span class="sp"></span><button type="button" class="sm dng" data-act="riapri">Riapri e annulla la firma</button>':''}</div>`
     :st==='fatturato'?`<div class="banner ok"><b>Fatturato</b>${S.fatture[r.id].nf?' · fattura '+esc(S.fatture[r.id].nf):''}${S.fatture[r.id].df?' del '+RI.fd(S.fatture[r.id].df):''}</div>`:'';
   const dati=`<section class="panel"><h2>Dati intervento</h2>
@@ -186,6 +187,8 @@ ROOT.addEventListener('click',async e=>{
     case'elimina':if(!confirmTwice(b,'Tocca di nuovo per eliminare il rapporto'))return;try{await db.doc('rapporti/'+CUR.id).delete();delete S.rapporti[CUR.id];DIRTY=false;CUR=null;UI.open=null;saveUI();render();toast('Rapporto eliminato')}catch(err){toast('Non riesco a eliminarlo: riprova')}break;
     case'riapri':if(!confirmTwice(b,'Tocca di nuovo: la firma del cliente verrà cancellata'))return;delete CUR.firma;CUR.riaperto=new Date().toISOString();DIRTY=true;await flush();render();toast('Rapporto riaperto: andrà firmato di nuovo');break;
     case'pdfid':await doPdf(S.rapporti[d.id]);break;
+    case'orepdf':await doOrePdf(CUR);break;
+    case'orepdfid':await doOrePdf(S.rapporti[d.id]);break;
     case'savefatt':await saveFatt();break;
     case'nofatt':UI.fatt=null;render();break;
     case'annfatt':if(!confirmTwice(b,'Tocca di nuovo per rimetterlo tra i da fatturare'))return;try{await db.doc('fatture/'+d.id).delete();toast('Rimesso tra i da fatturare')}catch(err){toast('Operazione non riuscita')}break;
@@ -228,12 +231,22 @@ async function doPdf(r){
   catch(e){if(e&&e.code==='declined')return;toast('Non riesco a creare il PDF: '+(e&&e.message||'errore'))}
 }
 
+/* report ore del singolo rapporto, per l'ufficio amministrativo */
+async function doOrePdf(r){
+  if(!r)return;
+  if(!DL){toast('Il download dei file non è disponibile in questa vista');return}
+  try{const jsPDF=await CTX.jsPDF();const blob=pdfReport(jsPDF,r,LOGO).output('blob');
+    const nm=('Report ore '+r.num+' '+(r.cli&&r.cli.nome||'')).replace(/[\\/:*?"<>|]+/g,' ').trim()+'.pdf';
+    await DL.save({filename:nm,data:blob})}
+  catch(e){if(e&&e.code==='declined')return;toast('Non riesco a creare il report: '+(e&&e.message||'errore'))}
+}
+
 /* ---------- da fatturare ---------- */
 function vFatt(){
   const L=Object.values(S.rapporti).filter(r=>r.firma&&r.firma.ts).sort((a,b)=>b.firma.ts.localeCompare(a.firma.ts));
   const da=L.filter(r=>!S.fatture[r.id]),fa=L.filter(r=>S.fatture[r.id]);
   L.forEach(checkInteg);
-  const row=(r,done)=>{const t=RI.totals(r),f=S.fatture[r.id];return `<tr><td><b>${esc(r.cli.nome)}</b><br><span class="mono" style="font-size:12px;color:var(--mut)">${esc(r.num)}</span></td><td>${r.tipo==='inst'?'Installazione':'Manutenzione'}<br><span class="note">${esc(range(r))}</span></td><td class="n num">${RI.hrs(t.ordU)}</td><td class="n num">${RI.hrs(t.extU)}</td><td class="n num">${RI.hrs(t.ordG+t.extG)}</td><td class="n num">${RI.hrs(t.viaggioU)}</td><td class="n num">${t.km}</td><td class="n num">${t.ricambi}</td><td>${INTEG[r.id]===false?'<span class="pill bad">Modificato dopo la firma</span>':RI.fd(r.firma.ts.slice(0,10))}</td><td><div class="row"><button type="button" class="sm" data-act="pdfid" data-id="${esc(r.id)}">PDF</button><button type="button" class="sm" data-openr="${esc(r.id)}">Apri</button>${done?`<span class="note">${f.nf?'Fatt. '+esc(f.nf):''} ${f.df?RI.fd(f.df):''}</span><button type="button" class="sm" data-act="annfatt" data-id="${esc(r.id)}">Annulla</button>`:`<button type="button" class="sm pri" data-fatt="${esc(r.id)}">Segna fatturato</button>`}</div></td></tr>`};
+  const row=(r,done)=>{const t=RI.totals(r),f=S.fatture[r.id];return `<tr><td><b>${esc(r.cli.nome)}</b><br><span class="mono" style="font-size:12px;color:var(--mut)">${esc(r.num)}</span></td><td>${r.tipo==='inst'?'Installazione':'Manutenzione'}<br><span class="note">${esc(range(r))}</span></td><td class="n num">${RI.hrs(t.ordU)}</td><td class="n num">${RI.hrs(t.extU)}</td><td class="n num">${RI.hrs(t.ordG+t.extG)}</td><td class="n num">${RI.hrs(t.viaggioU)}</td><td class="n num">${t.km}</td><td class="n num">${t.ricambi}</td><td>${INTEG[r.id]===false?'<span class="pill bad">Modificato dopo la firma</span>':RI.fd(r.firma.ts.slice(0,10))}</td><td><div class="row"><button type="button" class="sm" data-act="pdfid" data-id="${esc(r.id)}">PDF</button><button type="button" class="sm" data-act="orepdfid" data-id="${esc(r.id)}">Report ore</button><button type="button" class="sm" data-openr="${esc(r.id)}">Apri</button>${done?`<span class="note">${f.nf?'Fatt. '+esc(f.nf):''} ${f.df?RI.fd(f.df):''}</span><button type="button" class="sm" data-act="annfatt" data-id="${esc(r.id)}">Annulla</button>`:`<button type="button" class="sm pri" data-fatt="${esc(r.id)}">Segna fatturato</button>`}</div></td></tr>`};
   const hd='<thead><tr><th>Cliente</th><th>Intervento</th><th class="n">Ore ord.</th><th class="n">Ore extra</th><th class="n">In garanzia</th><th class="n">Viaggio</th><th class="n">Km</th><th class="n">Parti</th><th>Firmato</th><th></th></tr></thead>';
   const form=UI.fatt?`<div class="confirm"><b>Fatturazione di ${esc((S.rapporti[UI.fatt.id]||{}).num)}</b><div class="g"><label>Numero fattura<input id="ff-n" data-fk="nf" value="${esc(UI.fatt.nf)}"></label><label>Data fattura<input id="ff-d" type="date" data-fk="df" value="${esc(UI.fatt.df)}"></label><label class="w2">Note<input id="ff-no" data-fk="note" value="${esc(UI.fatt.note)}"></label></div><div class="row"><button type="button" class="pri" data-act="savefatt">Segna fatturato</button><button type="button" data-act="nofatt">Annulla</button></div></div>`:'';
   return `<div class="top"><h2>Da fatturare</h2><span class="note">Ore in ore uomo (ore × nr. tecnici). Le ore oltre le 8 giornaliere sono extra.</span></div>${form}
