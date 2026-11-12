@@ -28,7 +28,9 @@ function unisci(base, campi) {
 }
 const pulisci = (x) => JSON.parse(JSON.stringify(x, (k, v) => (v && typeof v === 'object' && v.__delete__ === true ? undefined : v)));
 
-export function creaClaude({ supabase, utente, livello }) {
+// tabella: dove stanno i documenti; raccolta: trasforma il percorso usato dalla pagina
+// (es. 'data/users/<id>/archivio/componenti') nel nome della raccolta in tabella.
+export function creaClaude({ supabase, utente, livello, tabella = 'bm_docs', raccolta = (c) => c, capacita = null }) {
   const gestisce = livello === 'gestisce';
   const modifica = gestisce || livello === 'modifica';
   const [nome, ...resto] = String(utente.nome || '').trim().split(/\s+/);
@@ -47,7 +49,7 @@ export function creaClaude({ supabase, utente, livello }) {
     if (VIRTUALI[coll]) return VIRTUALI[coll]();
     const out = [];
     for (let da = 0; ; da += 1000) {
-      const { data, error } = await supabase.from('bm_docs').select('id,dati').eq('coll', coll).range(da, da + 999);
+      const { data, error } = await supabase.from(tabella).select('id,dati').eq('coll', coll).range(da, da + 999);
       if (error) throw error;
       out.push(...data);
       if (data.length < 1000) return out;
@@ -58,13 +60,14 @@ export function creaClaude({ supabase, utente, livello }) {
 
   const docSnap = (id, dati) => ({ id, exists: dati != null, data: () => copia(dati) });
 
-  function collezione(coll, ordine = null, max = null) {
+  function collezione(percorsoPagina, ordine = null, max = null) {
+    const coll = raccolta(percorsoPagina);
     const ref = {
-      id: coll.split('/').pop(), path: coll,
-      orderBy: (campo, dir = 'asc') => collezione(coll, { campo, dir }, max),
-      limit: (n) => collezione(coll, ordine, n),
-      doc: (id) => documento(coll + '/' + (id || nuovoId())),
-      async add(dati) { const d = documento(coll + '/' + nuovoId()); await d.set(dati); return d; },
+      id: percorsoPagina.split('/').pop(), path: percorsoPagina,
+      orderBy: (campo, dir = 'asc') => collezione(percorsoPagina, { campo, dir }, max),
+      limit: (n) => collezione(percorsoPagina, ordine, n),
+      doc: (id) => documento(percorsoPagina + '/' + (id || nuovoId())),
+      async add(dati) { const d = documento(percorsoPagina + '/' + nuovoId()); await d.set(dati); return d; },
       onSnapshot(ok, err) {
         let vivo = true;
         const carica = async () => {
@@ -95,16 +98,16 @@ export function creaClaude({ supabase, utente, livello }) {
 
   function documento(percorso) {
     const parti = percorso.split('/');
-    const id = parti.pop(), coll = parti.join('/');
+    const id = parti.pop(), coll = raccolta(parti.join('/'));
     const leggi = async () => {
       if (VIRTUALI[coll]) return VIRTUALI[coll]().find((r) => r.id === id)?.dati ?? null;
-      const { data, error } = await supabase.from('bm_docs').select('dati').eq('coll', coll).eq('id', id).maybeSingle();
+      const { data, error } = await supabase.from(tabella).select('dati').eq('coll', coll).eq('id', id).maybeSingle();
       if (error) throw error;
       return data ? data.dati : null;
     };
     const scrivi = async (dati) => {
       if (VIRTUALI[coll]) return; // utenti e richieste si gestiscono nel gestionale
-      const { error } = await supabase.from('bm_docs').upsert({ coll, id, dati: pulisci(dati) });
+      const { error } = await supabase.from(tabella).upsert({ coll, id, dati: pulisci(dati) });
       if (error) throw Object.assign(new Error(error.message), { code: 'not_granted' });
       avvisa(coll);
     };
@@ -115,7 +118,7 @@ export function creaClaude({ supabase, utente, livello }) {
       async update(campi) { await scrivi(unisci(await leggi(), campi)); },
       async delete() {
         if (VIRTUALI[coll]) return;
-        const { error } = await supabase.from('bm_docs').delete().eq('coll', coll).eq('id', id);
+        const { error } = await supabase.from(tabella).delete().eq('coll', coll).eq('id', id);
         if (error) throw Object.assign(new Error(error.message), { code: 'not_granted' });
         avvisa(coll);
       },
@@ -162,6 +165,6 @@ export function creaClaude({ supabase, utente, livello }) {
     },
   };
 
-  const cap = { user, db, downloads };
+  const cap = capacita ? Object.fromEntries(capacita.map((k) => [k, { user, db, downloads }[k]])) : { user, db, downloads };
   return { use: async (nome) => cap[nome] ?? null };
 }

@@ -1,0 +1,1439 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script>/* Gestionale Kimatic: archivio, utente e download arrivano dal gestionale (pagina che contiene il modulo) */
+var K=(window.parent&&window.parent.KIMATIC_COST)||{parametri:function(){return null},salvaParametri:function(){},claude:null};
+if(K.claude) window.claude=K.claude;
+</script>
+<title>Costificatore pezzi meccanici</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<style>
+:root{
+  --bg:#E6EBEF; --surface:#FFFFFF; --surface-2:#F3F6F8; --ink:#16212B; --muted:#56646F;
+  --line:#C6D0D8; --accent:#F0B400; --accent-ink:#16212B; --focus:#1F6FB2;
+  --c1:#2C5B7B; --c2:#83A8C2; --c3:#E0A800; --c4:#8E6A48; --c5:#9AA4AC; --danger:#B3261E;
+  color-scheme: light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121A21; --surface:#1B252E; --surface-2:#222E38; --ink:#E4EAEF; --muted:#9AA9B5;
+    --line:#33424F; --accent:#F5C21B; --accent-ink:#121A21; --focus:#6FB2EE;
+    --c1:#5B93BA; --c2:#A9C6DA; --c3:#F0B400; --c4:#B98D64; --c5:#6F7B85; --danger:#F2867E;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121A21; --surface:#1B252E; --surface-2:#222E38; --ink:#E4EAEF; --muted:#9AA9B5;
+  --line:#33424F; --accent:#F5C21B; --accent-ink:#121A21; --focus:#6FB2EE;
+  --c1:#5B93BA; --c2:#A9C6DA; --c3:#F0B400; --c4:#B98D64; --c5:#6F7B85; --danger:#F2867E;
+  color-scheme: dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.45}
+.wrap{max-width:1240px;margin:0 auto;padding:1.5rem 1rem 4rem}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:1rem;border-bottom:3px solid var(--ink);padding-bottom:.9rem;margin-bottom:1.5rem}
+h1{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:700;font-size:clamp(2rem,5vw,3rem);line-height:1;margin:0;letter-spacing:-.01em}
+header p{margin:.35rem 0 0;color:var(--muted);max-width:60ch}
+h2{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:600;font-size:1.45rem;margin:0 0 .75rem}
+h3{font-size:1rem;font-weight:600;margin:0 0 .6rem}
+.layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:1.25rem;align-items:start}
+@media (max-width:880px){.layout{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:1.1rem 1.1rem 1.25rem}
+.proc{display:grid;grid-template-columns:repeat(3,1fr);border:2px solid var(--ink);border-radius:6px;overflow:hidden;margin-bottom:1.1rem}
+.proc input{position:absolute;opacity:0;pointer-events:none}
+.proc label{text-align:center;padding:.65rem .4rem;font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:600;font-size:1.15rem;cursor:pointer;border-right:2px solid var(--ink)}
+.proc label:last-child{border-right:0}
+.proc input:checked+span{display:inline-block}
+.proc label:has(input:checked){background:var(--ink);color:var(--bg)}
+.proc label:has(input:focus-visible){outline:3px solid var(--focus);outline-offset:-5px}
+fieldset{border:0;border-top:1px solid var(--line);margin:0;padding:.9rem 0 .4rem}
+legend{font-weight:600;padding:0 .4rem 0 0;font-size:1rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.7rem .8rem}
+.grid .wide{grid-column:1/-1}
+label.f{display:flex;flex-direction:column;gap:.2rem;font-size:.88rem;color:var(--muted)}
+label.f span.u{color:var(--muted);font-size:.8rem}
+input[type=number],input[type=text],input[type=date],input[type=search],select{font:inherit;font-size:1rem;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:.45rem .55rem;width:100%;min-width:0}
+input:focus-visible,select:focus-visible,button:focus-visible,summary:focus-visible{outline:3px solid var(--focus);outline-offset:1px}
+.inline{display:flex;gap:.4rem}
+.inline input{flex:1}
+button{font:inherit;cursor:pointer;border-radius:4px;border:1px solid var(--ink);background:transparent;color:var(--ink);padding:.45rem .8rem;font-weight:500}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600;padding:.7rem 1rem;width:100%;font-size:1.05rem}
+button.small{padding:.3rem .55rem;font-size:.85rem;white-space:nowrap}
+button.ghost{border-color:var(--line)}
+button.danger{color:var(--danger);border-color:var(--line)}
+.hint{font-size:.82rem;color:var(--muted);margin:.25rem 0 0}
+[hidden]{display:none!important}
+
+.result{position:sticky;top:calc(env(safe-area-inset-top,0px) + 1rem)}
+.price{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;flex-wrap:wrap}
+.price .big{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:700;font-size:clamp(2.6rem,6vw,3.6rem);line-height:1}
+.price .lbl{color:var(--muted);font-size:.9rem}
+.kv{display:grid;grid-template-columns:1fr auto;gap:.2rem 1rem;margin:.9rem 0;font-size:.95rem}
+.kv dt{color:var(--muted)} .kv dd{margin:0;text-align:right;font-variant-numeric:tabular-nums;font-weight:500}
+.bar{display:flex;height:22px;border-radius:3px;overflow:hidden;background:var(--surface-2);margin:.4rem 0 .6rem;border:1px solid var(--line)}
+.bar div{height:100%;transition:width .25s ease}
+.legend{list-style:none;padding:0;margin:0 0 1rem;display:grid;gap:.25rem;font-size:.92rem}
+.legend li{display:grid;grid-template-columns:12px 1fr auto auto;gap:.5rem;align-items:center;font-variant-numeric:tabular-nums}
+.legend i{width:12px;height:12px;border-radius:2px;display:block}
+.legend .pct{color:var(--muted);min-width:3.2em;text-align:right}
+.comm{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:1rem}
+.lot{width:100%;border-collapse:collapse;font-size:.9rem;font-variant-numeric:tabular-nums;margin-bottom:1rem}
+.lot td{padding:.2rem 0;vertical-align:middle}
+.lot td:first-child{width:4.5em;color:var(--muted)}
+.lot td:last-child{width:6.5em;text-align:right}
+.lot .track{height:8px;background:var(--surface-2);border-radius:2px;margin:0 .6rem}
+.lot .track div{height:100%;background:var(--c1);border-radius:2px}
+.lot tr.cur td{font-weight:600;color:var(--ink)}
+.lot td.cf{width:3.6em;color:var(--muted);font-size:.82rem;text-align:right;padding-right:.5rem}
+section.ripro{margin-top:1.25rem}
+section.arch{margin-top:1.25rem}
+.archhead{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:.5rem}
+.archhead p{margin:0}
+.archbar{display:grid;grid-template-columns:minmax(0,1fr) minmax(160px,260px) auto auto;gap:.6rem;align-items:center;margin:.6rem 0 1rem}
+@media (max-width:980px){.archbar{grid-template-columns:1fr 1fr}.archbar .filters{grid-column:1/-1}}
+@media (max-width:560px){.archbar{grid-template-columns:1fr}}
+.filters{display:flex;flex-wrap:wrap;gap:.4rem}
+.filters label{border:1px solid var(--line);border-radius:999px;padding:.3rem .8rem;cursor:pointer;font-size:.92rem;background:var(--surface-2)}
+.filters input{position:absolute;opacity:0;pointer-events:none}
+.filters label:has(input:checked){background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.filters label:has(input:focus-visible){outline:3px solid var(--focus);outline-offset:1px}
+.filters span{opacity:.7;font-variant-numeric:tabular-nums}
+table.arch-t{min-width:900px}
+table.arch-t tr.grp th{background:var(--surface-2);font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-size:1.15rem;font-weight:600;color:var(--ink);border-bottom:1px solid var(--line);padding:.45rem .5rem}
+table.arch-t tr.grp th span{color:var(--muted);font-size:.95rem;margin-left:.3rem}
+table.arch-t .sub{color:var(--muted);font-size:.82rem}
+.rgrid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:1.5rem;align-items:start}
+@media (max-width:880px){.rgrid{grid-template-columns:1fr}}
+.chk{display:flex;gap:.5rem;align-items:center;margin:.6rem 0;font-size:.95rem}
+.incl{display:flex;flex-wrap:wrap;gap:.2rem 1.6rem}
+.incl .chk{margin:.2rem 0;color:var(--ink);cursor:pointer}
+.incl input{width:1.1rem;height:1.1rem;accent-color:var(--c1)}
+table.mx th{white-space:nowrap;text-align:center}
+table.mx tbody th{text-align:left}
+table.mx td input{width:4.4em;text-align:right}
+table.mx th input{width:3.6em}
+.lot tr.cur .track div{background:var(--accent)}
+
+section.quote{margin-top:1.25rem}
+.qhead{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:.7rem;margin-bottom:1rem}
+.tablewrap{overflow-x:auto}
+table.q{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:640px}
+table.q th{text-align:left;font-weight:600;font-size:.88rem;color:var(--muted);border-bottom:2px solid var(--ink);padding:.45rem .5rem}
+table.q td{border-bottom:1px solid var(--line);padding:.5rem}
+table.q .n{text-align:right}
+table.q tfoot td{border-bottom:0;font-weight:600;padding-top:.7rem}
+table.q tfoot .tot{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-size:1.6rem}
+.empty{color:var(--muted);padding:1.2rem .5rem;text-align:center}
+.actions{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1rem;justify-content:flex-end}
+
+details.settings{margin-top:1.25rem}
+details.settings>summary{cursor:pointer;font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:600;font-size:1.45rem;list-style:none;display:flex;justify-content:space-between;align-items:center}
+details.settings>summary::-webkit-details-marker{display:none}
+details.settings>summary::after{content:"+";font-size:1.6rem}
+details.settings[open]>summary::after{content:"−"}
+.sgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr);gap:1.5rem;margin-top:1rem}
+@media (max-width:880px){.sgrid{grid-template-columns:1fr}}
+table.s{width:100%;border-collapse:collapse;font-size:.92rem}
+table.s th{text-align:left;font-weight:600;color:var(--muted);font-size:.82rem;padding:.3rem .3rem;border-bottom:1px solid var(--line)}
+table.s td{padding:.25rem .3rem}
+table.s input{padding:.3rem .4rem;font-size:.92rem}
+table.s td.nm{min-width:150px}
+table.s td.num input{width:5.5em}
+
+.draw{margin-bottom:1.25rem}
+.draw>p{max-width:75ch;margin:0 0 1rem;color:var(--muted)}
+.drop{border:2px dashed var(--line);border-radius:6px;padding:1.4rem 1rem;text-align:center;background:var(--surface-2);transition:border-color .15s,background .15s}
+.drop.over{border-color:var(--accent);background:var(--surface)}
+.drop input{position:absolute;width:1px;height:1px;opacity:0}
+.drop label{cursor:pointer;font-weight:500;font-size:1.05rem}
+.drop label u{text-decoration-thickness:2px;text-underline-offset:3px}
+.drop:has(input:focus-visible){outline:3px solid var(--focus);outline-offset:2px}
+.drop .types{font-size:.85rem;color:var(--muted);margin:.35rem 0 0}
+#fileList{display:flex;flex-wrap:wrap;gap:.4rem;justify-content:center;margin-top:.8rem}
+.chip{display:inline-flex;align-items:center;gap:.35rem;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:.2rem .3rem .2rem .7rem;font-size:.88rem}
+.chip button{border:0;padding:0 .4rem;font-size:1.05rem;line-height:1}
+.drawbar{display:grid;grid-template-columns:minmax(120px,180px) minmax(0,1fr) auto;gap:.8rem;align-items:end;margin-top:1rem}
+@media (max-width:640px){.drawbar{grid-template-columns:1fr}}
+button.go{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600;padding:.55rem 1.1rem}
+button:disabled{opacity:.45;cursor:not-allowed}
+#drawStatus{min-height:1.4em;margin:.8rem 0 0}
+#drawStatus.err{color:var(--danger)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1rem;margin-top:1rem}
+.card{border:1px solid var(--line);border-left:5px solid var(--c1);border-radius:4px;padding:.9rem 1rem;background:var(--surface)}
+.card.new{border-left-color:var(--accent)}
+.chead{display:flex;justify-content:space-between;gap:.6rem;align-items:flex-start}
+.chead h3{margin:0;font-size:1.05rem}
+.aff{font-size:.78rem;padding:.1rem .5rem;border-radius:999px;white-space:nowrap;border:1px solid var(--line)}
+.aff-alta{background:color-mix(in srgb,var(--c1) 18%,transparent)}
+.aff-bassa{background:color-mix(in srgb,var(--danger) 15%,transparent)}
+.card p{margin:.4rem 0;font-size:.92rem}
+.card .files{color:var(--muted);font-size:.82rem}
+.card details{margin:.4rem 0;font-size:.92rem}
+.card summary{cursor:pointer;font-weight:600}
+.card ol,.card ul{margin:.35rem 0;padding-left:1.25rem}
+.card li{margin:.15rem 0}
+.card .actions{justify-content:flex-start;margin-top:.7rem}
+.card .price-hint{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:600;font-size:1.25rem}
+
+@media print{
+  body{background:#fff;color:#000}
+  header p,.layout,details.settings,.actions,.noprint,section.ripro,section.arch{display:none!important}
+  .panel{border:0;padding:0}
+  table.q{min-width:0}
+  input{border:0;background:transparent;padding:0}
+}
+@media (prefers-reduced-motion:reduce){.bar div{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1>Costificatore pezzi</h1>
+    <p>Il prezzo obiettivo da proporre al fornitore per pezzi torniti, fresati e di carpenteria, calcolato come costo di un'officina efficiente. Tariffe e materiali si modificano in fondo alla pagina.</p>
+  </div>
+</header>
+
+<section class="panel draw noprint" id="drawPanel">
+  <h2>Disegni da costificare</h2>
+  <p>Carica i file di un pezzo: il PDF del disegno è il formato migliore, da solo o con il modello STEP. Claude legge cartiglio, quote, materiale, tolleranze e trattamenti, propone grezzo, ciclo e tempi e li carica nel calcolo qui sotto, dove puoi correggerli.</p>
+  <div class="drop" id="drop">
+    <input type="file" id="files" multiple accept=".pdf,.step,.stp,.png,.jpg,.jpeg,.webp,.dwg,.dxf">
+    <label for="files">Trascina qui i file del pezzo oppure <u>sfoglia</u></label>
+    <p class="types">PDF, STEP/STP, PNG o JPG. Il DWG non si apre nel browser: esportalo in PDF dal CAD.</p>
+    <div id="fileList"></div>
+  </div>
+  <div class="drawbar">
+    <label class="f">Quantità richiesta<input type="number" id="d_qty" min="1" step="1" placeholder="dal disegno"></label>
+    <label class="f">Indicazioni per Claude <span class="u">facoltative</span><input type="text" id="d_note" placeholder="Es. materiale fornito dal cliente, tempra esclusa, abbiamo il tornio con bimandrino"></label>
+    <span class="inline"><button type="button" class="go" id="btnAnalyze" disabled>Analizza e costifica</button><button type="button" id="btnStop" hidden>Interrompi</button></span>
+  </div>
+  <p id="drawStatus" class="hint" aria-live="polite"></p>
+  <div class="cards" id="cards"></div>
+</section>
+
+<div class="layout">
+<form class="panel" id="form" onsubmit="return false" autocomplete="off">
+  <div class="proc" role="radiogroup" aria-label="Tipo di lavorazione">
+    <label><input type="radio" name="proc" value="torn" checked>Tornitura</label>
+    <label><input type="radio" name="proc" value="fres">Fresatura</label>
+    <label><input type="radio" name="proc" value="carp">Carpenteria</label>
+  </div>
+
+  <fieldset>
+    <legend>Pezzo</legend>
+    <div class="grid">
+      <label class="f wide">Descrizione / codice disegno<input type="text" id="desc" placeholder="Es. Perno Ø20 – DIS. 1024 rev.B"></label>
+      <label class="f">Materiale<select id="mat"></select></label>
+      <label class="f">Quantità del lotto<input type="number" id="qty" min="1" step="1" value="10"></label>
+      <div class="wide incl">
+        <label class="chk"><input type="checkbox" id="x_matInc" checked> Materiale compreso nel prezzo</label>
+        <label class="chk"><input type="checkbox" id="x_trInc" checked> Trattamento compreso nel prezzo</label>
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset data-show="torn">
+    <legend>Grezzo da barra tonda</legend>
+    <div class="grid">
+      <label class="f">Diametro barra <span class="u">mm</span><input type="number" id="t_d" min="0" step="0.5" value="30"></label>
+      <label class="f">Lunghezza pezzo <span class="u">mm</span><input type="number" id="t_l" min="0" step="0.5" value="80"></label>
+      <label class="f">Troncatura + sovrametallo <span class="u">mm</span><input type="number" id="t_sovr" min="0" step="0.5" value="5"></label>
+      <label class="f">Materiale asportato <span class="u">% del grezzo</span><input type="number" id="t_asp" min="0" max="95" step="1" value="40"></label>
+    </div>
+  </fieldset>
+
+  <fieldset data-show="fres">
+    <legend>Grezzo da blocco o piatto</legend>
+    <div class="grid">
+      <label class="f">Lunghezza <span class="u">mm</span><input type="number" id="f_l" min="0" step="0.5" value="120"></label>
+      <label class="f">Larghezza <span class="u">mm</span><input type="number" id="f_w" min="0" step="0.5" value="80"></label>
+      <label class="f">Altezza <span class="u">mm</span><input type="number" id="f_h" min="0" step="0.5" value="30"></label>
+      <label class="f">Materiale asportato <span class="u">% del grezzo</span><input type="number" id="f_asp" min="0" max="95" step="1" value="35"></label>
+    </div>
+  </fieldset>
+
+  <fieldset data-show="carp">
+    <legend>Lamiera</legend>
+    <div class="grid">
+      <label class="f">Spessore <span class="u">mm</span><input type="number" id="c_s" min="0" step="0.5" value="3"></label>
+      <label class="f">Sviluppo lunghezza <span class="u">mm</span><input type="number" id="c_l" min="0" step="1" value="400"></label>
+      <label class="f">Sviluppo larghezza <span class="u">mm</span><input type="number" id="c_w" min="0" step="1" value="250"></label>
+      <label class="f">Sfrido di nesting <span class="u">%</span><input type="number" id="c_scarto" min="0" step="1" value="15"></label>
+    </div>
+  </fieldset>
+
+  <fieldset data-show="torn fres">
+    <legend>Lavorazione</legend>
+    <div class="grid">
+      <label class="f wide">Macchina<select id="m_mac"></select></label>
+      <label class="f">Attrezzaggio <span class="u">min per lotto</span><input type="number" id="m_setup" min="0" step="5" value="45"></label>
+      <label class="f">Tempo ciclo <span class="u">min/pz</span>
+        <span class="inline"><input type="number" id="m_ciclo" min="0" step="0.1" placeholder="auto"><button type="button" class="small ghost" id="btnStima" title="Copia il tempo stimato nel campo">Usa stima</button></span>
+      </label>
+      <label class="f">Scarto barra / grezzo <span class="u">%</span><input type="number" id="m_scarto" min="0" step="1" value="5"></label>
+    </div>
+    <p class="hint" id="stimaHint"></p>
+  </fieldset>
+
+  <fieldset data-show="carp">
+    <legend>Taglio, piega e saldatura</legend>
+    <div class="grid">
+      <label class="f">Lunghezza di taglio <span class="u">mm/pz</span><input type="number" id="c_taglio" min="0" step="10" value="1600"></label>
+      <label class="f">Inneschi (fori + contorni) <span class="u">n/pz</span><input type="number" id="c_inneschi" min="0" step="1" value="6"></label>
+      <label class="f">Velocità di taglio <span class="u">mm/min</span>
+        <span class="inline"><input type="number" id="c_v" min="1" step="50" placeholder="auto"><button type="button" class="small ghost" id="btnVel">Suggerita</button></span>
+      </label>
+      <label class="f">Attrezzaggio laser <span class="u">min per lotto</span><input type="number" id="c_setlaser" min="0" step="5" value="15"></label>
+      <label class="f">Pieghe <span class="u">n/pz</span><input type="number" id="c_pieghe" min="0" step="1" value="4"></label>
+      <label class="f">Attrezzaggio piegatrice <span class="u">min per lotto</span><input type="number" id="c_setpiega" min="0" step="5" value="20"></label>
+      <label class="f">Saldatura <span class="u">m/pz</span><input type="number" id="c_sald" min="0" step="0.05" value="0"></label>
+      <label class="f">Tempo saldatura <span class="u">min/m</span><input type="number" id="c_saldv" min="0" step="1" value="12"></label>
+    </div>
+    <p class="hint" id="carpHint"></p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Programmazione, finiture ed esterni</legend>
+    <div class="grid">
+      <label class="f">Programmazione CAM <span class="u">min per lotto</span><input type="number" id="m_cam" min="0" step="5" value="30"></label>
+      <label class="f">Sbavatura e controllo <span class="u">min/pz</span><input type="number" id="x_man" min="0" step="0.5" value="2"></label>
+      <label class="f">Trattamento superficiale<select id="x_tratt"></select></label>
+      <label class="f">Lavorazioni esterne <span class="u">€/pz</span><input type="number" id="x_est" min="0" step="0.1" value="0" title="Tempra, rettifica, filettature riportate…"></label>
+    </div>
+  </fieldset>
+</form>
+
+<aside class="panel result" aria-live="polite">
+  <div class="price">
+    <div>
+      <div class="lbl">Prezzo obiettivo al pezzo</div>
+      <div class="big" id="rPrezzo">–</div>
+    </div>
+    <div style="text-align:right">
+      <div class="lbl">Totale lotto</div>
+      <div style="font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-weight:600;font-size:1.6rem" id="rTot">–</div>
+    </div>
+  </div>
+
+  <dl class="kv">
+    <dt>Prezzo atteso da un fornitore medio</dt><dd id="rMerc">–</dd>
+    <dt>Margine di trattativa</dt><dd id="rDelta">–</dd>
+    <dt>Costo industriale efficiente</dt><dd id="rCosto">–</dd>
+    <dt>Peso grezzo / finito</dt><dd id="rPeso">–</dd>
+    <dt>Tempo macchina al pezzo</dt><dd id="rCiclo">–</dd>
+  </dl>
+
+  <h3>Composizione del costo al pezzo</h3>
+  <div class="bar" id="rBar" role="img" aria-label="Composizione del costo"></div>
+  <ul class="legend" id="rLegend"></ul>
+
+  <h3>Parametri del prezzo obiettivo</h3>
+  <div class="comm">
+    <label class="f">Tempi macchina <span class="u">% del tempo stimato</span><input type="number" id="t_eff" min="50" max="100" step="1"></label>
+    <label class="f">Sconto sulle tariffe orarie <span class="u">%</span><input type="number" id="t_sconto" min="0" max="50" step="1"></label>
+    <label class="f">Spese generali fornitore <span class="u">%</span><input type="number" id="t_oh" min="0" step="1"></label>
+    <label class="f">Utile fornitore <span class="u">%</span><input type="number" id="t_mg" min="0" step="1"></label>
+  </div>
+  <details style="margin:-.3rem 0 1rem;font-size:.92rem"><summary style="cursor:pointer;color:var(--muted)">Fornitore medio, usato come riferimento</summary>
+  <div class="comm" style="margin-top:.6rem">
+    <label class="f">Spese generali <span class="u">%</span><input type="number" id="overhead" min="0" step="1"></label>
+    <label class="f">Ricarico <span class="u">%</span><input type="number" id="margin" min="0" step="1"></label>
+  </div></details>
+
+  <h3>Prezzo al pezzo al variare del lotto</h3>
+  <table class="lot" id="rLot"></table>
+  <p class="hint" id="lotNote" style="margin:-.5rem 0 1rem"></p>
+
+  <button type="button" class="primary" id="btnAdd">Aggiungi al preventivo</button>
+  <button type="button" id="btnArch" style="width:100%;margin-top:.5rem">Salva nell'archivio</button>
+</aside>
+</div>
+
+<section class="panel ripro">
+  <h2>Riproporziona un prezzo noto</h2>
+  <p class="hint" style="max-width:75ch;margin:0 0 1rem;font-size:.95rem">Parti da un prezzo già fatto per una certa quantità. Il calcolo toglie materiale, trattamento e quota di piazzamento, applica il coefficiente della tabella alla sola lavorazione e rimette tutto sulla nuova quantità.</p>
+  <div class="rgrid">
+    <div class="grid">
+      <label class="f wide">Descrizione / codice<input type="text" id="rp_desc" placeholder="Es. Flangia DIS. 0877"></label>
+      <label class="f">Prezzo noto <span class="u">€/pz, tutto compreso</span><input type="number" id="rp_prezzo" min="0" step="0.01" value="156"></label>
+      <label class="f">Quantità nota <span class="u">pz</span><input type="number" id="rp_qn" min="1" step="1" value="2"></label>
+      <label class="f">Quantità da produrre <span class="u">pz</span><input type="number" id="rp_qp" min="1" step="1" value="100"></label>
+      <label class="f">Piazzamento <span class="u">€ per lotto</span><input type="number" id="rp_setup" min="0" step="1" value="100"></label>
+      <label class="f">Materia prima <span class="u">€/pz</span><input type="number" id="rp_mat" min="0" step="0.01" value="4"></label>
+      <label class="f">Trattamento <span class="u">€/pz</span><input type="number" id="rp_tratt" min="0" step="0.01" value="2"></label>
+      <div class="wide incl">
+        <label class="chk"><input type="checkbox" id="rp_matInc" checked> Materiale compreso nel nuovo prezzo</label>
+        <label class="chk"><input type="checkbox" id="rp_trInc" checked> Trattamento compreso nel nuovo prezzo</label>
+      </div>
+    </div>
+    <div>
+      <dl class="kv" id="rpOut" style="margin-top:0"></dl>
+      <p class="hint" id="rpWarn" style="color:var(--danger)"></p>
+      <button type="button" class="primary" id="rpAdd">Aggiungi al preventivo</button>
+      <button type="button" id="rpArch" style="width:100%;margin-top:.5rem">Salva nell'archivio</button>
+    </div>
+  </div>
+</section>
+
+<section class="panel quote">
+  <h2>Preventivo obiettivo da proporre al fornitore</h2>
+  <div class="qhead">
+    <label class="f">Fornitore<input type="text" id="q_cliente" placeholder="Ragione sociale del fornitore"></label>
+    <label class="f">Riferimento richiesta d'offerta<input type="text" id="q_num" placeholder="Es. RDO 2026/118"></label>
+    <label class="f">Data<input type="date" id="q_data"></label>
+  </div>
+  <div class="tablewrap">
+    <table class="q">
+      <thead><tr><th>Descrizione</th><th>Lavorazione</th><th>Materiale</th><th class="n">Q.tà</th><th class="n">€/pz obiettivo</th><th class="n">€/pz fornitore medio</th><th class="n">Totale obiettivo</th><th class="noprint"></th></tr></thead>
+      <tbody id="qBody"></tbody>
+      <tfoot id="qFoot"></tfoot>
+    </table>
+  </div>
+  <div class="actions">
+    <button type="button" class="danger" id="btnClear">Svuota preventivo</button>
+    <button type="button" id="btnPrint">Stampa preventivo</button>
+    <button type="button" id="btnPdf" hidden>Scarica PDF</button>
+    <button type="button" id="btnXls" hidden>Scarica Excel</button>
+    <button type="button" class="go" id="btnArchQ">Archivia preventivo</button>
+  </div>
+  <p class="hint noprint" id="qMsg" aria-live="polite" style="text-align:right"></p>
+</section>
+
+<section class="panel arch">
+  <div class="archhead"><h2>Archivio componenti</h2><p class="hint" id="archStore"></p></div>
+  <div class="archbar">
+    <div class="filters" role="radiogroup" aria-label="Filtra per lavorazione">
+      <label><input type="radio" name="af" value="tutti" checked>Tutti <span id="cnt_tutti"></span></label>
+      <label><input type="radio" name="af" value="torn">Tornitura <span id="cnt_torn"></span></label>
+      <label><input type="radio" name="af" value="fres">Fresatura <span id="cnt_fres"></span></label>
+      <label><input type="radio" name="af" value="carp">Carpenteria <span id="cnt_carp"></span></label>
+      <label><input type="radio" name="af" value="ripro">Riproporzionati <span id="cnt_ripro"></span></label>
+    </div>
+    <input type="search" id="archQ" placeholder="Cerca codice, descrizione o materiale" aria-label="Cerca nell'archivio">
+    <select id="archMode" aria-label="Prezzi da mostrare"><option value="p">Prezzo obiettivo</option><option value="pm">Fornitore medio</option></select>
+    <button type="button" id="archCsv" hidden>Esporta per Excel</button>
+  </div>
+  <div class="tablewrap"><table class="q arch-t" id="archT"></table></div>
+  <p class="hint" id="archMsg" aria-live="polite"></p>
+  <h3 style="margin-top:1.6rem">Preventivi archiviati</h3>
+  <div class="tablewrap"><table class="q" id="archQT"></table></div>
+</section>
+
+<details class="panel settings">
+  <summary>Tariffe orarie e materiali</summary>
+  <div class="sgrid">
+    <div>
+      <h3>Tariffe macchina e manodopera</h3>
+      <table class="s"><thead><tr><th>Risorsa</th><th>€/ora</th></tr></thead><tbody id="sRates"></tbody></table>
+      <h3 style="margin-top:1.2rem">Trattamenti superficiali</h3>
+      <table class="s"><thead><tr><th>Trattamento</th><th>€/kg</th><th>Minimo €/pz</th></tr></thead><tbody id="sTratt"></tbody></table>
+    </div>
+    <div>
+      <h3>Materiali</h3>
+      <div class="tablewrap">
+      <table class="s"><thead><tr><th>Materiale</th><th>Densità kg/dm³</th><th>€/kg</th><th>Asportazione tornio cm³/min</th><th>Asportazione fresa cm³/min</th></tr></thead><tbody id="sMat"></tbody></table>
+      </div>
+      <p class="hint">I valori di asportazione servono solo per stimare il tempo ciclo quando non lo inserisci a mano. Sono medie indicative di sgrossatura: tarale sulle tue macchine e sui tuoi utensili.</p>
+      <div class="actions"><button type="button" class="ghost" id="btnReset">Ripristina valori predefiniti</button></div>
+    </div>
+  </div>
+  <h3 style="margin-top:1.5rem">Tabella di riproporzionamento sulle quantità</h3>
+  <p class="hint" style="max-width:80ch">Righe: quantità per cui conosci il costo di lavorazione. Colonne: quantità da produrre. Il coefficiente moltiplica solo la lavorazione; materiale, trattamenti, attrezzaggio e CAM restano fuori. Se due fasce si sovrappongono vale la prima che contiene la quantità.</p>
+  <label class="chk"><input type="checkbox" id="riproOn"> Applica i coefficienti alla tabella dei lotti</label>
+  <div class="tablewrap"><table class="s mx" id="sRipro"></table></div>
+</details>
+</div>
+
+<script>
+(function(){
+const DEFAULTS = {
+  overhead: 15, margin: 20,
+  target: {eff:90, sconto:10, overhead:10, margin:8},
+  rates: {
+    tornio_cnc:{nome:"Tornio CNC", euro:55, proc:"torn"},
+    tornio_mot:{nome:"Tornio CNC con utensili motorizzati", euro:70, proc:"torn"},
+    tornio_trad:{nome:"Tornio tradizionale", euro:40, proc:"torn", trad:true},
+    fresa_3:{nome:"Centro di lavoro 3 assi", euro:60, proc:"fres"},
+    fresa_5:{nome:"Centro di lavoro 5 assi", euro:90, proc:"fres"},
+    fresa_trad:{nome:"Fresatrice tradizionale", euro:42, proc:"fres", trad:true},
+    laser:{nome:"Taglio laser", euro:120, proc:"carp"},
+    piegatrice:{nome:"Piegatrice", euro:55, proc:"carp"},
+    saldatura:{nome:"Saldatura", euro:45, proc:"carp"},
+    manuale:{nome:"Banco, sbavatura e controllo", euro:35},
+    cam:{nome:"Programmazione CAM", euro:50}
+  },
+  materials: [
+    {nome:"Acciaio S235JR", tipo:"acciaio", dens:7.85, euro:1.40, mrrT:25, mrrF:20},
+    {nome:"Acciaio C45", tipo:"acciaio", dens:7.85, euro:1.80, mrrT:20, mrrF:16},
+    {nome:"Acciaio 39NiCrMo3", tipo:"acciaio", dens:7.85, euro:3.20, mrrT:12, mrrF:10},
+    {nome:"Acciaio 11SMnPb37 (automatico)", tipo:"acciaio", dens:7.85, euro:1.90, mrrT:35, mrrF:25},
+    {nome:"Inox AISI 304", tipo:"inox", dens:7.93, euro:4.50, mrrT:10, mrrF:8},
+    {nome:"Inox AISI 316L", tipo:"inox", dens:7.98, euro:6.00, mrrT:8, mrrF:6},
+    {nome:"Alluminio 6082", tipo:"alluminio", dens:2.70, euro:4.80, mrrT:80, mrrF:70},
+    {nome:"Alluminio 7075", tipo:"alluminio", dens:2.81, euro:9.00, mrrT:70, mrrF:60},
+    {nome:"Ottone CW614N", tipo:"ottone", dens:8.50, euro:8.50, mrrT:60, mrrF:50},
+    {nome:"POM (Delrin)", tipo:"plastica", dens:1.41, euro:6.50, mrrT:100, mrrF:90}
+  ],
+  tratt: [
+    {nome:"Nessuno", euro:0, min:0},
+    {nome:"Zincatura elettrolitica", euro:1.20, min:0.30},
+    {nome:"Zincatura a caldo", euro:0.90, min:0.50},
+    {nome:"Brunitura", euro:2.50, min:0.40},
+    {nome:"Verniciatura a polvere", euro:3.50, min:1.50},
+    {nome:"Anodizzazione (alluminio)", euro:9.00, min:1.00},
+    {nome:"Nichelatura chimica", euro:12.00, min:1.50}
+  ],
+  riproOn: true,
+  ripro: {
+    bands: [[1,1],[2,2],[3,3],[4,4],[5,6],[7,8],[8,20],[21,50],[51,100],[101,300]],
+    m: [
+      [1,0.67,0.56,0.5,0.45,0.42,0.38,0.38,0.34,0.34],
+      [1.5,1,0.83,0.75,0.68,0.63,0.57,0.53,0.51,0.51],
+      [1.8,1.2,1,0.9,0.82,0.76,0.68,0.63,0.62,0.61],
+      [2,1.33,1.11,1,0.91,0.84,0.76,0.7,0.68,0.67],
+      [2.2,1.47,1.22,1.1,1,0.93,0.83,0.77,0.75,0.74],
+      [2.37,1.58,1.32,1.18,1.08,1,0.89,0.83,0.81,0.8],
+      [2.65,1.76,1.47,1.32,1.2,1.12,1,0.93,0.9,0.89],
+      [2.86,1.9,1.59,1.43,1.3,1.21,1.08,1,0.98,0.96],
+      [2.93,1.95,1.63,1.46,1.33,1.24,1.11,1.02,1,0.99],
+      [2.97,1.98,1.65,1.49,1.35,1.25,1.12,1.04,1.01,1]
+    ]
+  }
+};
+const COLORS = ["var(--c1)","var(--c2)","var(--c3)","var(--c4)","var(--c5)"];
+const LABELS = ["Materiale","Attrezzaggio e CAM","Lavorazione macchina","Sbavatura e controllo","Trattamenti ed esterni"];
+const LOTS = [1,2,3,4,5,8,20,50,100,300];
+const KEY = "costificatore-v1";
+const FORM_IDS = ["desc","mat","qty","t_d","t_l","t_sovr","t_asp","f_l","f_w","f_h","f_asp","c_s","c_l","c_w","c_scarto","m_mac","m_setup","m_ciclo","m_scarto","c_taglio","c_inneschi","c_v","c_setlaser","c_pieghe","c_setpiega","c_sald","c_saldv","m_cam","x_man","x_tratt","x_est","q_cliente","q_num","q_data","rp_desc","rp_prezzo","rp_qn","rp_qp","rp_setup","rp_mat","rp_tratt","x_matInc","x_trInc","rp_matInc","rp_trInc"];
+
+const $ = id => document.getElementById(id);
+const eur = new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR"});
+const n1 = new Intl.NumberFormat("it-IT",{maximumFractionDigits:2});
+const n2 = new Intl.NumberFormat("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2});
+let rpLast = null;
+const clone = o => JSON.parse(JSON.stringify(o));
+
+let S = clone(DEFAULTS), quote = [], formVals = {};
+try{
+  const raw = localStorage.getItem(KEY);
+  if(raw){
+    const d = JSON.parse(raw);
+    if(d.S && d.S.rates && d.S.materials && d.S.tratt) S = d.S;
+    if(Array.isArray(d.quote)) quote = d.quote;
+    if(d.form) formVals = d.form;
+    if(!S.ripro){ S.ripro = clone(DEFAULTS.ripro); S.riproOn = true; }
+    if(!S.target) S.target = clone(DEFAULTS.target);
+  }
+}catch(e){}
+// Gestionale Kimatic: tariffe, materiali e trattamenti sono condivisi e salvati nel gestionale
+let ultimiParam = null;
+try{
+  const P = K.parametri();
+  if(P && P.rates && P.materials && P.tratt){
+    S = P;
+    if(!S.ripro){ S.ripro = clone(DEFAULTS.ripro); S.riproOn = true; }
+    if(!S.target) S.target = clone(DEFAULTS.target);
+  }
+  ultimiParam = JSON.stringify(S);
+}catch(e){}
+
+let saveT;
+function save(){
+  clearTimeout(saveT);
+  saveT = setTimeout(()=>{
+    const form = {proc: proc()};
+    FORM_IDS.forEach(id=>{ form[id] = getV(id); });
+    try{ localStorage.setItem(KEY, JSON.stringify({S, quote, form})); }catch(e){}
+    try{ const j = JSON.stringify(S); if(j !== ultimiParam){ ultimiParam = j; K.salvaParametri(S); } }catch(e){}
+  },250);
+}
+
+const num = id => { const v = parseFloat($(id).value); return isFinite(v) ? v : 0; };
+const getV = id => { const el = $(id); return el.type==="checkbox" ? el.checked : el.value; };
+const setV = (id, v) => { const el = $(id); if(el.type==="checkbox") el.checked = (v===true || v==="true"); else el.value = v; };
+const exclNote = (m, t) => [m===false ? "Materiale escluso" : "", t===false ? "Trattamento escluso" : ""].filter(Boolean).join(", ");
+const proc = () => document.querySelector("input[name=proc]:checked").value;
+const PROC_NAME = {torn:"Tornitura", fres:"Fresatura", carp:"Carpenteria", ripro:"Riproporzionato"};
+// Tabella di riproporzionamento: con fasce sovrapposte vale la prima, come il CONFRONTA del foglio Excel
+const bandIdx = q => S.ripro.bands.findIndex(([a,b])=>q>=a && q<=b);
+function coef(qNota, qNuova){
+  const i = bandIdx(qNota), j = bandIdx(qNuova);
+  if(i<0 || j<0) return null;
+  const v = S.ripro.m[i] && S.ripro.m[i][j];
+  return isFinite(v) ? v : null;
+}
+
+function fillMat(){
+  const sel = $("mat"), cur = sel.value;
+  sel.innerHTML = S.materials.map((m,i)=>`<option value="${i}">${esc(m.nome)}</option>`).join("");
+  if(cur && S.materials[cur]) sel.value = cur;
+}
+function fillTratt(){
+  const sel = $("x_tratt"), cur = sel.value;
+  sel.innerHTML = S.tratt.map((t,i)=>`<option value="${i}">${esc(t.nome)}</option>`).join("");
+  if(cur && S.tratt[cur]) sel.value = cur;
+}
+function fillMac(){
+  const p = proc(), sel = $("m_mac"), cur = sel.value;
+  const keys = Object.keys(S.rates).filter(k=>S.rates[k].proc===p);
+  sel.innerHTML = keys.map(k=>`<option value="${k}">${esc(S.rates[k].nome)} · ${eur.format(S.rates[k].euro)}/h</option>`).join("");
+  if(keys.includes(cur)) sel.value = cur;
+}
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function showProc(){
+  const p = proc();
+  document.querySelectorAll("[data-show]").forEach(el=>{
+    el.hidden = !el.dataset.show.split(" ").includes(p);
+  });
+  fillMac();
+}
+
+// Velocità indicativa taglio laser fibra su acciaio al carbonio, mm/min
+const VEL = [[0.5,14000],[1,10000],[2,6000],[3,4200],[4,3300],[5,2700],[6,2200],[8,1600],[10,1200],[12,950],[15,750],[20,500],[25,350]];
+const VEL_F = {acciaio:1, inox:0.8, alluminio:0.85, ottone:0.6, plastica:1};
+function velSugg(s, tipo){
+  if(s<=0) return 0;
+  let v;
+  if(s<=VEL[0][0]) v = VEL[0][1];
+  else if(s>=VEL[VEL.length-1][0]) v = VEL[VEL.length-1][1];
+  else for(let i=1;i<VEL.length;i++){
+    if(s<=VEL[i][0]){ const [a,va]=VEL[i-1],[b,vb]=VEL[i]; v = va+(vb-va)*(s-a)/(b-a); break; }
+  }
+  return Math.round(v*(VEL_F[tipo]||1)/50)*50;
+}
+
+function calc(qOverride){
+  const p = proc();
+  const m = S.materials[$("mat").value] || S.materials[0];
+  const q = Math.max(1, qOverride || Math.round(num("qty")) || 1);
+  const R = k => (S.rates[k] ? S.rates[k].euro : 0);
+  let vol=0, asp=0, scarto=0, cycle=0, est=null, mach=0, setup=0, info="";
+
+  if(p==="torn"){
+    const d=num("t_d"); vol = Math.PI*(d/2)**2*(num("t_l")+num("t_sovr"));
+    asp = Math.min(95,num("t_asp")); scarto = num("m_scarto");
+  } else if(p==="fres"){
+    vol = num("f_l")*num("f_w")*num("f_h");
+    asp = Math.min(95,num("f_asp")); scarto = num("m_scarto");
+  } else {
+    vol = num("c_s")*num("c_l")*num("c_w");
+    asp = 0; scarto = num("c_scarto");
+  }
+  const wRaw = vol/1e6*m.dens;
+  const wFin = wRaw*(1-asp/100);
+  const matInc = $("x_matInc").checked, trInc = $("x_trInc").checked;
+  const materiale = matInc ? wRaw*m.euro*(1+scarto/100) : 0;
+  const cam = num("m_cam")/60*R("cam");
+
+  if(p!=="carp"){
+    const mk = $("m_mac").value, mac = S.rates[mk] || {euro:0};
+    let mrr = p==="torn" ? m.mrrT : m.mrrF;
+    if(mac.trad) mrr *= 0.6;
+    const removed = vol/1000*asp/100;
+    est = mrr>0 ? removed/mrr*1.35 + 0.5 : 0;
+    const manual = $("m_ciclo").value.trim()!=="";
+    cycle = manual ? num("m_ciclo") : est;
+    mach = cycle/60*mac.euro;
+    setup = (num("m_setup")/60*mac.euro + cam)/q;
+    info = `Stima: ${n1.format(removed)} cm³ da asportare a ${n1.format(mrr)} cm³/min, più finitura e carico/scarico ≈ ${n1.format(est)} min/pz.` + (manual ? " Stai usando il tempo inserito a mano." : " Lascia vuoto il tempo ciclo per usare questa stima.");
+  } else {
+    const vs = velSugg(num("c_s"), m.tipo);
+    const v = $("c_v").value.trim()!=="" ? Math.max(1,num("c_v")) : vs;
+    const tl = v>0 ? num("c_taglio")/v + num("c_inneschi")*2/60 : 0;
+    const tp = num("c_pieghe")*0.4;
+    const ts = num("c_sald")*num("c_saldv");
+    cycle = tl+tp+ts;
+    mach = tl/60*R("laser") + tp/60*R("piegatrice") + ts/60*R("saldatura");
+    setup = (num("c_setlaser")/60*R("laser") + (num("c_pieghe")>0 ? num("c_setpiega")/60*R("piegatrice") : 0) + cam)/q;
+    info = `Laser ${n1.format(tl)} min a ${n1.format(v)} mm/min (suggerita ${n1.format(vs)}), piega ${n1.format(tp)} min (0,4 min a piega), saldatura ${n1.format(ts)} min.`;
+  }
+  const man = num("x_man")/60*R("manuale");
+  const t = S.tratt[$("x_tratt").value] || S.tratt[0];
+  const trattCost = trInc && t.euro>0 ? Math.max(t.min, wFin*t.euro) : 0;
+  const fin = trattCost + num("x_est");
+  const parts = [materiale, setup, mach, man, fin];
+  const costo = parts.reduce((a,b)=>a+b,0);
+  const prezzoMerc = costo*(1+S.overhead/100)*(1+S.margin/100);
+  // Prezzo obiettivo: fornitore efficiente (tempi e tariffe ridotti, spese e utile contenuti)
+  const T = S.target, fe = T.eff/100, fr = 1-T.sconto/100;
+  const tparts = [materiale, setup*fr, mach*fe*fr, man*fe*fr, fin];
+  const tcosto = tparts.reduce((a,b)=>a+b,0);
+  const prezzo = tcosto*(1+T.overhead/100)*(1+T.margin/100);
+  return {q, wRaw, wFin, cycle, est, parts:tparts, mparts:parts, costo:tcosto, costoMerc:costo, prezzo, prezzoMerc, tot:prezzo*q, info, mat:m.nome, matInc, trInc};
+}
+
+// Prezzi per lotto (obiettivo e fornitore medio), con la tabella di riproporzionamento se attiva
+function lotTable(r, lots){
+  const useR = S.riproOn && bandIdx(r.q)>=0;
+  const k = (1+S.target.overhead/100)*(1+S.target.margin/100);
+  const kM = (1+S.overhead/100)*(1+S.margin/100);
+  const lav = r.parts[2]+r.parts[3], lavM = r.mparts[2]+r.mparts[3];
+  return lots.map(q=>{
+    const x = calc(q);
+    if(!useR) return {q, p:x.prezzo, pm:x.prezzoMerc, c:null};
+    const c = coef(r.q, q);
+    if(c===null) return {q, p:null, pm:null, c:null};
+    return {q, c, p:(x.parts[0]+x.parts[1]+lav*c+x.parts[4])*k, pm:(x.mparts[0]+x.mparts[1]+lavM*c+x.mparts[4])*kM};
+  });
+}
+function render(){
+  const r = calc();
+  $("rPrezzo").textContent = eur.format(r.prezzo);
+  $("rTot").textContent = eur.format(r.tot);
+  $("rCosto").textContent = eur.format(r.costo);
+  $("rMerc").textContent = eur.format(r.prezzoMerc);
+  $("rDelta").textContent = r.prezzoMerc>0 ? `${Math.round((1-r.prezzo/r.prezzoMerc)*100)}% sotto il fornitore medio` : "–";
+  $("rPeso").textContent = `${n1.format(r.wRaw)} / ${n1.format(r.wFin)} kg`;
+  $("rCiclo").textContent = `${n1.format(r.cycle)} min`;
+  const tot = r.costo || 1;
+  $("rBar").innerHTML = r.parts.map((v,i)=>`<div style="width:${v/tot*100}%;background:${COLORS[i]}" title="${LABELS[i]}: ${eur.format(v)}"></div>`).join("");
+  $("rLegend").innerHTML = r.parts.map((v,i)=>`<li><i style="background:${COLORS[i]}"></i><span>${LABELS[i]}${i===0 && !r.matInc ? " (escluso)" : ""}${i===4 && !r.trInc ? " (trattamento escluso)" : ""}</span><span>${eur.format(v)}</span><span class="pct">${Math.round(v/tot*100)}%</span></li>`).join("");
+  if(proc()==="carp") $("carpHint").textContent = r.info; else $("stimaHint").textContent = r.info;
+
+  const lots = LOTS.includes(r.q) ? LOTS : [...LOTS, r.q].sort((a,b)=>a-b);
+  const useR = S.riproOn && bandIdx(r.q)>=0;
+  const vals = lotTable(r, lots);
+  const max = Math.max(...vals.map(v=>v.p||0)) || 1;
+  $("rLot").innerHTML = vals.map(v=>`<tr class="${v.q===r.q?"cur":""}"><td>${v.q} pz</td><td><div class="track"><div style="width:${(v.p||0)/max*100}%"></div></div></td><td class="cf">${v.c!==null?"×"+n2.format(v.c):""}</td><td>${v.p===null?"fuori tabella":eur.format(v.p)}</td></tr>`).join("");
+  $("lotNote").textContent = !S.riproOn
+    ? "Coefficienti di riproporzionamento disattivati: cambia solo l'attrezzaggio diviso sul lotto."
+    : useR ? `Lavorazione riproporzionata con la tua tabella partendo da ${r.q} pz. Materiale e trattamenti restano uguali, attrezzaggio e CAM sono divisi sul lotto.`
+    : `${r.q} pz è fuori dalla tabella di riproporzionamento: mostro solo l'effetto dell'attrezzaggio.`;
+  save();
+}
+
+function renderQuote(){
+  if(!quote.length){
+    $("qBody").innerHTML = `<tr><td colspan="8" class="empty">Nessun pezzo ancora. Configura un pezzo qui sopra e premi “Aggiungi al preventivo”.</td></tr>`;
+    $("qFoot").innerHTML = "";
+  } else {
+    $("qBody").innerHTML = quote.map((it,i)=>`<tr><td>${esc(it.desc||"Pezzo senza nome")}${exclNote(it.matInc, it.trInc) ? `<div class="hint" style="margin:0">${exclNote(it.matInc, it.trInc)}</div>` : ""}</td><td>${PROC_NAME[it.proc]}</td><td>${esc(it.mat)}</td><td class="n">${it.q}</td><td class="n">${eur.format(it.prezzo)}</td><td class="n" style="color:var(--muted)">${it.merc?eur.format(it.merc):"–"}</td><td class="n">${eur.format(it.tot)}</td><td class="noprint"><button type="button" class="small danger" data-del="${i}" aria-label="Rimuovi ${esc(it.desc||"pezzo")}">Rimuovi</button></td></tr>`).join("");
+    const sum = quote.reduce((a,b)=>a+b.tot,0);
+    $("qFoot").innerHTML = `<tr><td colspan="6" class="n">Totale obiettivo imponibile</td><td class="n tot">${eur.format(sum)}</td><td class="noprint"></td></tr>
+      <tr><td colspan="6" class="n" style="font-weight:400;color:var(--muted)">IVA 22%</td><td class="n" style="font-weight:400">${eur.format(sum*0.22)}</td><td class="noprint"></td></tr>
+      <tr><td colspan="6" class="n">Totale</td><td class="n">${eur.format(sum*1.22)}</td><td class="noprint"></td></tr>`;
+  }
+  save();
+}
+
+function renderSettings(){
+  $("sRates").innerHTML = Object.keys(S.rates).map(k=>`<tr><td class="nm">${esc(S.rates[k].nome)}</td><td class="num"><input type="number" min="0" step="1" data-rate="${k}" value="${S.rates[k].euro}" aria-label="Tariffa ${esc(S.rates[k].nome)}"></td></tr>`).join("");
+  $("sTratt").innerHTML = S.tratt.map((t,i)=> i===0 ? "" : `<tr><td class="nm">${esc(t.nome)}</td><td class="num"><input type="number" min="0" step="0.1" data-tr="${i}" data-f="euro" value="${t.euro}"></td><td class="num"><input type="number" min="0" step="0.1" data-tr="${i}" data-f="min" value="${t.min}"></td></tr>`).join("");
+  $("sMat").innerHTML = S.materials.map((m,i)=>`<tr><td class="nm">${esc(m.nome)}</td>${["dens","euro","mrrT","mrrF"].map(f=>`<td class="num"><input type="number" min="0" step="0.01" data-mt="${i}" data-f="${f}" value="${m[f]}"></td>`).join("")}</tr>`).join("");
+}
+
+// Ripristina stato salvato del form
+if(formVals.proc){ const r = document.querySelector(`input[name=proc][value=${formVals.proc}]`); if(r) r.checked = true; }
+fillMat(); fillTratt(); showProc();
+FORM_IDS.forEach(id=>{ if(formVals[id]!==undefined) setV(id, formVals[id]); });
+if(!$("q_data").value) $("q_data").value = new Date().toISOString().slice(0,10);
+$("overhead").value = S.overhead; $("margin").value = S.margin;
+renderSettings(); render(); renderQuote();
+$("riproOn").checked = !!S.riproOn; renderRiproTable(); renderRipro();
+
+function renderRipro(){
+  const P=num("rp_prezzo"), qn=Math.round(num("rp_qn")), qp=Math.round(num("rp_qp")), su=num("rp_setup"), mt=num("rp_mat"), tt=num("rp_tratt");
+  const lavN = qn>0 ? P-mt-tt-su/qn : 0;
+  const c = coef(qn, qp);
+  let h = `<dt>Solo lavorazione a ${qn||"–"} pz</dt><dd>${eur.format(lavN)}</dd>`;
+  if(c===null){ h += `<dt>Coefficiente</dt><dd>fuori tabella</dd>`; rpLast = null; }
+  else {
+    const lavP = lavN*c, fin = lavP + ($("rp_matInc").checked ? mt : 0) + ($("rp_trInc").checked ? tt : 0) + (qp>0 ? su/qp : 0);
+    h += `<dt>Coefficiente</dt><dd>×${n2.format(c)}</dd><dt>Lavorazione a ${qp} pz</dt><dd>${eur.format(lavP)}</dd><dt>Prezzo finito al pezzo</dt><dd style="font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-size:1.7rem;font-weight:700">${eur.format(fin)}</dd><dt>Totale lotto</dt><dd>${eur.format(fin*qp)}</dd>`;
+    rpLast = {q:qp, prezzo:fin, tot:fin*qp};
+  }
+  $("rpOut").innerHTML = h;
+  $("rpWarn").textContent = lavN<0 ? "Materiale, trattamento e quota di piazzamento superano il prezzo noto: controlla i dati." : (c===null ? "Una delle due quantità è fuori dalle fasce della tabella." : "");
+  $("rpAdd").disabled = !rpLast;
+}
+function renderRiproTable(){
+  const B = S.ripro.bands, lbl = b => b[0]===b[1] ? `${b[0]}` : `${b[0]}–${b[1]}`;
+  $("sRipro").innerHTML = `<thead><tr><th>Nota ↓ / da produrre →</th>${B.map((b,j)=>`<th id="rh${j}">${lbl(b)}</th>`).join("")}</tr></thead><tbody>` +
+    B.map((b,i)=>`<tr><th><span class="inline"><input type="number" min="1" step="1" data-bd="${i}" data-e="0" value="${b[0]}" aria-label="Fascia ${i+1} da"><input type="number" min="1" step="1" data-bd="${i}" data-e="1" value="${b[1]}" aria-label="Fascia ${i+1} a"></span></th>${B.map((_,j)=>`<td><input type="number" min="0" step="0.01" data-mr="${i}" data-mc="${j}" value="${S.ripro.m[i][j]}" aria-label="Nota ${lbl(b)}, da produrre ${lbl(B[j])}"></td>`).join("")}</tr>`).join("") + `</tbody>`;
+}
+$("sRipro").addEventListener("input", e=>{
+  const el = e.target, v = parseFloat(el.value); if(!isFinite(v)) return;
+  if(el.dataset.bd!==undefined){
+    const b = S.ripro.bands[el.dataset.bd]; b[+el.dataset.e] = Math.round(v);
+    $("rh"+el.dataset.bd).textContent = b[0]===b[1] ? `${b[0]}` : `${b[0]}–${b[1]}`;
+  } else S.ripro.m[el.dataset.mr][el.dataset.mc] = v;
+  render(); renderRipro();
+});
+$("riproOn").addEventListener("change", e=>{ S.riproOn = e.target.checked; render(); });
+document.querySelector("section.ripro").addEventListener("input", ()=>{ renderRipro(); save(); });
+$("rpAdd").addEventListener("click", ()=>{
+  if(!rpLast) return;
+  const sn = window.Costificatore.riproSnapshot();
+  quote.push({desc:$("rp_desc").value.trim() || "Pezzo riproporzionato", proc:"ripro", mat:"–", q:rpLast.q, prezzo:rpLast.prezzo, tot:rpLast.tot, lots:sn.lots, params:sn.params, nota:sn.nota, matInc:$("rp_matInc").checked, trInc:$("rp_trInc").checked});
+  renderQuote();
+  const b = $("rpAdd"); b.textContent = "Aggiunto al preventivo"; setTimeout(()=>{ b.textContent = "Aggiungi al preventivo"; }, 1400);
+});
+
+// Eventi
+$("form").addEventListener("input", e=>{ if(e.target.name==="proc") showProc(); render(); });
+$("form").addEventListener("change", e=>{ if(e.target.name==="proc") showProc(); render(); });
+["overhead","margin"].forEach(id=>$(id).addEventListener("input",()=>{ S[id]=num(id); render(); }));
+const TF = {t_eff:"eff", t_sconto:"sconto", t_oh:"overhead", t_mg:"margin"};
+const fillTarget = () => Object.entries(TF).forEach(([id,k])=>{ $(id).value = S.target[k]; });
+fillTarget();
+Object.entries(TF).forEach(([id,k])=>$(id).addEventListener("input",()=>{ S.target[k]=num(id); render(); }));
+["q_cliente","q_num","q_data"].forEach(id=>$(id).addEventListener("input",save));
+
+$("btnStima").addEventListener("click",()=>{ const r = calc(); $("m_ciclo").value = (Math.round(r.est*100)/100); render(); });
+$("btnVel").addEventListener("click",()=>{ const m = S.materials[$("mat").value]; $("c_v").value = velSugg(num("c_s"), m.tipo); render(); });
+
+$("btnAdd").addEventListener("click",()=>{
+  const r = calc();
+  const sn = window.Costificatore.snapshot();
+  quote.push({desc:$("desc").value.trim(), proc:proc(), mat:r.mat, q:r.q, prezzo:r.prezzo, merc:r.prezzoMerc, tot:r.tot, lots:sn.lots, params:sn.params, nota:sn.nota, matInc:r.matInc, trInc:r.trInc});
+  renderQuote();
+  const b = $("btnAdd"); b.textContent = "Aggiunto al preventivo";
+  setTimeout(()=>{ b.textContent = "Aggiungi al preventivo"; }, 1400);
+});
+$("qBody").addEventListener("click", e=>{
+  const i = e.target.dataset.del; if(i===undefined) return;
+  quote.splice(+i,1); renderQuote();
+});
+$("btnClear").addEventListener("click",()=>{ if(quote.length && confirm("Vuoi svuotare il preventivo?")){ quote=[]; renderQuote(); } });
+$("btnPrint").addEventListener("click",()=>window.print());
+
+document.querySelector(".sgrid").addEventListener("input", e=>{
+  const el = e.target, v = parseFloat(el.value); if(!isFinite(v)) return;
+  if(el.dataset.rate){ S.rates[el.dataset.rate].euro = v; fillMac(); }
+  else if(el.dataset.tr){ S.tratt[el.dataset.tr][el.dataset.f] = v; }
+  else if(el.dataset.mt){ S.materials[el.dataset.mt][el.dataset.f] = v; }
+  render();
+});
+$("btnReset").addEventListener("click",()=>{
+  if(!confirm("Ripristinare tariffe, materiali e trattamenti ai valori predefiniti?")) return;
+  S = clone(DEFAULTS); $("overhead").value=S.overhead; $("margin").value=S.margin; fillTarget();
+  fillMat(); fillTratt(); fillMac(); renderSettings(); $("riproOn").checked = S.riproOn; renderRiproTable(); render(); renderRipro();
+});
+
+// Interfaccia usata dalla sezione disegni
+window.Costificatore = {
+  settings: () => S,
+  price: () => calc(),
+  addToQuote: () => $("btnAdd").click(),
+  getQuote: () => ({fornitore:$("q_cliente").value.trim(), rif:$("q_num").value.trim(), data:$("q_data").value, righe: clone(quote)}),
+  setQuote(qd){
+    $("q_cliente").value = qd.fornitore||""; $("q_num").value = qd.rif||""; $("q_data").value = qd.data||"";
+    quote = clone(qd.righe||[]); renderQuote();
+  },
+  snapshot(){
+    const r = calc();
+    const params = {proc: proc()}; FORM_IDS.forEach(id=>{ params[id] = getV(id); });
+    const lots = LOTS.includes(r.q) ? LOTS : [...LOTS, r.q].sort((a,b)=>a-b);
+    return {desc:$("desc").value.trim(), proc:proc(), mat:r.mat, q:r.q, prezzo:r.prezzo, merc:r.prezzoMerc, nota: exclNote(r.matInc, r.trInc),
+      lots: lotTable(r, lots).map(v=>({q:v.q, p:v.p, pm:v.pm})), params};
+  },
+  riproSnapshot(){
+    const P=num("rp_prezzo"), qn=Math.round(num("rp_qn")), qp=Math.round(num("rp_qp")), su=num("rp_setup"), mt=num("rp_mat"), tt=num("rp_tratt");
+    const lavN = qn>0 ? P-mt-tt-su/qn : 0;
+    const mi = $("rp_matInc").checked, ti = $("rp_trInc").checked;
+    const lots = (LOTS.includes(qp) ? LOTS : [...LOTS, qp].sort((a,b)=>a-b)).map(q=>{ const c = coef(qn,q); return {q, p: c===null ? null : lavN*c + (mi?mt:0) + (ti?tt:0) + su/q, pm:null}; });
+    const cur = lots.find(l=>l.q===qp);
+    return {desc:$("rp_desc").value.trim() || "Pezzo riproporzionato", proc:"ripro", mat:"–", q:qp, prezzo:cur ? cur.p : null, merc:null, lots,
+      nota:[`Dal prezzo di ${eur.format(P)} a ${qn} pz`, exclNote(mi, ti)].filter(Boolean).join(". "),
+      params:{ripro:{desc:$("rp_desc").value, prezzo:P, qn, qp, setup:su, mat:mt, tratt:tt, matInc:mi, trInc:ti}}};
+  },
+  restore(params){
+    if(params.ripro){
+      const x = params.ripro;
+      $("rp_desc").value = x.desc||""; $("rp_prezzo").value = x.prezzo; $("rp_qn").value = x.qn; $("rp_qp").value = x.qp;
+      $("rp_setup").value = x.setup; $("rp_mat").value = x.mat; $("rp_tratt").value = x.tratt;
+      $("rp_matInc").checked = x.matInc!==false; $("rp_trInc").checked = x.trInc!==false;
+      renderRipro(); save(); return "ripro";
+    }
+    const p = ["torn","fres","carp"].includes(params.proc) ? params.proc : "torn";
+    document.querySelector(`input[name=proc][value=${p}]`).checked = true;
+    showProc();
+    FORM_IDS.forEach(id=>{
+      if(id.startsWith("q_") || id.startsWith("rp_")) return;
+      const v = params[id]!==undefined ? params[id] : ((id==="x_matInc" || id==="x_trInc") ? true : undefined);
+      if(v!==undefined) setV(id, v);
+    });
+    render(); return "calc";
+  },
+  apply(r, qtyOverride){
+    const p = ["torn","fres","carp"].includes(r.proc) ? r.proc : "torn";
+    document.querySelector(`input[name=proc][value=${p}]`).checked = true;
+    showProc();
+    const ok = v => v!==null && v!==undefined && v!=="" && isFinite(Number(v));
+    const setv = (id,v) => { if(ok(v)) $(id).value = Math.round(Number(v)*100)/100; };
+    $("desc").value = [r.codice, r.descrizione].filter(Boolean).join(" – ");
+    const low = s => String(s||"").toLowerCase();
+    let mi = S.materials.findIndex(m=>low(m.nome)===low(r.materiale));
+    if(mi<0) mi = S.materials.findIndex(m=>low(m.nome).includes(low(r.materiale)) || low(r.materiale).includes(low(m.nome)));
+    if(mi>=0) $("mat").value = mi;
+    if(ok(qtyOverride)) setv("qty", qtyOverride); else setv("qty", r.quantita);
+    const t=r.torn||{}, f=r.fres||{}, c=r.carp||{};
+    if(p==="torn"){ setv("t_d",t.diametro_barra); setv("t_l",t.lunghezza_pezzo); setv("t_sovr",t.sovrametallo); setv("t_asp",t.asportazione_pct); }
+    if(p==="fres"){ setv("f_l",f.l); setv("f_w",f.w); setv("f_h",f.h); setv("f_asp",f.asportazione_pct); }
+    if(p==="carp"){
+      setv("c_s",c.spessore); setv("c_l",c.sviluppo_l); setv("c_w",c.sviluppo_w); setv("c_taglio",c.lunghezza_taglio);
+      setv("c_inneschi",c.inneschi); setv("c_pieghe",c.pieghe); setv("c_sald",c.saldatura_m);
+      setv("c_setlaser",c.setup_laser_min); setv("c_setpiega",c.setup_piega_min); $("c_v").value="";
+    } else {
+      if(r.macchina && S.rates[r.macchina] && S.rates[r.macchina].proc===p) $("m_mac").value = r.macchina;
+      setv("m_setup", r.setup_min); setv("m_ciclo", r.ciclo_min);
+    }
+    setv("m_cam", r.cam_min); setv("x_man", r.sbavatura_min);
+    const ti = S.tratt.findIndex(x=>low(x.nome)===low(r.trattamento));
+    $("x_tratt").value = ti>=0 ? ti : 0;
+    setv("x_est", ok(r.esterne_eur) ? r.esterne_eur : 0);
+    render();
+  }
+};
+})();
+</script>
+
+<script>
+(async function(){
+const $ = id => document.getElementById(id);
+const esc = s => String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const eur = new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR"});
+const C = window.Costificatore;
+const DKEY = "costificatore-disegni-v1";
+const PN = {torn:"Tornitura", fres:"Fresatura", carp:"Carpenteria"};
+const AFF = {alta:"Lettura sicura", media:"Lettura parziale", bassa:"Molte ipotesi"};
+let analyses = [];
+try{ analyses = JSON.parse(localStorage.getItem(DKEY)||"[]") || []; }catch(e){}
+const saveA = () => { try{ localStorage.setItem(DKEY, JSON.stringify(analyses.slice(0,40))); }catch(e){} };
+let pending = [], ready = false, ctl = null, lastId = null;
+
+const status = (msg, err) => { const el=$("drawStatus"); el.textContent = msg||""; el.classList.toggle("err", !!err); };
+
+// ---------- file ----------
+function renderFiles(){
+  $("fileList").innerHTML = pending.map((f,i)=>`<span class="chip">${esc(f.name)}<button type="button" data-rm="${i}" aria-label="Togli ${esc(f.name)}">×</button></span>`).join("");
+  $("btnAnalyze").disabled = !pending.length || !ready || !!ctl;
+}
+function addFiles(list){
+  for(const f of list){ if(!pending.some(p=>p.name===f.name && p.size===f.size)) pending.push(f); }
+  renderFiles();
+}
+$("files").addEventListener("change", e=>{ addFiles(e.target.files); e.target.value=""; });
+const drop = $("drop");
+["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev, e=>{ e.preventDefault(); drop.classList.add("over"); }));
+["dragleave","drop"].forEach(ev=>drop.addEventListener(ev, e=>{ e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e=>{ if(e.dataTransfer?.files) addFiles(e.dataTransfer.files); });
+$("fileList").addEventListener("click", e=>{ const i=e.target.dataset.rm; if(i!==undefined){ pending.splice(+i,1); renderFiles(); } });
+
+// ---------- schede ----------
+function renderCards(){
+  $("cards").innerHTML = analyses.map(r=>{
+    const title = [r.codice, r.descrizione].filter(Boolean).join(" – ") || "Pezzo senza nome";
+    const li = a => (Array.isArray(a)&&a.length) ? a.map(x=>`<li>${esc(x)}</li>`).join("") : "";
+    const matTxt = r.materiale_disegno && r.materiale_disegno!==r.materiale ? `${esc(r.materiale)} (a disegno: ${esc(r.materiale_disegno)})` : esc(r.materiale||"non indicato");
+    const tr = r.trattamento && r.trattamento!=="Nessuno" ? ` Trattamento: ${esc(r.trattamento)}.` : "";
+    return `<article class="card ${r.id===lastId?"new":""}">
+      <div class="chead"><h3>${esc(title)}</h3><span class="aff aff-${esc(r.affidabilita)}">${AFF[r.affidabilita]||"Da verificare"}</span></div>
+      <p>${PN[r.proc]||"Lavorazione"} in ${matTxt}.${tr}</p>
+      ${r.prezzo ? `<p><span class="price-hint">${eur.format(r.prezzo)}</span> obiettivo al pezzo per ${r.qty} pz</p>` : ""}
+      <p class="files">${esc((r.files||[]).join(", "))}</p>
+      ${li(r.operazioni) ? `<details open><summary>Ciclo proposto</summary><ol>${li(r.operazioni)}</ol></details>` : ""}
+      ${li(r.tolleranze_critiche) ? `<details><summary>Tolleranze e richieste critiche</summary><ul>${li(r.tolleranze_critiche)}</ul></details>` : ""}
+      ${li(r.note) ? `<details><summary>Ipotesi e punti da verificare</summary><ul>${li(r.note)}</ul></details>` : ""}
+      <div class="actions">
+        <button type="button" class="small" data-apply="${r.id}">Carica nel calcolo</button>
+        <button type="button" class="small" data-quote="${r.id}">Aggiungi al preventivo</button>
+        <button type="button" class="small danger" data-del="${r.id}">Elimina</button>
+      </div>
+    </article>`;
+  }).join("");
+}
+$("cards").addEventListener("click", e=>{
+  const b = e.target.closest("button"); if(!b) return;
+  const id = Number(b.dataset.apply||b.dataset.quote||b.dataset.del);
+  const r = analyses.find(x=>x.id===id); if(!r) return;
+  if(b.dataset.del){ analyses = analyses.filter(x=>x.id!==id); saveA(); renderCards(); return; }
+  C.apply(r, r.qty);
+  if(b.dataset.quote){ C.addToQuote(); status(`“${r.codice||r.descrizione||"Pezzo"}” aggiunto al preventivo.`); }
+  else document.querySelector(".layout").scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"});
+});
+renderCards();
+
+// ---------- capacità ----------
+let sample = null, maxImgs = 0, mediaTypes = [];
+try{ sample = window.claude ? await window.claude.use("sample") : null; }catch(e){ sample = null; }
+if(!sample){
+  status("L'analisi automatica dei disegni non è ancora attiva nel gestionale. Puoi inserire i dati del pezzo a mano qui sotto, oppure caricare i disegni nella chat con Claude.", true);
+  return;
+}
+try{ const lim = await sample.limits(); maxImgs = lim.images?.maxCount || 0; mediaTypes = lim.images?.mediaTypes || []; }catch(e){}
+ready = true; renderFiles();
+if(!maxImgs) status("In questa vista Claude può leggere solo il testo dei PDF e i file STEP, non le immagini dei disegni.");
+
+// ---------- preparazione ----------
+const toBlob = (cv) => new Promise(res=>cv.toBlob(b=>res(b),"image/png"));
+function sub(src, x, y, w, h, maxSide){
+  const k = Math.min(1, maxSide/Math.max(w,h));
+  const cv = document.createElement("canvas"); cv.width = Math.round(w*k); cv.height = Math.round(h*k);
+  cv.getContext("2d").drawImage(src, x, y, w, h, 0, 0, cv.width, cv.height);
+  return cv;
+}
+async function readPdf(f, full, tiles, texts){
+  if(!window.pdfjsLib) throw new Error("lettore PDF non caricato");
+  const pdf = await pdfjsLib.getDocument({data:new Uint8Array(await f.arrayBuffer()), isEvalSupported:false}).promise;
+  const n = Math.min(pdf.numPages, 4);
+  for(let i=1;i<=n;i++){
+    const page = await pdf.getPage(i);
+    try{
+      const tc = await page.getTextContent();
+      const txt = tc.items.map(it=>it.str).join(" ").replace(/\s+/g," ").trim();
+      if(txt) texts.push(`[Testo estratto da ${f.name}, pagina ${i}]\n${txt.slice(0,12000)}`);
+    }catch(e){}
+    const base = page.getViewport({scale:1});
+    const scale = 3200/Math.max(base.width, base.height);
+    const vp = page.getViewport({scale});
+    const cv = document.createElement("canvas"); cv.width = Math.ceil(vp.width); cv.height = Math.ceil(vp.height);
+    const ctx = cv.getContext("2d"); ctx.fillStyle="#fff"; ctx.fillRect(0,0,cv.width,cv.height);
+    await page.render({canvasContext:ctx, viewport:vp}).promise;
+    full.push({blob: await toBlob(sub(cv,0,0,cv.width,cv.height,1600)), label:`${f.name}, pagina ${i} intera`});
+    if(i===1){
+      const tw = cv.width*0.55, th = cv.height*0.55;
+      const pos = [[0,0,"in alto a sinistra"],[cv.width-tw,0,"in alto a destra"],[0,cv.height-th,"in basso a sinistra"],[cv.width-tw,cv.height-th,"in basso a destra (di solito il cartiglio)"]];
+      for(const [x,y,nm] of pos.reverse()) tiles.push({blob: await toBlob(sub(cv,x,y,tw,th,1800)), label:`${f.name}, pagina 1, ingrandimento ${nm}`});
+    }
+  }
+}
+function readStep(name, s){
+  const g = re => (s.match(re)||[])[1];
+  const unit = /\.MILLI\.\s*,\s*\.METRE\./i.test(s) ? "mm" : (/INCH/i.test(s) ? "pollici" : "non dichiarata");
+  let mn=[Infinity,Infinity,Infinity], mx=[-Infinity,-Infinity,-Infinity], np=0;
+  const re = /CARTESIAN_POINT\s*\(\s*'[^']*'\s*,\s*\(\s*([-+\d.eE]+)\s*,\s*([-+\d.eE]+)\s*,\s*([-+\d.eE]+)\s*\)/g;
+  let m;
+  while((m = re.exec(s))){ for(let k=0;k<3;k++){ const v=parseFloat(m[k+1]); if(v<mn[k])mn[k]=v; if(v>mx[k])mx[k]=v; } np++; }
+  const cnt = k => (s.match(new RegExp(k+"\\s*\\(","g"))||[]).length;
+  const radii = [...s.matchAll(/CYLINDRICAL_SURFACE\s*\(\s*'[^']*'\s*,\s*#\d+\s*,\s*([-+\d.eE]+)\s*\)/g)].map(x=>+(+x[1]).toFixed(3));
+  const ru = [...new Set(radii)].sort((a,b)=>a-b);
+  const dims = np ? mn.map((v,k)=>(mx[k]-v).toFixed(2)) : null;
+  return `[Modello STEP ${name}]
+Nome file interno: ${g(/FILE_NAME\s*\(\s*'([^']*)'/)||"-"}; prodotto: ${g(/PRODUCT\s*\(\s*'([^']*)'/)||"-"}; unità: ${unit}.
+Ingombro approssimato (box dei punti, può includere origini dei riferimenti): ${dims ? `X ${dims[0]} × Y ${dims[1]} × Z ${dims[2]}` : "non ricavabile"}.
+Facce: ${cnt("ADVANCED_FACE")}; piani: ${cnt("PLANE")}; cilindri: ${cnt("CYLINDRICAL_SURFACE")}; coni: ${cnt("CONICAL_SURFACE")}; tori: ${cnt("TOROIDAL_SURFACE")}; superfici libere: ${cnt("B_SPLINE_SURFACE_WITH_KNOTS")}; solidi: ${cnt("MANIFOLD_SOLID_BREP")}.
+Raggi delle superfici cilindriche (diametri = 2×): ${ru.length ? ru.slice(0,60).join(", ") : "nessuno"}.`;
+}
+async function prepare(files){
+  const full=[], tiles=[], texts=[], warn=[];
+  for(const f of files){
+    const ext = (f.name.split(".").pop()||"").toLowerCase();
+    try{
+      if(ext==="pdf") await readPdf(f, full, tiles, texts);
+      else if(ext==="step"||ext==="stp") texts.push(readStep(f.name, await f.text()));
+      else if(["png","jpg","jpeg","webp"].includes(ext)){
+        if(!mediaTypes.length || mediaTypes.includes(f.type)) full.push({blob:f, label:`${f.name}, immagine`});
+        else warn.push(`${f.name}: formato immagine non accettato`);
+      }
+      else if(ext==="dwg"||ext==="dxf") warn.push(`${f.name}: esporta il disegno in PDF dal CAD e caricalo di nuovo`);
+      else warn.push(`${f.name}: formato non riconosciuto`);
+    }catch(e){ warn.push(`${f.name}: non sono riuscito a leggerlo (${e.message||e})`); }
+  }
+  const imgs = maxImgs ? [...full, ...tiles].slice(0, maxImgs) : [];
+  return {imgs, texts, warn};
+}
+
+function buildPrompt(imgs, texts, qty, note){
+  const S = C.settings();
+  const rates = Object.entries(S.rates).map(([k,v])=>`${k}: ${v.nome}, ${v.euro} €/h${v.proc?` (${PN[v.proc]})`:""}`).join("\n");
+  const mats = S.materials.map(m=>m.nome).join("; ");
+  const tr = S.tratt.map(t=>t.nome).join("; ");
+  const imgList = imgs.length ? imgs.map((x,i)=>`Immagine ${i+1}: ${x.label}`).join("\n") : "Nessuna immagine allegata.";
+  return `Sei un cost engineer dell'ufficio acquisti di un'azienda che compra pezzi meccanici da officine italiane di subfornitura (tornitura CNC, fresatura CNC, carpenteria leggera con laser fibra, piegatrice e saldatura). Devi calcolare quanto costerebbe il pezzo a un fornitore efficiente e ben attrezzato (should-cost), per fissare un prezzo obiettivo da proporre. Usa tempi competitivi ma davvero ottenibili: il ciclo più corto sensato con attrezzature adeguate, nessun tempo di sicurezza. Prepara la costificazione di UN pezzo partendo dai documenti qui sotto, che descrivono tutti lo stesso pezzo.
+
+IMMAGINI ALLEGATE (rendering del disegno; gli ingrandimenti servono a leggere quote e cartiglio):
+${imgList}
+
+TESTO E DATI ESTRATTI:
+${texts.join("\n\n").slice(0,60000) || "nessuno"}
+
+Quantità richiesta: ${qty || "non indicata, usa quella del disegno se presente, altrimenti null"}.
+Indicazioni dell'utente: ${note || "nessuna"}.
+
+RISORSE DISPONIBILI (chiave: nome, tariffa):
+${rates}
+
+MATERIALI A LISTINO (scrivi in "materiale" esattamente uno di questi nomi, il più vicino a quello del disegno): ${mats}
+TRATTAMENTI A LISTINO (scrivi in "trattamento" esattamente uno di questi nomi): ${tr}
+
+COSA FARE
+1. Leggi cartiglio (codice, revisione, descrizione, materiale, trattamenti, quantità), quote d'ingombro, tolleranze dimensionali e geometriche, rugosità, filettature, note.
+2. Scegli il processo principale: "torn" per pezzi di rivoluzione, "fres" per pezzi prismatici, "carp" per lamiera tagliata, piegata o saldata.
+3. Definisci il grezzo commerciale. Tornitura: diametro barra commerciale immediatamente superiore al diametro massimo (lasciando almeno 1-2 mm sul diametro), lunghezza del pezzo finito, sovrametallo di troncatura e intestatura (di solito 3-6 mm). Fresatura: piatto o blocco commerciale con 2-5 mm di sovrametallo per lato. Carpenteria: spessore, sviluppo della lamiera, lunghezza totale di taglio (contorno più fori), numero di inneschi (un innesco per ogni contorno chiuso), pieghe, metri di saldatura.
+4. Stima la percentuale di materiale asportato rispetto al grezzo.
+5. Stima tempi realistici per macchine CNC moderne: tempo ciclo per pezzo in minuti (tutte le fasi sulla macchina principale, cambi pezzo compresi; se servono più fasi o una seconda macchina, somma il tempo equivalente e spiegalo in "note"), attrezzaggio per lotto, programmazione CAM per lotto, sbavatura e controllo per pezzo.
+6. Lavorazioni esterne non coperte dalle risorse (tempra, cementazione, rettifica, filettature particolari, certificati) come costo stimato in €/pz.
+7. Se un dato manca o è illeggibile, fai un'ipotesi ragionevole e scrivila in "note". Non inventare quote che non vedi senza dirlo.
+
+Rispondi SOLO con un oggetto JSON, unità in mm, minuti ed euro, con questa forma:
+{"codice":"string","descrizione":"string","proc":"torn|fres|carp","materiale":"nome dal listino","materiale_disegno":"come scritto a disegno","quantita":number|null,
+"torn":{"diametro_barra":number,"lunghezza_pezzo":number,"sovrametallo":number,"asportazione_pct":number} oppure null,
+"fres":{"l":number,"w":number,"h":number,"asportazione_pct":number} oppure null,
+"carp":{"spessore":number,"sviluppo_l":number,"sviluppo_w":number,"lunghezza_taglio":number,"inneschi":number,"pieghe":number,"saldatura_m":number,"setup_laser_min":number,"setup_piega_min":number} oppure null,
+"macchina":"chiave della risorsa principale (solo per torn e fres)","setup_min":number,"ciclo_min":number,"cam_min":number,"sbavatura_min":number,
+"trattamento":"nome dal listino","esterne_eur":number,
+"operazioni":["fase 1 ...","fase 2 ..."],"tolleranze_critiche":["..."],"note":["ipotesi e punti da verificare"],"affidabilita":"alta|media|bassa"}`;
+}
+
+const ERR = {
+  not_granted:"Non hai autorizzato questa pagina a usare Claude. Ricarica la pagina per autorizzarla.",
+  sampling_disabled:"Claude non è disponibile per questo account.",
+  rate_limited:"Troppe richieste o limite di utilizzo raggiunto. Riprova tra qualche minuto.",
+  image_rejected:"Una delle immagini non è stata accettata. Prova con un PDF diverso o con meno pagine.",
+  images_unavailable:"In questa vista non si possono inviare immagini: carica un PDF con testo o un file STEP.",
+  invalid_json:"La risposta non era nel formato atteso. Premi di nuovo Analizza.",
+  refused:"Claude non ha elaborato questi file. Controlla che siano disegni tecnici del pezzo.",
+  prompt_too_large:"I file contengono troppo testo. Carica solo le pagine del pezzo da costificare.",
+  session_expired:"La sessione è scaduta: accedi di nuovo a Claude.",
+  empty_completion:"Nessuna risposta ricevuta. Riprova con meno file.",
+  upstream_error:"Errore temporaneo del servizio. Riprova."
+};
+
+$("btnStop").addEventListener("click", ()=>ctl?.abort());
+$("btnAnalyze").addEventListener("click", async ()=>{
+  if(!pending.length || ctl) return;
+  const files = pending.slice();
+  ctl = new AbortController(); renderFiles(); $("btnStop").hidden = false;
+  status("Preparo i file…");
+  let timer;
+  try{
+    const {imgs, texts, warn} = await prepare(files);
+    if(!imgs.length && !texts.length){ throw {code:"_local", message: warn.join(". ") || "Nessun contenuto leggibile nei file."}; }
+    const qty = parseInt($("d_qty").value,10) || null;
+    const t0 = Date.now();
+    const w = warn.length ? ` (${warn.join("; ")})` : "";
+    timer = setInterval(()=>status(`Claude sta leggendo il disegno e calcolando il ciclo… ${Math.round((Date.now()-t0)/1000)} s${w}`), 1000);
+    status(`Claude sta leggendo il disegno e calcolando il ciclo…${w}`);
+    const r = await sample.json(buildPrompt(imgs, texts, qty, $("d_note").value.trim()), {
+      images: imgs.map(x=>x.blob), modelTier:"complex", signal: ctl.signal
+    });
+    if(!r || typeof r!=="object") throw {code:"invalid_json"};
+    r.id = Date.now(); r.files = files.map(f=>f.name); r.qty = qty || r.quantita || null;
+    C.apply(r, r.qty);
+    const p = C.price(); r.prezzo = p.prezzo; r.qty = p.q;
+    analyses.unshift(r); lastId = r.id; saveA(); renderCards();
+    if(C.archive) C.archive("disegno");
+    pending = [];
+    status(`Fatto: i parametri sono nel calcolo qui sotto. Controlla le ipotesi nella scheda prima di aggiungere il pezzo al preventivo.${w}`);
+  }catch(e){
+    if(e && e.code==="cancelled") status("Analisi interrotta.");
+    else if(e && e.code==="_local") status(e.message, true);
+    else status((e && ERR[e.code]) || ERR.upstream_error, true);
+  }finally{
+    clearInterval(timer); ctl = null; $("btnStop").hidden = true; renderFiles();
+  }
+});
+})();
+</script>
+
+<script>
+(async function(){
+const $ = id => document.getElementById(id);
+const esc = s => String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const eur = new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR"});
+const nCsv = new Intl.NumberFormat("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2,useGrouping:false});
+const C = window.Costificatore;
+const PN = {torn:"Tornitura", fres:"Fresatura", carp:"Carpenteria", ripro:"Riproporzionati"};
+const ORDER = ["torn","fres","carp","ripro"];
+const COLS = [1,5,20,50,100,300];
+const LKEY = "costificatore-archivio-v1";
+let items = [], col = null, filt = "tutti", quotes = [], colQ = null;
+const LQKEY = "costificatore-preventivi-v1";
+const qmsg = (t, err) => { const el=$("qMsg"); el.textContent = t||""; el.style.color = err ? "var(--danger)" : ""; };
+const msg = (t, err) => { const el=$("archMsg"); el.textContent = t||""; el.style.color = err ? "var(--danger)" : ""; };
+const fin = v => (typeof v==="number" && isFinite(v)) ? v : null;
+const slug = s => (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,90);
+const fmtD = iso => { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleDateString("it-IT"); };
+const mode = () => $("archMode").value;
+const priceAt = (x,q) => { const l = (x.lots||[]).find(l=>l.q===q); return l ? (mode()==="pm" ? l.pm : l.p) : null; };
+const reqPrice = x => mode()==="pm" ? x.merc : x.prezzo;
+
+function filtered(){
+  const q = $("archQ").value.trim().toLowerCase();
+  return items.filter(x=>(filt==="tutti" || x.proc===filt) && (!q || `${x.codice} ${x.mat}`.toLowerCase().includes(q)))
+    .sort((a,b)=>String(b.data).localeCompare(String(a.data)));
+}
+function render(){
+  $("cnt_tutti").textContent = items.length;
+  ORDER.forEach(k=>{ $("cnt_"+k).textContent = items.filter(x=>x.proc===k).length; });
+  const list = filtered(), ncol = 5 + COLS.length;
+  const head = `<thead><tr><th>Componente</th><th>Materiale</th><th>Aggiornato</th><th class="n">Q.tà richiesta</th>${COLS.map(c=>`<th class="n">${c} pz</th>`).join("")}<th class="noprint"></th></tr></thead>`;
+  const row = x => {
+    const rp = fin(reqPrice(x));
+    return `<tr><td>${esc(x.codice)}${x.nota ? `<div class="sub">${esc(x.nota)}</div>` : ""}</td><td>${esc(x.mat)}</td><td>${fmtD(x.data)}</td>
+      <td class="n">${rp!==null ? eur.format(rp) : "–"}<div class="sub">${esc(x.q)} pz</div></td>
+      ${COLS.map(c=>{ const v = fin(priceAt(x,c)); return `<td class="n">${v!==null ? eur.format(v) : "–"}</td>`; }).join("")}
+      <td class="noprint" style="white-space:nowrap"><button type="button" class="small" data-open="${esc(x.id)}">Riapri</button> <button type="button" class="small danger" data-rm="${esc(x.id)}" aria-label="Elimina ${esc(x.codice)}">Elimina</button></td></tr>`;
+  };
+  let body;
+  if(!list.length) body = `<tr><td colspan="${ncol}" class="empty">${items.length ? "Nessun componente corrisponde al filtro." : "L'archivio è vuoto. Salva un pezzo con “Salva nell'archivio”: i disegni analizzati vengono archiviati da soli."}</td></tr>`;
+  else if(filt==="tutti") body = ORDER.map(k=>{ const g = list.filter(x=>x.proc===k); return g.length ? `<tr class="grp"><th colspan="${ncol}">${PN[k]}<span>${g.length}</span></th></tr>` + g.map(row).join("") : ""; }).join("");
+  else body = list.map(row).join("");
+  $("archT").innerHTML = head + `<tbody>${body}</tbody>`;
+}
+
+function makeDoc(snap, fonte){
+  return {codice: snap.desc || "Pezzo senza nome", proc: snap.proc, mat: snap.mat || "–", q: snap.q, prezzo: fin(snap.prezzo), merc: fin(snap.merc),
+    lots: (snap.lots||[]).map(l=>({q:l.q, p:fin(l.p), pm:fin(l.pm)})), params: snap.params || {}, fonte, nota: snap.nota || "", data: new Date().toISOString()};
+}
+const IKEY = "costificatore-arch-import-v1";
+async function init(){
+  try{
+    const db = window.claude ? await window.claude.use("db") : null;
+    const user = db ? await window.claude.use("user") : null;
+    const uid = user ? await user.id() : null;
+    if(db && uid){
+      const c = db.collection(`data/users/${uid}/archivio/componenti`);
+      const s = await c.get();
+      items = s.docs.map(d=>({...d.data(), id:d.id}));
+      col = c;
+      try{
+        const cq = db.collection(`data/users/${uid}/archivio/preventivi`);
+        const sq = await cq.get();
+        quotes = sq.docs.map(d=>({...d.data(), id:d.id})); colQ = cq;
+      }catch(e){ colQ = null; }
+    }
+  }catch(e){ col = null; }
+  let local = [];
+  try{ local = JSON.parse(localStorage.getItem(LKEY)||"[]") || []; }catch(e){}
+  if(!col) items = local;
+  if(!colQ){ try{ quotes = JSON.parse(localStorage.getItem(LQKEY)||"[]") || []; }catch(e){ quotes = []; } }
+  else {
+    // porta sul tuo account quanto era stato salvato solo nel browser
+    for(const x of local){
+      if(items.some(i=>i.id===x.id)) continue;
+      const {id, ...d} = x;
+      try{ await col.doc(id).set(d); items.push(x); }catch(e){}
+    }
+  }
+  // archivia una volta i disegni analizzati prima che esistesse l'archivio
+  let done = false;
+  try{ done = !!localStorage.getItem(IKEY); }catch(e){}
+  if(!done){
+    try{
+      const an = JSON.parse(localStorage.getItem("costificatore-disegni-v1")||"[]") || [];
+      if(an.length){
+        const keep = C.snapshot().params;
+        for(const r of an.slice().reverse()){
+          C.apply(r, r.qty);
+          const snap = C.snapshot();
+          const id = `${slug(snap.desc) || "pezzo-"+r.id}_${snap.proc}`;
+          if(items.some(i=>i.id===id)) continue;
+          const doc = makeDoc(snap, "disegno");
+          if(r.id) doc.data = new Date(r.id).toISOString();
+          items.push({...doc, id});
+          if(col){ try{ await col.doc(id).set(doc); }catch(e){} }
+        }
+        C.restore(keep);
+      }
+      if(!col) localStorage.setItem(LKEY, JSON.stringify(items));
+      localStorage.setItem(IKEY, "1");
+    }catch(e){}
+  }
+  $("archStore").textContent = col ? "Archivio condiviso del gestionale: lo vede tutto il team che usa il Costificatore." : "Salvato solo in questo browser.";
+  render(); renderQuotes();
+}
+
+function renderQuotes(){
+  const list = quotes.slice().sort((a,b)=>String(b.creato).localeCompare(String(a.creato)));
+  const head = `<thead><tr><th>Data</th><th>Riferimento</th><th>Fornitore</th><th class="n">Righe</th><th class="n">Totale obiettivo</th><th class="noprint"></th></tr></thead>`;
+  const body = list.length
+    ? list.map(x=>`<tr><td>${fmtD(x.data || x.creato)}</td><td>${esc(x.rif || "–")}</td><td>${esc(x.fornitore || "–")}</td><td class="n">${(x.righe||[]).length}</td><td class="n">${eur.format(x.totale||0)}</td><td class="noprint" style="white-space:nowrap"><button type="button" class="small" data-qopen="${esc(x.id)}">Riapri</button> <button type="button" class="small danger" data-qrm="${esc(x.id)}" aria-label="Elimina preventivo ${esc(x.rif||"")}">Elimina</button></td></tr>`).join("")
+    : `<tr><td colspan="6" class="empty">Nessun preventivo archiviato. Prepara un preventivo e premi “Archivia preventivo”.</td></tr>`;
+  $("archQT").innerHTML = head + `<tbody>${body}</tbody>`;
+}
+
+async function archiveQuote(){
+  await ready;
+  const qd = C.getQuote();
+  if(!qd.righe.length){ qmsg("Il preventivo è vuoto: aggiungi almeno un pezzo prima di archiviarlo.", true); return; }
+  const id = slug(qd.rif) ? `${slug(qd.rif)}_${slug(qd.fornitore) || "senza-fornitore"}` : "prev-" + Date.now();
+  const righe = qd.righe.map(r=>({desc:r.desc||"", proc:r.proc, mat:r.mat||"–", q:r.q, prezzo:fin(r.prezzo), merc:fin(r.merc), tot:fin(r.tot), matInc:r.matInc!==false, trInc:r.trInc!==false,
+    lots:(r.lots||[]).map(l=>({q:l.q, p:fin(l.p), pm:fin(l.pm)})), params:r.params||{}, nota:r.nota||""}));
+  const doc = {fornitore:qd.fornitore, rif:qd.rif, data:qd.data, righe, totale: righe.reduce((a,b)=>a+(b.tot||0),0), creato:new Date().toISOString()};
+  const i = quotes.findIndex(x=>x.id===id);
+  if(i>=0 && !confirm(`C'è già un preventivo archiviato con riferimento “${qd.rif}” per questo fornitore. Vuoi sostituirlo?`)) return;
+  try{
+    if(colQ) await colQ.doc(id).set(doc);
+    if(i>=0) quotes[i] = {...doc, id}; else quotes.unshift({...doc, id});
+    if(!colQ) localStorage.setItem(LQKEY, JSON.stringify(quotes));
+  }catch(e){ qmsg("Archiviazione non riuscita. Riprova tra poco.", true); return; }
+  renderQuotes();
+  let n = 0, skip = 0;
+  for(const r of righe){
+    if(r.lots.length){ await saveItem({desc:r.desc, proc:r.proc, mat:r.mat, q:r.q, prezzo:r.prezzo, merc:r.merc, lots:r.lots, params:r.params, nota:r.nota}, "preventivo"); n++; }
+    else skip++;
+  }
+  qmsg(`Preventivo archiviato: lo trovi in “Preventivi archiviati”.${n ? ` ${n} ${n===1 ? "pezzo è stato aggiunto" : "pezzi sono stati aggiunti"} anche all'archivio componenti.` : ""}${skip ? ` ${skip} ${skip===1 ? "riga aggiunta" : "righe aggiunte"} prima di questa versione non ha i parametri per l'archivio componenti.` : ""}`);
+}
+$("btnArchQ").addEventListener("click", archiveQuote);
+$("archQT").addEventListener("click", async e=>{
+  const b = e.target.closest("button"); if(!b) return;
+  const id = b.dataset.qopen || b.dataset.qrm; const x = quotes.find(q=>q.id===id); if(!x) return;
+  if(b.dataset.qrm){
+    if(!confirm(`Eliminare il preventivo “${x.rif || fmtD(x.creato)}” dall'archivio?`)) return;
+    quotes = quotes.filter(q=>q.id!==id); renderQuotes();
+    try{ if(colQ) await colQ.doc(id).delete(); else localStorage.setItem(LQKEY, JSON.stringify(quotes)); msg("Preventivo eliminato dall'archivio."); }
+    catch(err){ msg("Eliminazione non riuscita. Riprova tra poco.", true); }
+  } else {
+    if(C.getQuote().righe.length && !confirm("Il preventivo aperto verrà sostituito da quello archiviato. Continuare?")) return;
+    C.setQuote(x);
+    document.querySelector("section.quote").scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"});
+    qmsg(`Preventivo “${x.rif || fmtD(x.creato)}” riaperto.`);
+  }
+});
+$("archT").innerHTML = `<tbody><tr><td class="empty">Carico l'archivio…</td></tr></tbody>`;
+const ready = init();
+
+async function saveItem(snap, fonte){
+  await ready;
+  if(!snap) return;
+  const id = `${slug(snap.desc) || "pezzo-"+Date.now()}_${snap.proc}`;
+  const doc = makeDoc(snap, fonte);
+  const i = items.findIndex(x=>x.id===id);
+  if(i>=0) items[i] = {...doc, id}; else items.unshift({...doc, id});
+  render();
+  try{
+    if(col) await col.doc(id).set(doc); else localStorage.setItem(LKEY, JSON.stringify(items));
+    msg(`“${doc.codice}” ${i>=0 ? "aggiornato" : "salvato"} nell'archivio.`);
+  }catch(e){ msg("Salvataggio non riuscito. Riprova tra poco.", true); }
+}
+C.archive = fonte => saveItem(C.snapshot(), fonte);
+
+$("btnArch").addEventListener("click", ()=>saveItem(C.snapshot(), "calcolo"));
+$("rpArch").addEventListener("click", ()=>saveItem(C.riproSnapshot(), "riproporzionato"));
+document.querySelectorAll("input[name=af]").forEach(r=>r.addEventListener("change", ()=>{ filt = r.value; render(); }));
+$("archQ").addEventListener("input", render);
+$("archMode").addEventListener("change", render);
+$("archT").addEventListener("click", async e=>{
+  const b = e.target.closest("button"); if(!b) return;
+  const id = b.dataset.open || b.dataset.rm; const x = items.find(i=>i.id===id); if(!x) return;
+  if(b.dataset.rm){
+    if(!confirm(`Eliminare “${x.codice}” dall'archivio?`)) return;
+    items = items.filter(i=>i.id!==id); render();
+    try{ if(col) await col.doc(id).delete(); else localStorage.setItem(LKEY, JSON.stringify(items)); msg(`“${x.codice}” eliminato dall'archivio.`); }
+    catch(err){ msg("Eliminazione non riuscita. Riprova tra poco.", true); }
+  } else {
+    const where = C.restore(x.params || {});
+    document.querySelector(where==="ripro" ? "section.ripro" : ".layout").scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"});
+    msg(`“${x.codice}” riaperto nel calcolo.`);
+  }
+});
+
+const dl = window.claude ? await window.claude.use("downloads") : null;
+if(dl){
+  $("archCsv").hidden = false;
+  $("archCsv").addEventListener("click", async ()=>{
+    const list = filtered();
+    if(!list.length){ msg("Nessun componente da esportare con il filtro attuale."); return; }
+    const num = v => fin(v)===null ? "" : nCsv.format(v);
+    const cell = s => `"${String(s??"").replace(/"/g,'""')}"`;
+    const lines = [["Componente","Lavorazione","Materiale","Aggiornato","Q.tà richiesta","€/pz q.tà richiesta", ...COLS.map(c=>`€/pz ${c} pz`)].map(cell).join(";")];
+    list.forEach(x=>lines.push([cell(x.codice), cell(PN[x.proc]), cell(x.mat), cell(fmtD(x.data)), x.q, num(reqPrice(x)), ...COLS.map(c=>num(priceAt(x,c)))].join(";")));
+    try{
+      await dl.save({filename:`archivio-componenti-${mode()==="pm" ? "fornitore-medio" : "obiettivo"}.csv`, data:"\ufeff" + lines.join("\r\n")});
+      msg("Archivio esportato.");
+    }catch(e){ if(e && e.code!=="declined") msg("Esportazione non riuscita.", true); }
+  });
+}
+
+// ---------- scarica il preventivo in PDF o Excel ----------
+const loadScript = src => new Promise((res,rej)=>{ const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = ()=>rej(new Error("load")); document.head.appendChild(s); });
+const PR = {torn:"Tornitura", fres:"Fresatura", carp:"Carpenteria", ripro:"Riproporzionato"};
+const money = v => fin(v)===null ? "–" : nCsv.format(v).replace(/(\d)(?=(\d{3})+,)/g,"$1.") + " €";
+const fileBase = qd => "Preventivo_" + (slug(qd.rif) || qd.data || "obiettivo").replace(/-/g,"_");
+const xn = r => [r.matInc===false ? "Materiale escluso" : "", r.trInc===false ? "Trattamento escluso" : ""].filter(Boolean).join(", ");
+
+async function makePdf(qd){
+  if(!window.jspdf) await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:"mm", format:"a4"});
+  const L = 15, W = 180; let y = 20;
+  doc.setFont("helvetica","bold"); doc.setFontSize(18); doc.text("Preventivo", L, y); y += 10;
+  doc.setFontSize(10);
+  [["Fornitore", qd.fornitore || "–"], ["Riferimento", qd.rif || "–"], ["Data", fmtD(qd.data) || "–"]].forEach(([k,v])=>{
+    doc.setFont("helvetica","normal"); doc.setTextColor(100); doc.text(k, L, y);
+    doc.setTextColor(20); doc.text(String(v), L+28, y); y += 5.5;
+  });
+  y += 5;
+  const cols = [{h:"Descrizione",w:60},{h:"Lavorazione",w:28},{h:"Materiale",w:34},{h:"Q.tà",w:14,r:1},{h:"€/pz",w:22,r:1},{h:"Totale",w:22,r:1}];
+  const header = () => {
+    doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.setTextColor(20);
+    let x = L; cols.forEach(c=>{ doc.text(c.h, c.r ? x+c.w-1 : x+1, y, {align: c.r ? "right" : "left"}); x += c.w; });
+    y += 2; doc.setLineWidth(0.5); doc.setDrawColor(20); doc.line(L, y, L+W, y); y += 5;
+    doc.setFont("helvetica","normal");
+  };
+  header();
+  let sum = 0;
+  qd.righe.forEach(r=>{
+    const cells = [doc.splitTextToSize([r.desc || "Pezzo senza nome", xn(r) ? `(${xn(r)})` : ""].filter(Boolean).join("\n"), 57), doc.splitTextToSize(PR[r.proc] || "", 26), doc.splitTextToSize(r.mat || "–", 32), [String(r.q)], [money(r.prezzo)], [money(r.tot)]];
+    const h = Math.max(...cells.map(c=>c.length))*4.2 + 2;
+    if(y + h > 272){ doc.addPage(); y = 20; header(); }
+    let x = L; cells.forEach((c,i)=>{ const cc = cols[i]; doc.text(c, cc.r ? x+cc.w-1 : x+1, y, {align: cc.r ? "right" : "left"}); x += cc.w; });
+    y += h - 2; doc.setLineWidth(0.1); doc.setDrawColor(190); doc.line(L, y, L+W, y); y += 5;
+    sum += r.tot || 0;
+  });
+  if(y > 252){ doc.addPage(); y = 20; }
+  y += 2;
+  [["Totale imponibile", sum, true], ["IVA 22%", sum*0.22, false], ["Totale", sum*1.22, true]].forEach(([k,v,b])=>{
+    doc.setFont("helvetica", b ? "bold" : "normal"); doc.setFontSize(10);
+    doc.text(k, L+W-32, y, {align:"right"}); doc.text(money(v), L+W-1, y, {align:"right"}); y += 6;
+  });
+  return doc.output("arraybuffer");
+}
+
+async function makeXlsx(qd){
+  if(!window.XLSX) await loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js");
+  const EUR = '#,##0.00 "€"';
+  const aoa = [["Preventivo"], ["Fornitore", qd.fornitore || ""], ["Riferimento", qd.rif || ""], ["Data", fmtD(qd.data)], [],
+    ["Descrizione","Lavorazione","Materiale","Q.tà","€/pz","Totale","Note"]];
+  qd.righe.forEach(r=>aoa.push([r.desc || "", PR[r.proc] || "", r.mat || "", r.q, fin(r.prezzo), null, xn(r)]));
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  const first = 7, last = 6 + qd.righe.length;
+  let sum = 0;
+  qd.righe.forEach((r,k)=>{
+    const i = first + k, v = (fin(r.prezzo)||0) * (r.q||0); sum += v;
+    if(ws["E"+i]) ws["E"+i].z = EUR;
+    ws["F"+i] = {t:"n", v, f:`D${i}*E${i}`, z:EUR};
+  });
+  const t = last + 2;
+  ws["E"+t] = {t:"s", v:"Totale imponibile"}; ws["F"+t] = {t:"n", v:sum, f:`SUM(F${first}:F${last})`, z:EUR};
+  ws["E"+(t+1)] = {t:"s", v:"IVA 22%"}; ws["F"+(t+1)] = {t:"n", v:sum*0.22, f:`F${t}*0.22`, z:EUR};
+  ws["E"+(t+2)] = {t:"s", v:"Totale"}; ws["F"+(t+2)] = {t:"n", v:sum*1.22, f:`F${t}+F${t+1}`, z:EUR};
+  ws["!ref"] = `A1:G${t+2}`;
+  ws["!cols"] = [{wch:42},{wch:16},{wch:24},{wch:8},{wch:13},{wch:15},{wch:32}];
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Preventivo");
+  return XLSX.write(wb, {bookType:"xlsx", type:"array"});
+}
+
+if(dl){
+  const doDl = async kind => {
+    const qd = C.getQuote();
+    if(!qd.righe.length){ qmsg("Il preventivo è vuoto: aggiungi almeno un pezzo prima di scaricarlo.", true); return; }
+    try{
+      qmsg("Preparo il file…");
+      const data = kind==="pdf" ? await makePdf(qd) : await makeXlsx(qd);
+      await dl.save({filename:`${fileBase(qd)}.${kind==="pdf" ? "pdf" : "xlsx"}`, data});
+      qmsg("Preventivo scaricato.");
+    }catch(e){ if(e && e.code==="declined") qmsg(""); else qmsg("Non sono riuscito a preparare il file. Riprova.", true); }
+  };
+  $("btnPdf").hidden = false; $("btnXls").hidden = false;
+  $("btnPdf").addEventListener("click", ()=>doDl("pdf"));
+  $("btnXls").addEventListener("click", ()=>doDl("xlsx"));
+}
+})();
+</script>
+</body>
+</html>
