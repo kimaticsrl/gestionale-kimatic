@@ -59,7 +59,7 @@ export default function ReportOre() {
         <section className="panel" style={{ position: "absolute", right: 16, top: 64, zIndex: 20, width: "min(420px, calc(100vw - 32px))", boxShadow: "0 8px 30px rgba(0,0,0,.18)" }}>
           <h2>Report ore per l&apos;amministrazione</h2>
           <p className="note" style={{ margin: "0 0 10px" }}>
-            File Excel con ore di lavoro (ordinarie e straordinarie oltre le 8 ore), ore di viaggio, km, sabati/domeniche/festivi
+            File Excel con ore di lavoro (ordinarie e straordinarie oltre le 8 ore), ore di viaggio, sabati/domeniche/festivi
             e notti fuori sede (indennità di trasferta), distinte tra Italia ed estero. Una riga per tecnico e per giornata, più il riepilogo.
           </p>
           <div className="row" style={{ gap: 8, marginBottom: 8 }}>
