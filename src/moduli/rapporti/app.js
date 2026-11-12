@@ -74,7 +74,7 @@ async function checkInteg(r){if(!r.firma||!r.firma.hash)return;const h=await dig
 function newRap(){
   const d=new Date(),yy=String(d.getFullYear()).slice(2),md=String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
   const id='r'+Date.now().toString(36)+rid();
-  return{id,num:'RI-'+yy+md+'-'+rid().slice(0,3).toUpperCase(),tipo:'man',cli:{id:'',nome:'',indirizzo:'',contatto:''},matr:'',macDesc:'',oreMac:'',sacchi:'',tecnici:CTX.nome||'',
+  return{id,num:'P-'+yy+md+'-'+rid().slice(0,3).toUpperCase(),tipo:'man',cli:{id:'',nome:'',indirizzo:'',contatto:''},matr:'',macDesc:'',oreMac:'',sacchi:'',tecnici:CTX.nome||'',
     giorni:[{id:rid(),d:today(),v:{},vr:{},tr:{},f:[{da:'08:00',a:'12:00'},{da:'13:00',a:'17:00'}],nt:'1',gar:false,att:''}],ric:[],note:'',lingua:'IT',by:ME||'',cr:new Date().toISOString()};
 }
 function queueSave(){DIRTY=true;setSync('Modifiche da salvare…');clearTimeout(ST);ST=setTimeout(flush,700)}
@@ -126,7 +126,7 @@ function cliOpts(){return Object.entries(S.clienti).sort((a,b)=>a[1].nome.locale
 function macOpts(){const c=S.clienti[CUR.cli.id];if(!c)return'';return (c.commesse||[]).flatMap(k=>(k.macchine||[]).filter(m=>/^\d/.test(m.matr||'')).map(m=>`<option value="${esc(m.matr)}">${esc(m.desc+' · comm. '+k.num)}</option>`)).join('')}
 function vEdit(){
   const r=CUR,lk=locked(),ro=lk||!CAN_EDIT,dis=ro?' disabled':'',t=RI.totals(r),st=stato(r);
-  const head=`<div class="top"><button type="button" data-act="back">← Interventi</button><h2>${esc(r.cli.nome||'Nuovo intervento')}</h2><span class="mono" style="color:var(--mut)">${esc(r.num)}</span>${pill(r)}<span class="sp"></span>${(r.giorni||[]).length?`<button type="button" data-act="orepdf">Report ore (PDF)</button>`:''}${lk?`<button type="button" data-act="invia">Invia al cliente</button><button type="button" class="pri" data-act="pdf">Scarica PDF</button>`:''}</div>`;
+  const head=`<div class="top"><button type="button" data-act="back">← Interventi</button><h2>${esc(r.cli.nome||'Nuovo intervento')}</h2><span class="mono" style="color:var(--mut)">${esc(r.num)}${/^P-/.test(r.num||'')?' <small>(provvisorio: il numero definitivo arriva alla firma)</small>':''}</span>${pill(r)}<span class="sp"></span>${(r.giorni||[]).length?`<button type="button" data-act="orepdf">Report ore (PDF)</button>`:''}${lk?`<button type="button" data-act="invia">Invia al cliente</button><button type="button" class="pri" data-act="pdf">Scarica PDF</button>`:''}</div>`;
   const ban=st==='dafatt'?`<div class="banner warn"><b>Firmato dal cliente il ${RI.fd(r.firma.ts.slice(0,10))} alle ${r.firma.ts.slice(11,16)}.</b> È nella coda «Da fatturare». Il rapporto ora è in sola lettura.${INTEG[r.id]===false?' <b>Attenzione: il contenuto è stato modificato dopo la firma.</b>':''}${ADMIN?' <span class="sp"></span><button type="button" class="sm dng" data-act="riapri">Riapri e annulla la firma</button>':''}</div>`
     :st==='fatturato'?`<div class="banner ok"><b>Fatturato</b>${S.fatture[r.id].nf?' · fattura '+esc(S.fatture[r.id].nf):''}${S.fatture[r.id].df?' del '+RI.fd(S.fatture[r.id].df):''}</div>`:'';
   const dati=`<section class="panel"><h2>Dati intervento</h2>
@@ -290,6 +290,14 @@ async function doSign(b){
   if(!cli||!cn){toast('Serve la firma del cliente e il nome di chi firma');return}
   if(!tec||!tn){toast('Serve la firma e il nome del tecnico');return}
   b.disabled=true;
+  /* numero definitivo: lo assegna il database (progressivo dell'anno, mai ripetuto) */
+  if(CTX.numeroRapporto){
+    DIRTY=true;await flush();
+    if(DIRTY){b.disabled=false;toast('Rapporto non salvato: controlla la connessione e riprova');return}
+    try{const n=await CTX.numeroRapporto(CUR.id);if(n)CUR.num=n}
+    catch(e){const m=String(e&&(e.message||e.code)||'');
+      if(!/PGRST202|numero_rapporto|Could not find the function/i.test(m)){b.disabled=false;toast('Non riesco ad assegnare il numero: '+m);return}}
+  }
   const now=new Date(),ts=new Date(now.getTime()-now.getTimezoneOffset()*6e4).toISOString().slice(0,19);
   CUR.firma={cli,cliNome:cn,tec,tecNome:tn,ts,by:ME||''};
   CUR.firma.hash=await digest(CUR);

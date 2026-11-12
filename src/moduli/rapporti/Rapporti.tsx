@@ -35,6 +35,12 @@ export default function Rapporti({ me, nome, modifica, gestisce, clienti }: Prop
           const { data } = await sb.from("articoli").select("codice,descrizione").or(`codice.ilike.${p},descrizione.ilike.${p}`).order("codice").limit(20);
           return data ?? [];
         },
+        // numero definitivo progressivo, assegnato dal database alla firma (stesso numero se il rapporto si rifirma)
+        async numeroRapporto(id: string) {
+          const { data, error } = await sb.rpc("numero_rapporto", { p_id: id });
+          if (error) throw error;
+          return data as string;
+        },
         jsPDF: async () => (await import("jspdf")).jsPDF,
         downloads: {
           async save({ filename, data }: { filename: string; data: Blob }) {
