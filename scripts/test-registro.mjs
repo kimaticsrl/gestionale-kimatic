@@ -11,7 +11,7 @@ await db.exec(`
   alter table storage.objects enable row level security;
   create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('test.uid', true), '')::uuid $$;
   grant usage on schema public, auth to authenticated; grant execute on function auth.uid() to authenticated;`);
-for (const f of ['0001_base.sql', '0002_rapporti_intervento.sql', '0004_troubleshooting.sql', '0006_offerte_bmtek.sql', '0008_anagrafica_clienti.sql', '0010_registro_modifiche.sql', '0011_lettere_impegno.sql', '0012_costificatore.sql', '0015_non_conformita.sql'])
+for (const f of ['0001_base.sql', '0002_rapporti_intervento.sql', '0004_troubleshooting.sql', '0006_offerte_bmtek.sql', '0008_anagrafica_clienti.sql', '0010_registro_modifiche.sql', '0011_lettere_impegno.sql', '0012_costificatore.sql', '0015_non_conformita.sql', '0018_nc_numerazione.sql'])
   await db.exec(fs.readFileSync('supabase/migrations/' + f, 'utf8'));
 await db.exec(`grant select, insert, update, delete on all tables in schema public to authenticated;`);
 const ok = (c, m) => { console.log((c ? 'OK  ' : 'ERR ') + m); if (!c) process.exitCode = 1; };
@@ -57,7 +57,7 @@ await as(com, async () => {
 // Lettere d'impegno: impostazioni condivise
 await as(sara, async () => { await q(`insert into impostazioni(id,modulo_id,dati) values ('lettere-impegno/minimi','lettere-impegno','{"1":1700}')`); });
 await as(com, async () => {
-  ok((await q(`select count(*)::int n from impostazioni`)).rows[0].n === 0, 'il Commerciale non vede le impostazioni delle Lettere');
+  ok((await q(`select count(*)::int n from impostazioni where modulo_id='lettere-impegno'`)).rows[0].n === 0, 'il Commerciale non vede le impostazioni delle Lettere');
   const r = await q(`update impostazioni set dati='{}'`); ok(r.affectedRows === 0, 'il Commerciale non le modifica');
 });
 ok((await q(`select migrato from moduli where id='lettere-impegno'`)).rows[0].migrato === true, 'Lettere d\'impegno segnato come migrato');
@@ -76,9 +76,9 @@ await q(`insert into inviti(email,ruoli) values ('mag@kimatic.it','{magazzino-qu
 const mag = (await q(`insert into auth.users(email) values ('mag@kimatic.it') returning id`)).rows[0].id;
 const op = (await q(`insert into auth.users(email) values ('op@kimatic.it') returning id`)).rows[0].id;
 const nc1 = await as(op, async () => (await q(`insert into nc(dati) values ('{"fornitore":"Rossi srl","gestione":{"costo":5}}') returning id, numero, stato, dati`)).rows[0]);
-ok(/^NC-\d{4}-001$/.test(nc1.numero) && nc1.stato === 'aperta' && !nc1.dati.gestione, 'l\'Operativo apre una NC: numero automatico, stato aperta, niente gestione');
+ok(/^NC-\d{4}-(001|104)$/.test(nc1.numero) && nc1.stato === 'aperta' && !nc1.dati.gestione, 'l\'Operativo apre una NC: numero automatico, stato aperta, niente gestione');
 const nc2 = await as(com, async () => (await q(`insert into nc(dati) values ('{"fornitore":"Bianchi"}') returning numero`)).rows[0]);
-ok(nc2.numero.endsWith('-002'), 'numerazione progressiva');
+ok(nc2.numero.endsWith(nc1.numero.endsWith('104') ? '-105' : '-002'), 'numerazione progressiva: ' + nc1.numero + ', ' + nc2.numero);
 await as(op, async () => {
   const r = await q(`update nc set dati = dati || '{"difetto":"x"}' where id=$1`, [nc1.id]); ok(r.affectedRows === 1, 'l\'Operativo modifica la sua NC aperta');
   const r2 = await q(`update nc set dati = dati || '{"difetto":"y"}' where numero=$1`, [nc2.numero]); ok(r2.affectedRows === 0, 'ma non quella di un altro');

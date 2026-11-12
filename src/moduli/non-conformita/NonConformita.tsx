@@ -209,7 +209,7 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
     const [{ jsPDF }, { pdfNC }] = await Promise.all([import("jspdf"), import("./pdf")]);
     const logo = await fetch("/logo-kimatic.png").then((r) => r.blob()).then((b) => new Promise<string>((ok) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result)); fr.readAsDataURL(b); })).catch(() => "");
     const immagini: string[] = [];
-    for (const p of (ed.dati.foto || []).filter((p) => /\.(jpe?g|png)$/i.test(p)).slice(0, 4)) {
+    for (const p of (ed.dati.foto || []).filter((p) => /\.(jpe?g|png)$/i.test(p)).slice(0, 6)) {
       const { data } = await sb.storage.from("non-conformita").download(p);
       if (data) immagini.push(await new Promise<string>((ok) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result)); fr.readAsDataURL(data); }));
     }

@@ -41,7 +41,7 @@ export function pdfNC(jsPDF: JsPDF, nc: NC, o: { logo: string; immagini: string[
   const L = o.lingua, t = T[L], en = L === "en";
   const tr = (m: Record<string, string>, v?: string) => (en && v && m[v]) || v || "";
   const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const X = 14, R = 196, W = R - X, FONDO = 280;
+  const X = 14, R = 196, W = R - X, FONDO = 285;
   const d = nc.dati, g = d.gestione || {};
   const txt = (s: unknown, x: number, y: number, op: { b?: boolean; sz?: number; c?: string; al?: string; mw?: number } = {}) => {
     doc.setFont("helvetica", op.b ? "bold" : "normal"); doc.setFontSize(op.sz || 9); doc.setTextColor(op.c || "#1b1b1b");
@@ -109,15 +109,15 @@ export function pdfNC(jsPDF: JsPDF, nc: NC, o: { logo: string; immagini: string[
 
   if (o.immagini.length) {
     titolo(t.foto);
-    const lato = (W - 6) / 2, alt = 62;
+    const lato = (W - 12) / 3, alt = 46; // tre foto per riga
     o.immagini.forEach((img, i) => {
-      if (i % 2 === 0) spazio(alt + 4);
-      const x = X + (i % 2) * (lato + 6);
+      if (i % 3 === 0) spazio(alt + 4);
+      const x = X + (i % 3) * (lato + 6);
       try {
         const p = doc.getImageProperties(img), k = Math.min(lato / p.width, alt / p.height);
         doc.addImage(img, img.startsWith("data:image/png") ? "PNG" : "JPEG", x + (lato - p.width * k) / 2, y, p.width * k, p.height * k);
       } catch { /* immagine non leggibile */ }
-      if (i % 2 === 1 || i === o.immagini.length - 1) y += alt + 4;
+      if (i % 3 === 2 || i === o.immagini.length - 1) y += alt + 4;
     });
   }
 
@@ -131,10 +131,10 @@ export function pdfNC(jsPDF: JsPDF, nc: NC, o: { logo: string; immagini: string[
     titolo(t.costi);
     griglia([[t.addebito, addebito.toLocaleString(en ? "en-GB" : "it-IT", { style: "currency", currency: "EUR" })], [t.rif, g.nota_credito]]);
   }
+  spazio(28); // titolo, testo e firma restano insieme
   titolo(t.richiesta);
   paragrafo(t.testoRich(fd(g.scadenza_risposta)));
-  spazio(14);
-  txt(`${t.aperta}: ${o.aperta || "—"}`, X, y + 2, { sz: 8.5, c: "#555555" });
+  txt(`${t.aperta}: ${o.aperta || "—"}`, X, y + 1, { sz: 8.5, c: "#555555" });
 
   const tot = doc.getNumberOfPages();
   for (let p = 1; p <= tot; p++) {
