@@ -3,6 +3,7 @@
 // Stessa logica e stessi dati; il salvataggio passa da Supabase (vedi dati.js).
 import { RI } from './pdf.js';
 import { pdfReport } from './reportOre.js';
+import { calcola, listinoPerPaese, LISTINO_BASE } from './addebito.js';
 
 export function avvia(ROOT, CTX) {
 const APP = ROOT.querySelector('[data-ri=app]'), TABS = ROOT.querySelector('[data-ri=tabs]'), SYNC = ROOT.querySelector('[data-ri=sync]'), TOAST = ROOT.querySelector('[data-ri=toast]');
@@ -50,8 +51,8 @@ const rid=()=>Math.random().toString(36).slice(2,8);
 
 let db=null,ME=null,ADMIN=false,CAN_EDIT=false,DL=null,BOOT=true,LOGO=null;
 const busy=()=>{const a=document.activeElement;if(!ROOT.contains(a))return false;return !!(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&a.type!=='checkbox'&&a.type!=='radio')};
-const S={rapporti:{},clienti:{},fatture:{}};
-const UI={tab:'int',filt:'aperti',q:'',open:null,cli:null,cq:'',sign:false,cliEdit:null,fatt:null};
+const S={rapporti:{},clienti:{},fatture:{},listini:{},addebiti:{}};
+const UI={tab:'int',filt:'aperti',q:'',open:null,cli:null,cq:'',sign:false,cliEdit:null,fatt:null,add:null,lst:false};
 try{Object.assign(UI,JSON.parse(localStorage.getItem('ri_ui')||'{}'));UI.sign=false;UI.cliEdit=null;UI.fatt=null}catch(e){}
 const saveUI=()=>{try{localStorage.setItem('ri_ui',JSON.stringify({tab:UI.tab,filt:UI.filt,open:UI.open,cli:UI.cli}))}catch(e){}};
 let CUR=null,DIRTY=false,SAVING=false,ST=null;
@@ -216,6 +217,8 @@ function onField(e){
   if(el.id==='cq'){UI.cq=el.value;const p=el.selectionStart;render();const q=$('#cq');q.focus();q.setSelectionRange(p,p);return}
   if(el.dataset.ck&&UI.cliEdit){UI.cliEdit[el.dataset.ck]=el.value;return}
   if(el.dataset.fk&&UI.fatt){UI.fatt[el.dataset.fk]=el.value;return}
+  if(el.dataset.ak&&UI.add){if(e.type==='change')salvaAddebito(UI.add,el.dataset.ak,el.type==='checkbox'?el.checked:el.value);return}
+  if(el.dataset.lk){if(e.type==='change')salvaListino(el.dataset.lk,el.value);return}
   if(!CUR||!el.dataset.k||locked()||!CAN_EDIT)return;
   const k=el.dataset.k,v=el.type==='checkbox'?el.checked:el.value;
   if(el.type==='radio'&&!el.checked)return;
@@ -237,6 +240,7 @@ ROOT.addEventListener('click',async e=>{
   if(d.clr){const c=document.getElementById(d.clr);c.getContext('2d').clearRect(0,0,c.width,c.height);c.dataset.ink='';return}
   if(d.opencli){UI.cli=d.opencli;UI.cliEdit=null;saveUI();render();return}
   if(d.fatt){UI.fatt={id:d.fatt,nf:'',df:today(),note:''};render();return}
+  if(d.add){UI.add=UI.add===d.add?null:d.add;UI.lst=false;render();if(UI.add){const p=ROOT.querySelector('#addebito');if(p)p.scrollIntoView({behavior:'smooth',block:'start'})}return}
   if((locked()||!CAN_EDIT)&&CUR&&(d.addf||d.delf||d.delday||d.delric||d.ora||d.km)){return}
   if(d.ora&&CUR){adesso(d.ora);const m=/^(giorni\.\d+\.(?:v|vr))\.da$/.exec(d.ora);if(m){const g=CUR.giorni[+d.ora.split('.')[1]],v=g[d.ora.split('.')[2]]||{};if(!v.km)calcolaKm(m[1],true)}queueSave();render();return}
   if(d.km&&CUR){calcolaKm(d.km);return}
@@ -261,6 +265,9 @@ ROOT.addEventListener('click',async e=>{
     case'orepdfid':await doOrePdf(S.rapporti[d.id]);break;
     case'savefatt':await saveFatt();break;
     case'nofatt':UI.fatt=null;render();break;
+    case'noadd':UI.add=null;render();break;
+    case'listini':UI.lst=!UI.lst;UI.add=null;render();break;
+    case'xlsadd':await esportaAddebiti();break;
     case'annfatt':if(!confirmTwice(b,'Tocca di nuovo per rimetterlo tra i da fatturare'))return;try{await db.doc('fatture/'+d.id).delete();toast('Rimesso tra i da fatturare')}catch(err){toast('Operazione non riuscita')}break;
     case'newcli':UI.cliEdit={id:'',nome:'',indirizzo:'',contatto:'',email:'',telefono:'',piva:'',lingua:'',note:''};render();break;
     case'editcli':{const c=S.clienti[UI.cli];UI.cliEdit=Object.assign({id:UI.cli},{nome:'',indirizzo:'',contatto:'',email:'',telefono:'',piva:'',lingua:'',note:''},c);render();break}
@@ -344,13 +351,74 @@ function vFatt(){
   const L=Object.values(S.rapporti).filter(r=>r.firma&&r.firma.ts).sort((a,b)=>b.firma.ts.localeCompare(a.firma.ts));
   const da=L.filter(r=>!S.fatture[r.id]),fa=L.filter(r=>S.fatture[r.id]);
   L.forEach(checkInteg);
-  const row=(r,done)=>{const t=RI.totals(r),f=S.fatture[r.id];return `<tr><td><b>${esc(r.cli.nome)}</b><br><span class="mono" style="font-size:12px;color:var(--mut)">${esc(r.num)}</span></td><td>${r.tipo==='inst'?'Installazione':'Manutenzione'}<br><span class="note">${esc(range(r))}</span></td><td class="n num">${RI.hrs(t.ordU)}</td><td class="n num">${RI.hrs(t.extU)}</td><td class="n num">${RI.hrs(t.ordG+t.extG)}</td><td class="n num">${RI.hrs(t.viaggioU)}</td><td class="n num">${t.km}</td><td class="n num">${t.ricambi}</td><td>${INTEG[r.id]===false?'<span class="pill bad">Modificato dopo la firma</span>':RI.fd(r.firma.ts.slice(0,10))}</td><td><div class="row"><button type="button" class="sm" data-act="pdfid" data-id="${esc(r.id)}">PDF</button><button type="button" class="sm" data-act="orepdfid" data-id="${esc(r.id)}">Report ore</button><button type="button" class="sm" data-openr="${esc(r.id)}">Apri</button>${done?`<span class="note">${f.nf?'Fatt. '+esc(f.nf):''} ${f.df?RI.fd(f.df):''}</span><button type="button" class="sm" data-act="annfatt" data-id="${esc(r.id)}">Annulla</button>`:`<button type="button" class="sm pri" data-fatt="${esc(r.id)}">Segna fatturato</button>`}</div></td></tr>`};
-  const hd='<thead><tr><th>Cliente</th><th>Intervento</th><th class="n">Ore ord.</th><th class="n">Ore extra</th><th class="n">In garanzia</th><th class="n">Viaggio</th><th class="n">Km</th><th class="n">Parti</th><th>Firmato</th><th></th></tr></thead>';
+  const row=(r,done)=>{const t=RI.totals(r),f=S.fatture[r.id];return `<tr><td><b>${esc(r.cli.nome)}</b><br><span class="mono" style="font-size:12px;color:var(--mut)">${esc(r.num)}</span></td><td>${r.tipo==='inst'?'Installazione':'Manutenzione'}<br><span class="note">${esc(range(r))}</span></td><td class="n num">${RI.hrs(t.ordU)}</td><td class="n num">${RI.hrs(t.extU)}</td><td class="n num">${RI.hrs(t.ordG+t.extG)}</td><td class="n num">${RI.hrs(t.viaggioU)}</td><td class="n num">${t.km}</td><td class="n num">${t.ricambi}</td><td class="n num"><b>${euro(addebitoDi(r).totale)}</b></td><td>${INTEG[r.id]===false?'<span class="pill bad">Modificato dopo la firma</span>':RI.fd(r.firma.ts.slice(0,10))}</td><td><div class="row"><button type="button" class="sm" data-act="pdfid" data-id="${esc(r.id)}">PDF</button><button type="button" class="sm" data-act="orepdfid" data-id="${esc(r.id)}">Report ore</button><button type="button" class="sm${UI.add===r.id?' pri':''}" data-add="${esc(r.id)}">Importo</button><button type="button" class="sm" data-openr="${esc(r.id)}">Apri</button>${done?`<span class="note">${f.nf?'Fatt. '+esc(f.nf):''} ${f.df?RI.fd(f.df):''}</span><button type="button" class="sm" data-act="annfatt" data-id="${esc(r.id)}">Annulla</button>`:`<button type="button" class="sm pri" data-fatt="${esc(r.id)}">Segna fatturato</button>`}</div></td></tr>`};
+  const hd='<thead><tr><th>Cliente</th><th>Intervento</th><th class="n">Ore ord.</th><th class="n">Ore extra</th><th class="n">In garanzia</th><th class="n">Viaggio</th><th class="n">Km</th><th class="n">Parti</th><th class="n">Importo €</th><th>Firmato</th><th></th></tr></thead>';
   const form=UI.fatt?`<div class="confirm"><b>Fatturazione di ${esc((S.rapporti[UI.fatt.id]||{}).num)}</b><div class="g"><label>Numero fattura<input id="ff-n" data-fk="nf" value="${esc(UI.fatt.nf)}"></label><label>Data fattura<input id="ff-d" type="date" data-fk="df" value="${esc(UI.fatt.df)}"></label><label class="w2">Note<input id="ff-no" data-fk="note" value="${esc(UI.fatt.note)}"></label></div><div class="row"><button type="button" class="pri" data-act="savefatt">Segna fatturato</button><button type="button" data-act="nofatt">Annulla</button></div></div>`:'';
-  return `<div class="top"><h2>Da fatturare</h2><span class="note">Ore in ore uomo (ore × nr. tecnici). Le ore oltre le 8 giornaliere sono extra.</span></div>${form}
+  return `<div class="top"><h2>Da fatturare</h2><span class="note">Ore in ore uomo (ore × nr. tecnici). Le ore oltre le 8 giornaliere sono extra.</span><span class="sp"></span>${da.length?'<button type="button" data-act="xlsadd">Esporta importi (Excel)</button>':''}<button type="button" data-act="listini">Listini</button></div>${form}${UI.lst?vListini():''}${UI.add&&S.rapporti[UI.add]?vAddebito(S.rapporti[UI.add]):''}
   <section class="panel"><h2>In attesa di fattura <small>${da.length}</small></h2>${da.length?`<div class="tw"><table>${hd}<tbody>${da.map(r=>row(r,false)).join('')}</tbody></table></div>`:'<p class="note" style="margin:0">Nessun rapporto firmato in attesa. Quando un tecnico fa firmare il cliente, il rapporto compare qui.</p>'}</section>
   <section class="panel"><h2>Fatturati <small>${fa.length}</small></h2>${fa.length?`<div class="tw"><table>${hd}<tbody>${fa.map(r=>row(r,true)).join('')}</tbody></table></div>`:'<p class="note" style="margin:0">Ancora nessuno.</p>'}</section>`;
 }
+/* ---------- importo da fatturare (listino assistenza) ---------- */
+const euro=x=>(+x||0).toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2});
+const paeseDi=r=>{const c=S.clienti[r.cli&&r.cli.id]||{};return c.paese||''};
+function addebitoDi(r){
+  const o=S.addebiti[r.id]||{},auto=listinoPerPaese(paeseDi(r)),lid=o.listino||auto.id;
+  const res=calcola(r,S.listini[lid]||LISTINO_BASE,o);res.lid=lid;res.auto=auto;res.o=o;
+  if(!o.listino&&!auto.certo)res.avvisi.unshift('paese del cliente non indicato: proposto il listino Europa');
+  if((S.listini[lid]||{}).daVerificare)res.avvisi.push('i prezzi del listino '+(lid==='EU'?'Europa':'Extra Europa')+' sono da verificare');
+  if(!S.listini[lid])res.avvisi.push('listino non ancora caricato nel database: usati i prezzi 2024');
+  return res}
+function vAddebito(r){
+  const A=addebitoDi(r),o=A.o,ro=!ADMIN?' disabled':'';
+  const nomeL={EU:'Europa',EXTRA_EU:'Extra Europa'};
+  const chk=(k,l,def)=>`<label class="row" style="gap:6px;align-items:center"><input type="checkbox" data-ak="${k}"${(o[k]===undefined?def:o[k])?' checked':''}${ro}> ${l}</label>`;
+  const num=(k,l)=>`<label>${l}<input type="number" step="0.01" min="0" inputmode="decimal" data-ak="${k}" value="${esc(o[k]??'')}"${ro}></label>`;
+  return `<section class="panel" id="addebito"><h2>Importo da fatturare · ${esc(r.num)} <small>${esc(r.cli.nome)}</small></h2>
+  <div class="g"><label>Listino<select data-ak="listino"${ro}>${['EU','EXTRA_EU'].map(id=>`<option value="${id}"${A.lid===id?' selected':''}>${nomeL[id]}${A.auto.id===id?' (dal paese del cliente)':''}</option>`).join('')}</select></label>
+  <label>Veicolo<select data-ak="veicolo"${ro}><option value="auto"${o.veicolo!=='furgone'?' selected':''}>Auto</option><option value="furgone"${o.veicolo==='furgone'?' selected':''}>Furgone</option></select></label>
+  ${chk('km','Addebita i km',true)}${chk('pasti','Addebita i pasti (non pagati dal cliente)',true)}
+  ${num('speseViaggio','Spese di viaggio a costo (€)')}${num('alloggio','Alloggio e trasporti locali a costo (€)')}${num('altre','Altre spese a costo (€)')}
+  ${num('oreRemote','Ore di assistenza da remoto')}${num('oreOfficina','Ore di lavoro in Kimatic')}
+  <label class="w2">Note per la fattura<input data-ak="note" value="${esc(o.note||'')}"${ro}></label></div>
+  <div class="tw" style="margin-top:12px"><table><thead><tr><th>Voce</th><th class="n">Quantità</th><th class="n">Prezzo €</th><th class="n">Importo €</th></tr></thead><tbody>
+  ${A.righe.map(x=>`<tr><td>${esc(x.voce)}</td><td class="n num">${x.costo?'':String(x.qta).replace('.',',')+' '+x.um}</td><td class="n num">${x.costo?'':euro(x.prezzo)}</td><td class="n num">${euro(x.importo)}</td></tr>`).join('')||'<tr><td colspan="4" class="note">Niente da addebitare.</td></tr>'}
+  </tbody><tfoot><tr><th>Totale (IVA esclusa)</th><th></th><th></th><th class="n num">${euro(A.totale)}</th></tr></tfoot></table></div>
+  ${A.avvisi.length?`<p class="note">Da sapere: ${A.avvisi.map(esc).join('; ')}.</p>`:''}
+  <p class="note">Lavoro: prime 8 ore dei giorni feriali a tariffa ordinaria, il resto e sabati, domeniche e festivi a tariffa extra. Viaggio: prime 8 ore al giorno per tecnico a tariffa base, poi tariffa oltre 8 ore. ${ADMIN?'Le scelte si salvano da sole.':'Solo chi gestisce il modulo può cambiare le scelte.'}</p>
+  <div class="row"><button type="button" data-act="noadd">Chiudi</button></div></section>`}
+async function salvaAddebito(id,k,v){
+  if(!ADMIN){toast('Serve il permesso di gestione del modulo');return}
+  const o=Object.assign({},S.addebiti[id]||{});
+  if(['speseViaggio','alloggio','altre','oreRemote','oreOfficina'].includes(k))v=v===''?'':Math.max(0,+String(v).replace(',','.')||0);
+  o[k]=v;o.by=ME||'';o.ts=new Date().toISOString();S.addebiti[id]=o;render();
+  try{await db.doc('addebiti/'+id).set(o)}catch(e){toast('Non salvato: '+(e&&e.message||'errore'))}}
+const VOCI_L=[['ore','Ore di lavoro (feriali, fino a 8 h)'],['oreExtra','Ore extra, weekend, festivi'],['viaggio','Ore di viaggio fino a 8 h'],['viaggioOltre','Ore di viaggio oltre 8 h'],['kmAuto','Rimborso km auto'],['kmFurgone','Rimborso km furgone'],['pasto','Indennità pasto'],['remoto','Assistenza da remoto (h)'],['officina','Lavoro in Kimatic (h)']];
+function vListini(){
+  const ro=!ADMIN?' disabled':'',L=id=>Object.assign({},LISTINO_BASE,S.listini[id]||{});
+  return `<section class="panel"><h2>Listini assistenza <small>prezzi unitari in €, IVA esclusa</small></h2>
+  <div class="tw"><table><thead><tr><th>Voce</th><th class="n">Europa${L('EU').daVerificare?' <span class="pill warn">da verificare</span>':''}</th><th class="n">Extra Europa</th></tr></thead><tbody>
+  ${VOCI_L.map(([k,l])=>`<tr><td>${l}</td>${['EU','EXTRA_EU'].map(id=>`<td class="n"><input type="number" step="0.01" min="0" style="width:90px;text-align:right" data-lk="${id}.${k}" value="${L(id)[k]}"${ro}></td>`).join('')}</tr>`).join('')}
+  </tbody></table></div><p class="note">Viaggi, alloggio e trasporti locali si addebitano a costo. Il listino si sceglie dal paese del cliente (Italia e Unione europea → Europa), e si può cambiare per il singolo rapporto.${S.listini.EU?'':' <b>I listini non sono ancora nel database: esegui lo SQL 0021.</b>'}</p>
+  <div class="row"><button type="button" data-act="listini">Chiudi</button></div></section>`}
+async function salvaListino(lk,v){
+  if(!ADMIN){toast('Serve il permesso di gestione del modulo');return}
+  const[id,k]=lk.split('.');const L=Object.assign({},LISTINO_BASE,S.listini[id]||{});
+  L[k]=Math.max(0,+String(v).replace(',','.')||0);if(id==='EU')delete L.daVerificare;S.listini[id]=L;render();
+  try{await db.doc('listini/'+id).set(L);toast('Listino aggiornato')}catch(e){toast('Non salvato: '+(e&&e.message||'errore'))}}
+async function esportaAddebiti(){
+  if(!DL){toast('Il download dei file non è disponibile in questa vista');return}
+  const L=Object.values(S.rapporti).filter(r=>r.firma&&r.firma.ts&&!S.fatture[r.id]).sort((a,b)=>(a.cli.nome||'').localeCompare(b.cli.nome||'','it'));
+  try{const ExcelJS=(await import('exceljs')).default;const wb=new ExcelJS.Workbook();
+    const ws=wb.addWorksheet('Da fatturare');
+    ws.columns=[{header:'Cliente',width:34},{header:'Rapporto',width:16},{header:'Periodo',width:24},{header:'Listino',width:12},{header:'Voce',width:46},{header:'Quantità',width:10},{header:'U.m.',width:6},{header:'Prezzo €',width:11},{header:'Importo €',width:12},{header:'Note',width:40}];
+    ws.getRow(1).font={bold:true};
+    for(const r of L){const A=addebitoDi(r),base=[r.cli.nome||'',r.num,range(r),A.lid==='EU'?'Europa':'Extra Europa'];
+      A.righe.forEach(x=>ws.addRow([...base,x.voce,x.costo?null:x.qta,x.um,x.costo?null:x.prezzo,x.importo,'']));
+      const t=ws.addRow([...base,'TOTALE RAPPORTO',null,'',null,A.totale,[A.o.note,...A.avvisi].filter(Boolean).join('; ')]);t.font={bold:true}}
+    ['H','I'].forEach(c=>ws.getColumn(c).numFmt='#,##0.00');
+    const buf=await wb.xlsx.writeBuffer();
+    await DL.save({filename:'Da fatturare '+today()+'.xlsx',data:new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})})}
+  catch(e){if(e&&e.code==='declined')return;toast('Non riesco a creare il file: '+(e&&e.message||'errore'))}}
 async function saveFatt(){const f=UI.fatt;if(!f)return;try{await db.doc('fatture/'+f.id).set({stato:'fatturato',nf:f.nf.trim(),df:f.df,note:f.note.trim(),by:ME||'',ts:new Date().toISOString()});UI.fatt=null;toast('Segnato come fatturato')}catch(e){toast('Non salvato: serve il permesso di modifica del modulo')}render()}
 
 /* ---------- clienti ---------- */
@@ -391,5 +459,7 @@ db.collection('rapporti').onSnapshot(qs=>{const o={};qs.docs.forEach(d=>{o[d.id]
   setSync('Aggiornato');refresh()},()=>{GOT.r=1;setSync('Non riesco a leggere i rapporti');refresh()});
 db.collection('clienti').onSnapshot(qs=>{const o={};qs.docs.forEach(d=>{o[d.id]=d.data()});S.clienti=o;GOT.c=1;refresh()},()=>{GOT.c=1;refresh()});
 db.collection('fatture').onSnapshot(qs=>{const o={};qs.docs.forEach(d=>{o[d.id]=d.data()});S.fatture=o;refresh()},()=>{});
+db.collection('listini').onSnapshot(qs=>{const o={};qs.docs.forEach(d=>{o[d.id]=d.data()});S.listini=o;refresh()},()=>{});
+db.collection('addebiti').onSnapshot(qs=>{const o={};qs.docs.forEach(d=>{o[d.id]=d.data()});S.addebiti=o;refresh()},()=>{});
 return ()=>{clearTimeout(ST);if(DIRTY)flush();CTX.db.stop()};
 }

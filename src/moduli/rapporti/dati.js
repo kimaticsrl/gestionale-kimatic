@@ -18,6 +18,16 @@ const TABELLE = {
     leggi: (r) => r.dati,
     scrivi: (id, d) => ({ rapporto_id: id, dati: d }),
   },
+  listini: {
+    tabella: 'listini_assistenza', chiave: 'id', campi: 'id,dati',
+    leggi: (r) => r.dati,
+    scrivi: (id, d) => ({ id, dati: d }),
+  },
+  addebiti: {
+    tabella: 'addebiti_rapporti', chiave: 'rapporto_id', campi: 'rapporto_id,dati',
+    leggi: (r) => r.dati,
+    scrivi: (id, d) => ({ rapporto_id: id, dati: d }),
+  },
 };
 
 export function creaDb(supabase) {
