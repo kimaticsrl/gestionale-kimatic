@@ -1,11 +1,11 @@
 // Rapporto di non conformità da inviare al fornitore (A4, italiano o inglese)
-import type { NC } from "./NonConformita";
-import { costoTotale } from "./NonConformita";
+import type { NC, Fornitore } from "./NonConformita";
+import { righeDi } from "./NonConformita";
 
 const T = {
   it: {
     titolo: "RAPPORTO DI NON CONFORMITÀ", sotto: "Non conformità del materiale fornito", fornitore: "Fornitore", data: "Data rilevazione", fase: "Rilevata in",
-    ddt: "DDT", ordine: "Ordine di acquisto", commessa: "Commessa", codice: "Codice / disegno", articolo: "Articolo", qric: "Q.tà ricevuta", qnc: "Q.tà non conforme",
+    ddt: "DDT", ordine: "Ordine di acquisto", commessa: "Commessa", codice: "Codice / disegno", articolo: "Articolo", articoli: "Articoli non conformi", qric: "Q.tà ricevuta", qnc: "Q.tà non conforme",
     tipo: "Tipo di difetto", gravita: "Gravità", descr: "Descrizione della non conformità", foto: "Documentazione fotografica",
     tratt: "Trattamento richiesto", istr: "Istruzioni", richiesta: "Richiesta al fornitore",
     testoRich: (d: string) => `Vi chiediamo di analizzare la causa della non conformità e di comunicarci l'azione correttiva adottata${d ? " entro il " + d : ""}, citando il numero di questo rapporto.`,
@@ -14,7 +14,7 @@ const T = {
   },
   en: {
     titolo: "NON-CONFORMITY REPORT", sotto: "Non-conforming supplied material", fornitore: "Supplier", data: "Detected on", fase: "Detected at",
-    ddt: "Delivery note", ordine: "Purchase order", commessa: "Job", codice: "Part no. / drawing", articolo: "Item", qric: "Qty received", qnc: "Qty non-conforming",
+    ddt: "Delivery note", ordine: "Purchase order", commessa: "Job", codice: "Part no. / drawing", articolo: "Item", articoli: "Non-conforming items", qric: "Qty received", qnc: "Qty non-conforming",
     tipo: "Defect type", gravita: "Severity", descr: "Description of the non-conformity", foto: "Photos",
     tratt: "Required action", istr: "Instructions", richiesta: "Request to the supplier",
     testoRich: (d: string) => `Please analyse the root cause of this non-conformity and inform us of the corrective action taken${d ? " by " + d : ""}, quoting the number of this report.`,
@@ -37,7 +37,7 @@ const num = (s?: string) => { const v = parseFloat(String(s ?? "").replace(",", 
 
 type JsPDF = new (o: object) => any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
-export function pdfNC(jsPDF: JsPDF, nc: NC, o: { logo: string; immagini: string[]; lingua: "it" | "en"; aperta: string }) {
+export function pdfNC(jsPDF: JsPDF, nc: NC, o: { logo: string; immagini: string[]; lingua: "it" | "en"; aperta: string; fornitore?: Fornitore }) {
   const L = o.lingua, t = T[L], en = L === "en";
   const tr = (m: Record<string, string>, v?: string) => (en && v && m[v]) || v || "";
   const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -78,11 +78,32 @@ export function pdfNC(jsPDF: JsPDF, nc: NC, o: { logo: string; immagini: string[
 
   testata();
   txt(t.sotto, X, y, { sz: 9, c: "#666666" }); y += 7;
-  griglia([[t.fornitore, d.fornitore], [t.data, fd(d.data)]]);
+  const fo = o.fornitore?.dati || {};
+  const indForn = [fo.indirizzo, [fo.citta, fo.provincia && `(${fo.provincia})`].filter(Boolean).join(" "), fo.piva && (en ? "VAT " : "P.IVA ") + fo.piva].filter(Boolean).join(" – ");
+  griglia([[t.fornitore, [d.fornitore, indForn].filter(Boolean).join("\n")], [t.data, fd(d.data)]]);
   griglia([[t.ddt, [d.ddt, fd(d.ddt_data)].filter(Boolean).join(" – ")], [t.ordine, d.ordine], [t.commessa, d.commessa], [t.fase, tr(FASI_EN, d.fase)]], 4);
-  titolo(t.articolo);
-  griglia([[t.codice, d.codice], [t.articolo, d.articolo]]);
-  griglia([[t.qric, d.q_ricevuta && `${d.q_ricevuta} ${d.um || ""}`], [t.qnc, d.q_nc && `${d.q_nc} ${d.um || ""}`], [t.tipo, tr(TIPI_EN, d.tipo)], [t.gravita, t.grav[d.gravita || ""] || d.gravita]], 4);
+  titolo(t.articoli);
+  // tabella degli articoli non conformi
+  const righe = righeDi(d);
+  if (righe.length) {
+    const C = [{ k: t.codice, w: 44 }, { k: t.articolo, w: 82 }, { k: t.qric, w: 28, n: 1 }, { k: t.qnc, w: 28, n: 1 }];
+    spazio(14);
+    doc.setFillColor("#1f3a5f"); doc.rect(X, y - 4.2, W, 6.4, "F");
+    let x = X; C.forEach((c) => { txt(c.k, c.n ? x + c.w - 2 : x + 2, y, { b: true, sz: 8, c: "#ffffff", al: c.n ? "right" : "left" }); x += c.w; });
+    y += 6.4;
+    righe.forEach((r, i) => {
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
+      const desc: string[] = doc.splitTextToSize(r.descrizione || "", C[1].w - 4), h = Math.max(1, desc.length) * 4.4 + 2.4;
+      spazio(h + 2);
+      if (i % 2) { doc.setFillColor("#f3f5f7"); doc.rect(X, y - 4.2, W, h, "F"); }
+      txt(r.codice, X + 2, y, { sz: 9.5 }); desc.forEach((l, m) => txt(l, X + C[0].w + 2, y + m * 4.4, { sz: 9.5 }));
+      txt(r.q_ricevuta ? `${r.q_ricevuta} ${r.um || ""}` : "", X + C[0].w + C[1].w + C[2].w - 2, y, { sz: 9.5, al: "right" });
+      txt(r.q_nc ? `${r.q_nc} ${r.um || ""}` : "", R - 2, y, { sz: 9.5, al: "right", b: true });
+      y += h;
+    });
+    y += 5;
+  }
+  griglia([[t.tipo, tr(TIPI_EN, d.tipo)], [t.gravita, t.grav[d.gravita || ""] || d.gravita]]);
   titolo(t.descr);
   paragrafo(d.descrizione);
 
@@ -105,11 +126,11 @@ export function pdfNC(jsPDF: JsPDF, nc: NC, o: { logo: string; immagini: string[
     griglia([[t.tratt, tr(TRATT_EN, g.trattamento)]], 1);
     if (g.istruzioni) { txt(t.istr, X, y, { sz: 7.5, c: "#666666" }); y += 4.6; paragrafo(g.istruzioni); }
   }
-  const costo = costoTotale(g), addebito = num(g.addebito);
+  const addebito = num(g.addebito);
   if (addebito) {
     titolo(t.costi);
     griglia([[t.addebito, addebito.toLocaleString(en ? "en-GB" : "it-IT", { style: "currency", currency: "EUR" })], [t.rif, g.nota_credito]]);
-  } else if (costo && !en) { /* il costo interno non si comunica al fornitore se non c'è addebito */ }
+  }
   titolo(t.richiesta);
   paragrafo(t.testoRich(fd(g.scadenza_risposta)));
   spazio(14);

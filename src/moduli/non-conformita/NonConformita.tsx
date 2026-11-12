@@ -10,10 +10,13 @@ export type Gestione = {
   ore?: string; costo_ora?: string; costo_materiale?: string; costo_trasporto?: string; addebito?: string; nota_credito?: string;
   verifica?: string; chiusa_il?: string; chiusa_da?: string;
 };
+export type Riga = { codice: string; descrizione: string; um: string; q_ricevuta: string; q_nc: string };
+export type Fornitore = { codice: string; nome: string; dati: { indirizzo?: string; citta?: string; provincia?: string; piva?: string; telefono?: string; contatto?: string } };
 export type DatiNC = {
-  data?: string; fase?: string; fornitore?: string; ddt?: string; ddt_data?: string; ordine?: string; commessa?: string;
-  codice?: string; articolo?: string; q_ricevuta?: string; q_nc?: string; um?: string; tipo?: string; gravita?: string;
-  descrizione?: string; foto?: string[]; gestione?: Gestione;
+  data?: string; fase?: string; fornitore?: string; fornitore_codice?: string; ddt?: string; ddt_data?: string; ordine?: string; commessa?: string;
+  righe?: Riga[];
+  codice?: string; articolo?: string; q_ricevuta?: string; q_nc?: string; um?: string; // vecchio formato (un solo articolo)
+  tipo?: string; gravita?: string; descrizione?: string; foto?: string[]; gestione?: Gestione;
 };
 export type NC = { id: string; numero: string; anno: number; stato: string; dati: DatiNC; creato_da: string | null; creato_il: string };
 
@@ -27,7 +30,13 @@ const oggi = () => { const d = new Date(); return new Date(d.getTime() - d.getTi
 const fd = (s?: string) => (s && /^\d{4}-\d{2}-\d{2}/.test(s) ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}` : "");
 const n = (s?: string) => { const v = parseFloat(String(s ?? "").replace(",", ".")); return isFinite(v) ? v : 0; };
 const eur = (v: number) => v.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
-export const costoTotale = (g: Gestione = {}) => n(g.ore) * n(g.costo_ora) + n(g.costo_materiale) + n(g.costo_trasporto);
+export const COSTO_ORA = 45; // costo interno orario predefinito
+export const costoOra = (g: Gestione = {}) => (String(g.costo_ora ?? "").trim() === "" ? COSTO_ORA : n(g.costo_ora));
+export const costoTotale = (g: Gestione = {}) => n(g.ore) * costoOra(g) + n(g.costo_materiale) + n(g.costo_trasporto);
+const rigaVuota = (): Riga => ({ codice: "", descrizione: "", um: "PZ", q_ricevuta: "", q_nc: "" });
+// articoli della NC (anche quelle salvate col vecchio formato a un solo articolo)
+export const righeDi = (d: DatiNC): Riga[] => d.righe?.length ? d.righe
+  : d.codice || d.articolo || d.q_nc ? [{ codice: d.codice || "", descrizione: d.articolo || "", um: d.um || "PZ", q_ricevuta: d.q_ricevuta || "", q_nc: d.q_nc || "" }] : [];
 
 // Foto ridimensionata (lato lungo 1600 px) prima del caricamento
 async function comprimi(f: File): Promise<Blob> {
@@ -40,6 +49,7 @@ async function comprimi(f: File): Promise<Blob> {
 }
 
 type Props = { me: string; nome: string; gestisce: boolean; modifica: boolean };
+type NCR = NC & { r?: Riga };
 
 export default function NonConformita({ me, gestisce, modifica }: Props) {
   const sb = useMemo(() => supabaseBrowser(), []);
@@ -53,6 +63,8 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
   const [msg, setMsg] = useState("");
   const [foto, setFoto] = useState<Record<string, string>>({});
   const [salvo, setSalvo] = useState(false);
+  const [anagForn, setAnagForn] = useState<Fornitore[]>([]);
+  const [sugg, setSugg] = useState<{ codice: string; descrizione: string; um: string }[]>([]);
 
   async function carica() {
     const tutte: NC[] = [];
@@ -66,6 +78,15 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
   }
   useEffect(() => {
     carica();
+    (async () => {
+      const tutti: Fornitore[] = [];
+      for (let da = 0; ; da += 1000) {
+        const { data } = await sb.from("fornitori").select("codice,nome,dati").order("nome").range(da, da + 999);
+        tutti.push(...((data ?? []) as Fornitore[]));
+        if (!data || data.length < 1000) break;
+      }
+      setAnagForn(tutti);
+    })();
     sb.from("profili").select("id,nome,email").then(({ data }) => setNomi(Object.fromEntries((data ?? []).map((p: { id: string; nome: string | null; email: string }) => [p.id, p.nome || p.email]))));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -79,13 +100,14 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
   }, [ed?.dati.foto]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const anni = [...new Set(lista.map((x) => x.anno))].sort((a, b) => b - a);
-  const fornitori = [...new Set(lista.map((x) => x.dati.fornitore?.trim()).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b));
+  const fornitori = [...new Set([...anagForn.map((f) => f.nome), ...lista.map((x) => x.dati.fornitore?.trim()).filter(Boolean) as string[]])].sort((a, b) => a.localeCompare(b));
+  const fornDi = (d: DatiNC) => anagForn.find((f) => f.codice === d.fornitore_codice) || anagForn.find((f) => f.nome.toLowerCase() === (d.fornitore || "").trim().toLowerCase());
   const visibili = lista.filter((x) => {
     if (filtro === "attive" && ["chiusa", "annullata"].includes(x.stato)) return false;
     if (filtro !== "attive" && filtro !== "tutte" && x.stato !== filtro) return false;
     if (anno && String(x.anno) !== anno) return false;
     const t = q.trim().toLowerCase();
-    return !t || [x.numero, x.dati.fornitore, x.dati.codice, x.dati.articolo, x.dati.commessa, x.dati.ddt, x.dati.ordine, x.dati.descrizione].join(" ").toLowerCase().includes(t);
+    return !t || [x.numero, x.dati.fornitore, x.dati.commessa, x.dati.ddt, x.dati.ordine, x.dati.descrizione, ...righeDi(x.dati).flatMap((r) => [r.codice, r.descrizione])].join(" ").toLowerCase().includes(t);
   });
   const conta = (f: string) => lista.filter((x) => (f === "attive" ? !["chiusa", "annullata"].includes(x.stato) : f === "tutte" ? true : x.stato === f)).length;
 
@@ -94,12 +116,35 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
   const puoSegnalazione = (x: NC) => gestisce || (modifica && x.stato === "aperta" && (!x.id || mia(x)));
   const nuova = !ed?.id;
 
-  function apri(x: NC) { setEd(JSON.parse(JSON.stringify(x))); setMsg(""); window.scrollTo(0, 0); }
+  function apri(x: NC) {
+    const c: NC = JSON.parse(JSON.stringify(x));
+    c.dati.righe = righeDi(c.dati); delete c.dati.codice; delete c.dati.articolo; delete c.dati.q_ricevuta; delete c.dati.q_nc; delete c.dati.um;
+    if (!c.dati.righe.length) c.dati.righe = [rigaVuota()];
+    setEd(c); setMsg(""); window.scrollTo(0, 0);
+  }
   function crea() {
-    setEd({ id: "", numero: "", anno: new Date().getFullYear(), stato: "aperta", creato_da: me, creato_il: "", dati: { data: oggi(), fase: FASI[0], gravita: "maggiore", um: "pz", foto: [] } });
+    setEd({ id: "", numero: "", anno: new Date().getFullYear(), stato: "aperta", creato_da: me, creato_il: "", dati: { data: oggi(), fase: FASI[0], gravita: "maggiore", righe: [rigaVuota()], foto: [] } });
     setMsg(""); window.scrollTo(0, 0);
   }
   const setD = (k: keyof DatiNC, v: unknown) => ed && setEd({ ...ed, dati: { ...ed.dati, [k]: v } });
+  const setR = (i: number, v: Partial<Riga>) => ed && setEd({ ...ed, dati: { ...ed.dati, righe: (ed.dati.righe || []).map((x, j) => (j === i ? { ...x, ...v } : x)) } });
+  // suggerimenti dall'anagrafica articoli mentre si scrive il codice o la descrizione
+  async function cercaArticoli(t: string) {
+    t = t.trim(); if (t.length < 3) { setSugg([]); return; }
+    const p = "%" + t.replace(/[%_]/g, "") + "%";
+    const { data } = await sb.from("articoli").select("codice,descrizione,um").or(`codice.ilike.${p},descrizione.ilike.${p}`).order("codice").limit(25);
+    setSugg((data ?? []) as typeof sugg);
+  }
+  async function compilaArticolo(i: number, codice: string) {
+    const c = codice.trim(); if (!c) return;
+    const hit = sugg.find((x) => x.codice === c) || (await sb.from("articoli").select("codice,descrizione,um").eq("codice", c).maybeSingle()).data;
+    if (hit) setR(i, { codice: hit.codice, descrizione: hit.descrizione, um: hit.um || "PZ" });
+  }
+  function sceltaFornitore(v: string) {
+    if (!ed) return;
+    const f = anagForn.find((x) => x.nome.toLowerCase() === v.trim().toLowerCase());
+    setEd({ ...ed, dati: { ...ed.dati, fornitore: v, fornitore_codice: f?.codice || "" } });
+  }
   const setG = (k: keyof Gestione, v: unknown) => ed && setEd({ ...ed, dati: { ...ed.dati, gestione: { ...(ed.dati.gestione || {}), [k]: v } } });
 
   async function salva(chiudi = false) {
@@ -107,7 +152,7 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
     if (!ed.dati.fornitore?.trim()) { setMsg("Indica il fornitore."); return; }
     if (!ed.dati.descrizione?.trim()) { setMsg("Descrivi la non conformità."); return; }
     setSalvo(true);
-    const dati = { ...ed.dati };
+    const dati = { ...ed.dati, righe: (ed.dati.righe || []).filter((x) => x.codice.trim() || x.descrizione.trim() || x.q_nc.trim()) };
     let stato = ed.stato;
     if (gestisce) {
       const g = { ...(dati.gestione || {}) };
@@ -158,7 +203,7 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
       const { data } = await sb.storage.from("non-conformita").download(p);
       if (data) immagini.push(await new Promise<string>((ok) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result)); fr.readAsDataURL(data); }));
     }
-    const doc = pdfNC(jsPDF, ed, { logo, immagini, lingua, aperta: nomi[ed.creato_da || ""] || "" });
+    const doc = pdfNC(jsPDF, ed, { logo, immagini, lingua, aperta: nomi[ed.creato_da || ""] || "", fornitore: fornDi(ed.dati) });
     const url = URL.createObjectURL(doc.output("blob")), a = document.createElement("a");
     a.href = url; a.download = `${ed.numero} ${ed.dati.fornitore || ""}.pdf`.replace(/[\\/:*?"<>|]+/g, " "); a.click();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
@@ -169,7 +214,7 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
     const cols: [string, number, (x: NC) => unknown][] = [
       ["Numero", 13, (x) => x.numero], ["Data", 11, (x) => fd(x.dati.data)], ["Stato", 16, (x) => nomeStato(x.stato)], ["Fornitore", 28, (x) => x.dati.fornitore],
       ["Fase", 16, (x) => x.dati.fase], ["DDT", 12, (x) => x.dati.ddt], ["Ordine", 12, (x) => x.dati.ordine], ["Commessa", 12, (x) => x.dati.commessa],
-      ["Codice", 16, (x) => x.dati.codice], ["Articolo", 26, (x) => x.dati.articolo], ["Q.tà ricevuta", 10, (x) => n(x.dati.q_ricevuta) || ""], ["Q.tà NC", 9, (x) => n(x.dati.q_nc) || ""],
+      ["Codice", 16, (x) => (x as NCR).r?.codice], ["Articolo", 30, (x) => (x as NCR).r?.descrizione], ["UM", 6, (x) => (x as NCR).r?.um], ["Q.tà ricevuta", 10, (x) => n((x as NCR).r?.q_ricevuta) || ""], ["Q.tà NC", 9, (x) => n((x as NCR).r?.q_nc) || ""],
       ["Tipo difetto", 24, (x) => x.dati.tipo], ["Gravità", 10, (x) => x.dati.gravita], ["Descrizione", 40, (x) => x.dati.descrizione],
       ["Trattamento", 26, (x) => x.dati.gestione?.trattamento], ["Costo interno €", 13, (x) => costoTotale(x.dati.gestione) || ""], ["Addebito al fornitore €", 14, (x) => n(x.dati.gestione?.addebito) || ""],
       ["Nota credito/addebito", 14, (x) => x.dati.gestione?.nota_credito], ["Chiusa il", 11, (x) => fd(x.dati.gestione?.chiusa_il)], ["Aperta da", 18, (x) => nomi[x.creato_da || ""] || ""],
@@ -177,7 +222,8 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
     const h = ws.addRow(cols.map((c) => c[0])); h.font = { bold: true, color: { argb: "FFFFFFFF" } };
     h.eachCell((c) => { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F3A5F" } }; c.alignment = { wrapText: true, vertical: "middle" }; });
     cols.forEach((c, i) => { ws.getColumn(i + 1).width = c[1]; });
-    visibili.forEach((x) => ws.addRow(cols.map((c) => c[2](x) ?? "")));
+    // una riga per ogni articolo; i costi solo sulla prima riga della NC
+    visibili.forEach((x) => { const rr = righeDi(x.dati); (rr.length ? rr : [undefined]).forEach((r, i) => ws.addRow(cols.map((c) => (i > 0 && c[0].includes("€") ? "" : c[2]({ ...x, r } as NCR) ?? "")))); });
     ws.views = [{ state: "frozen", ySplit: 1 }]; ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: cols.length } };
     const url = URL.createObjectURL(new Blob([await wb.xlsx.writeBuffer()], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
     const a = document.createElement("a"); a.href = url; a.download = `Non_conformita_${oggi()}.xlsx`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 5000);
@@ -222,20 +268,43 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
           <div className="fl">
             {testo("data", "Data rilevazione", { tipo: "date" })}
             {scelta("fase", "Dove è stata rilevata", FASI)}
-            {testo("fornitore", "Fornitore *", { lista: "nc-fornitori", ph: "Ragione sociale" })}
+            <label className="f">Fornitore *
+              <input type="text" value={d.fornitore || ""} disabled={ro} list="nc-fornitori" placeholder="Scrivi per cercare" onChange={(e) => sceltaFornitore(e.target.value)} />
+              {(() => { const f = fornDi(d); return f ? <small className="nota">{[f.codice && "cod. " + f.codice, [f.dati.indirizzo, f.dati.citta, f.dati.provincia && `(${f.dati.provincia})`].filter(Boolean).join(" ")].filter(Boolean).join(" · ")}</small>
+                : d.fornitore ? <small className="nota">non in anagrafica fornitori</small> : null; })()}</label>
             {testo("ddt", "DDT n.")}
             {testo("ddt_data", "Data DDT", { tipo: "date" })}
             {testo("ordine", "Ordine di acquisto n.")}
             {testo("commessa", "Commessa")}
-            {testo("codice", "Codice articolo / disegno")}
-            {testo("articolo", "Descrizione articolo", { w: true })}
-            {testo("q_ricevuta", "Quantità ricevuta")}
-            {testo("q_nc", "Quantità non conforme")}
-            {testo("um", "Unità di misura")}
             {scelta("tipo", "Tipo di difetto", TIPI)}
             {scelta("gravita", "Gravità", GRAVITA)}
             <label className="f w">Descrizione della non conformità *
               <textarea value={d.descrizione || ""} disabled={ro} placeholder="Cosa non va: quote misurate, difetti visibili, documenti mancanti…" onChange={(e) => setD("descrizione", e.target.value)} /></label>
+          </div>
+          <div>
+            <p className="nota" style={{ marginBottom: 6 }}>Articoli non conformi <span>· scrivi almeno 3 caratteri del codice o della descrizione e scegli dall&apos;elenco</span></p>
+            <div className="mx">
+              <table className="righe">
+                <thead><tr><th style={{ width: "24%" }}>Codice</th><th>Descrizione</th><th style={{ width: 70 }}>UM</th><th style={{ width: 95 }}>Q.tà ricevuta</th><th style={{ width: 95 }}>Q.tà non conforme</th>{!ro && <th style={{ width: 36 }} />}</tr></thead>
+                <tbody>
+                  {(d.righe || []).map((x, i) => (
+                    <tr key={i}>
+                      <td><input value={x.codice} disabled={ro} list="nc-articoli" aria-label="Codice articolo"
+                        onChange={(e) => { const v = e.target.value, hit = sugg.find((a) => a.codice === v); setR(i, hit ? { codice: hit.codice, descrizione: hit.descrizione, um: hit.um || "PZ" } : { codice: v }); if (!hit) cercaArticoli(v); }}
+                        onBlur={(e) => { if (!x.descrizione) compilaArticolo(i, e.target.value); }}
+                        onKeyDown={(e) => { if (e.key === "Enter") compilaArticolo(i, (e.target as HTMLInputElement).value); }} /></td>
+                      <td><input value={x.descrizione} disabled={ro} aria-label="Descrizione articolo" onChange={(e) => setR(i, { descrizione: e.target.value })} /></td>
+                      <td><input value={x.um} disabled={ro} aria-label="Unità di misura" onChange={(e) => setR(i, { um: e.target.value })} /></td>
+                      <td><input value={x.q_ricevuta} disabled={ro} inputMode="decimal" aria-label="Quantità ricevuta" onChange={(e) => setR(i, { q_ricevuta: e.target.value })} /></td>
+                      <td><input value={x.q_nc} disabled={ro} inputMode="decimal" aria-label="Quantità non conforme" onChange={(e) => setR(i, { q_nc: e.target.value })} /></td>
+                      {!ro && <td><button type="button" className="btn link" aria-label="Togli articolo" onClick={() => setD("righe", (d.righe || []).filter((_, j) => j !== i))}>✕</button></td>}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {!ro && <button type="button" className="btn sec" style={{ marginTop: 8 }} onClick={() => setD("righe", [...(d.righe || []), rigaVuota()])}>+ Articolo</button>}
+            <datalist id="nc-articoli">{sugg.map((a) => <option key={a.codice} value={a.codice}>{a.descrizione}</option>)}</datalist>
           </div>
           <datalist id="nc-fornitori">{fornitori.map((f) => <option key={f} value={f} />)}</datalist>
           <div>
@@ -277,7 +346,7 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
             <h3 style={{ margin: "6px 0 0", fontSize: 14 }}>Costi</h3>
             <div className="fl">
               {gt("ore", "Ore interne", { tipo: "num" })}
-              {gt("costo_ora", "Costo orario €", { tipo: "num", ph: "es. 35" })}
+              {gt("costo_ora", "Costo orario interno €", { tipo: "num", ph: String(COSTO_ORA) })}
               {gt("costo_materiale", "Materiale / rilavorazione €", { tipo: "num" })}
               {gt("costo_trasporto", "Trasporto / spedizione €", { tipo: "num" })}
               <label className="f">Costo totale<span className="tot" style={{ padding: "8px 0" }}>{eur(costo)}</span></label>
@@ -338,8 +407,9 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
                   <td><b>{x.numero}</b>{x.dati.gravita === "critica" && <small className="g-critica">critica</small>}</td>
                   <td>{fd(x.dati.data)}</td>
                   <td>{x.dati.fornitore}<small>{[x.dati.ddt && "DDT " + x.dati.ddt, x.dati.commessa && "comm. " + x.dati.commessa].filter(Boolean).join(" · ")}</small></td>
-                  <td className="hide-s">{x.dati.codice}<small>{x.dati.articolo}</small></td>
-                  <td className="hide-s">{x.dati.tipo}<small>{x.dati.q_nc ? `${x.dati.q_nc} ${x.dati.um || ""} su ${x.dati.q_ricevuta || "?"}` : ""}</small></td>
+                  {(() => { const rr = righeDi(x.dati), r0 = rr[0]; return <>
+                    <td className="hide-s">{r0?.codice}{rr.length > 1 && <b> +{rr.length - 1}</b>}<small>{r0?.descrizione}</small></td>
+                    <td className="hide-s">{x.dati.tipo}<small>{rr.length === 1 && r0.q_nc ? `${r0.q_nc} ${r0.um || ""} su ${r0.q_ricevuta || "?"}` : rr.length > 1 ? `${rr.length} articoli` : ""}</small></td></>; })()}
                   <td><span className={"st st-" + x.stato}>{nomeStato(x.stato)}</span>{x.dati.gestione?.trattamento && <small>{x.dati.gestione.trattamento}</small>}</td>
                   <td className="hide-s">{nomi[x.creato_da || ""] || ""}{mia(x) && <small>tu</small>}</td>
                 </tr>

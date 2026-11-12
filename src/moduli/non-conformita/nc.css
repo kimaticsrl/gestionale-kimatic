@@ -26,3 +26,7 @@
 .nc .nota{font-size:13px;color:var(--muted);margin:0}
 .nc .tot{font-family:var(--f-mono);font-weight:600}
 @media (max-width:640px){.nc .hide-s{display:none}}
+.nc table.righe td{padding:4px 4px}
+.nc table.righe input{padding:6px 7px;font-size:14px}
+.nc small.nota{font-size:12px}
+.nc table.righe tbody tr{cursor:auto}.nc table.righe tbody tr:hover{background:none}
