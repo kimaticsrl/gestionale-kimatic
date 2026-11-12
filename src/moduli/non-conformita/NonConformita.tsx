@@ -65,6 +65,8 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
   const [salvo, setSalvo] = useState(false);
   const [anagForn, setAnagForn] = useState<Fornitore[]>([]);
   const [sugg, setSugg] = useState<{ codice: string; descrizione: string; um: string }[]>([]);
+  const [nonTrovati, setNonTrovati] = useState<string[]>([]);
+  const [totArticoli, setTotArticoli] = useState<number | null>(null);
 
   async function carica() {
     const tutte: NC[] = [];
@@ -87,6 +89,7 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
       }
       setAnagForn(tutti);
     })();
+    sb.from("articoli").select("codice", { count: "exact", head: true }).then(({ count }) => setTotArticoli(count ?? 0));
     sb.from("profili").select("id,nome,email").then(({ data }) => setNomi(Object.fromEntries((data ?? []).map((p: { id: string; nome: string | null; email: string }) => [p.id, p.nome || p.email]))));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -127,18 +130,25 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
     setMsg(""); window.scrollTo(0, 0);
   }
   const setD = (k: keyof DatiNC, v: unknown) => ed && setEd({ ...ed, dati: { ...ed.dati, [k]: v } });
-  const setR = (i: number, v: Partial<Riga>) => ed && setEd({ ...ed, dati: { ...ed.dati, righe: (ed.dati.righe || []).map((x, j) => (j === i ? { ...x, ...v } : x)) } });
+  // aggiornamento «funzionale»: funziona anche quando arriva dopo una ricerca in anagrafica
+  const setR = (i: number, v: Partial<Riga>) => setEd((e) => e && { ...e, dati: { ...e.dati, righe: (e.dati.righe || []).map((x, j) => (j === i ? { ...x, ...v } : x)) } });
   // suggerimenti dall'anagrafica articoli mentre si scrive il codice o la descrizione
   async function cercaArticoli(t: string) {
     t = t.trim(); if (t.length < 3) { setSugg([]); return; }
-    const p = "%" + t.replace(/[%_]/g, "") + "%";
-    const { data } = await sb.from("articoli").select("codice,descrizione,um").or(`codice.ilike.${p},descrizione.ilike.${p}`).order("codice").limit(25);
-    setSugg((data ?? []) as typeof sugg);
+    const p = '"%' + t.replace(/[%_"\\]/g, "") + '%"'; // tra virgolette: i codici possono contenere punti, virgole, parentesi
+    const { data, error } = await sb.from("articoli").select("codice,descrizione,um").or(`codice.ilike.${p},descrizione.ilike.${p}`).order("codice").limit(25);
+    if (error) { setMsg("Ricerca articoli non riuscita: " + error.message); return; }
+    const L = (data ?? []) as typeof sugg;
+    setSugg(L);
+    return L;
   }
   async function compilaArticolo(i: number, codice: string) {
     const c = codice.trim(); if (!c) return;
-    const hit = sugg.find((x) => x.codice === c) || (await sb.from("articoli").select("codice,descrizione,um").eq("codice", c).maybeSingle()).data;
-    if (hit) setR(i, { codice: hit.codice, descrizione: hit.descrizione, um: hit.um || "PZ" });
+    const uguale = (x: { codice: string }) => x.codice.toLowerCase() === c.toLowerCase();
+    let hit = sugg.find(uguale);
+    if (!hit) { const { data } = await sb.from("articoli").select("codice,descrizione,um").ilike("codice", c.replace(/[%_]/g, "\\$&")).limit(1); hit = data?.[0]; }
+    if (hit) { setR(i, { codice: hit.codice, descrizione: hit.descrizione, um: hit.um || "PZ" }); setNonTrovati((s) => s.filter((x) => x !== c)); }
+    else setNonTrovati((s) => [...s, c]);
   }
   function sceltaFornitore(v: string) {
     if (!ed) return;
@@ -290,8 +300,15 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
                   {(d.righe || []).map((x, i) => (
                     <tr key={i}>
                       <td><input value={x.codice} disabled={ro} list="nc-articoli" aria-label="Codice articolo"
-                        onChange={(e) => { const v = e.target.value, hit = sugg.find((a) => a.codice === v); setR(i, hit ? { codice: hit.codice, descrizione: hit.descrizione, um: hit.um || "PZ" } : { codice: v }); if (!hit) cercaArticoli(v); }}
-                        onBlur={(e) => { if (!x.descrizione) compilaArticolo(i, e.target.value); }}
+                        onChange={async (e) => {
+                          const v = e.target.value, hit = sugg.find((a) => a.codice === v);
+                          if (hit) { setR(i, { codice: hit.codice, descrizione: hit.descrizione, um: hit.um || "PZ" }); return; }
+                          setR(i, { codice: v });
+                          const L = await cercaArticoli(v);
+                          const esatto = L?.find((a) => a.codice.toLowerCase() === v.trim().toLowerCase());
+                          if (esatto) setR(i, { codice: esatto.codice, descrizione: esatto.descrizione, um: esatto.um || "PZ" });
+                        }}
+                        onBlur={(e) => { if (!x.descrizione && e.target.value.trim()) compilaArticolo(i, e.target.value); }}
                         onKeyDown={(e) => { if (e.key === "Enter") compilaArticolo(i, (e.target as HTMLInputElement).value); }} /></td>
                       <td><input value={x.descrizione} disabled={ro} aria-label="Descrizione articolo" onChange={(e) => setR(i, { descrizione: e.target.value })} /></td>
                       <td><input value={x.um} disabled={ro} aria-label="Unità di misura" onChange={(e) => setR(i, { um: e.target.value })} /></td>
@@ -304,6 +321,8 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
               </table>
             </div>
             {!ro && <button type="button" className="btn sec" style={{ marginTop: 8 }} onClick={() => setD("righe", [...(d.righe || []), rigaVuota()])}>+ Articolo</button>}
+            {totArticoli === 0 && !ro && <p className="nota" style={{ color: "var(--danger)" }}>L&apos;anagrafica articoli è vuota: va caricato il file articoli.csv in Supabase.</p>}
+            {nonTrovati.length > 0 && !ro && <p className="nota">Non trovati in anagrafica: {[...new Set(nonTrovati)].join(", ")}. Controlla il codice oppure scrivi la descrizione a mano.</p>}
             <datalist id="nc-articoli">{sugg.map((a) => <option key={a.codice} value={a.codice}>{a.descrizione}</option>)}</datalist>
           </div>
           <datalist id="nc-fornitori">{fornitori.map((f) => <option key={f} value={f} />)}</datalist>
