@@ -3,7 +3,7 @@
 // Stessa logica e stessi dati; il salvataggio passa da Supabase (vedi dati.js).
 import { RI } from './pdf.js';
 import { pdfReport } from './reportOre.js';
-import { calcola, listinoPerPaese, LISTINO_BASE } from './addebito.js';
+import { calcola, listinoPerPaese, LISTINO_BASE, pdfAddebiti } from './addebito.js';
 
 export function avvia(ROOT, CTX) {
 const APP = ROOT.querySelector('[data-ri=app]'), TABS = ROOT.querySelector('[data-ri=tabs]'), SYNC = ROOT.querySelector('[data-ri=sync]'), TOAST = ROOT.querySelector('[data-ri=toast]');
@@ -268,6 +268,7 @@ ROOT.addEventListener('click',async e=>{
     case'noadd':UI.add=null;render();break;
     case'listini':UI.lst=!UI.lst;UI.add=null;render();break;
     case'xlsadd':await esportaAddebiti();break;
+    case'addpdf':await doAddPdf(S.rapporti[d.id]);break;
     case'annfatt':if(!confirmTwice(b,'Tocca di nuovo per rimetterlo tra i da fatturare'))return;try{await db.doc('fatture/'+d.id).delete();toast('Rimesso tra i da fatturare')}catch(err){toast('Operazione non riuscita')}break;
     case'newcli':UI.cliEdit={id:'',nome:'',indirizzo:'',contatto:'',email:'',telefono:'',piva:'',lingua:'',note:''};render();break;
     case'editcli':{const c=S.clienti[UI.cli];UI.cliEdit=Object.assign({id:UI.cli},{nome:'',indirizzo:'',contatto:'',email:'',telefono:'',piva:'',lingua:'',note:''},c);render();break}
@@ -359,8 +360,8 @@ function vFatt(){
   const L=Object.values(S.rapporti).filter(r=>r.firma&&r.firma.ts).sort((a,b)=>b.firma.ts.localeCompare(a.firma.ts));
   const da=L.filter(r=>!S.fatture[r.id]),fa=L.filter(r=>S.fatture[r.id]);
   L.forEach(checkInteg);
-  const row=(r,done)=>{const t=RI.totals(r),f=S.fatture[r.id];return `<tr><td><b>${esc(r.cli.nome)}</b><br><span class="mono" style="font-size:12px;color:var(--mut)">${esc(r.num)}</span></td><td>${r.tipo==='inst'?'Installazione':'Manutenzione'}<br><span class="note">${esc(range(r))}</span></td><td class="n num">${RI.hrs(t.ordU)}</td><td class="n num">${RI.hrs(t.extU)}</td><td class="n num">${RI.hrs(t.ordG+t.extG)}</td><td class="n num">${RI.hrs(t.viaggioU)}</td><td class="n num">${t.km}</td><td class="n num">${t.ricambi}</td><td class="n num"><b>${euro(addebitoDi(r).totale)}</b></td><td>${INTEG[r.id]===false?'<span class="pill bad">Modificato dopo la firma</span>':RI.fd(r.firma.ts.slice(0,10))}</td><td><div class="row"><button type="button" class="sm" data-act="pdfid" data-id="${esc(r.id)}">PDF</button><button type="button" class="sm" data-act="orepdfid" data-id="${esc(r.id)}">Report ore</button><button type="button" class="sm${UI.add===r.id?' pri':''}" data-add="${esc(r.id)}">Importo</button><button type="button" class="sm" data-openr="${esc(r.id)}">Apri</button>${done?`<span class="note">${f.nf?'Fatt. '+esc(f.nf):''} ${f.df?RI.fd(f.df):''}</span><button type="button" class="sm" data-act="annfatt" data-id="${esc(r.id)}">Annulla</button>`:`<button type="button" class="sm pri" data-fatt="${esc(r.id)}">Segna fatturato</button>`}</div></td></tr>`};
-  const hd='<thead><tr><th>Cliente</th><th>Intervento</th><th class="n">Ore ord.</th><th class="n">Ore extra</th><th class="n">In garanzia</th><th class="n">Viaggio</th><th class="n">Km</th><th class="n">Parti</th><th class="n">Importo €</th><th>Firmato</th><th></th></tr></thead>';
+  const row=(r,done)=>{const t=RI.totals(r),f=S.fatture[r.id];return `<tr><td><b>${esc(r.cli.nome)}</b><br><span class="mono" style="font-size:12px;color:var(--mut)">${esc(r.num)}</span></td><td>${r.tipo==='inst'?'Installazione':'Manutenzione'}<br><span class="note">${esc(range(r))}</span></td><td class="n num">${RI.hrs(t.ordU)}</td><td class="n num">${RI.hrs(t.extU)}</td><td class="n num">${RI.hrs(t.ordG+t.extG)}</td><td class="n num">${RI.hrs(t.viaggioU)}</td><td class="n num">${t.km}</td><td class="n num">${t.ricambi}</td><td class="n num"><b>${euro(addebitoDi(r).totale)}</b></td><td>${INTEG[r.id]===false?'<span class="pill bad">Modificato dopo la firma</span>':RI.fd(r.firma.ts.slice(0,10))}</td><td><div class="row"><button type="button" class="sm" data-act="pdfid" data-id="${esc(r.id)}">PDF</button><button type="button" class="sm" data-act="orepdfid" data-id="${esc(r.id)}">Report ore</button><button type="button" class="sm${UI.add===r.id?' pri':''}" data-add="${esc(r.id)}">Importo</button><button type="button" class="sm" data-act="addpdf" data-id="${esc(r.id)}">Riepilogo addebiti</button><button type="button" class="sm" data-openr="${esc(r.id)}">Apri</button>${done?`<span class="note">${f.nf?'Fatt. '+esc(f.nf):''} ${f.df?RI.fd(f.df):''}</span><button type="button" class="sm" data-act="annfatt" data-id="${esc(r.id)}">Annulla</button>`:`<button type="button" class="sm pri" data-fatt="${esc(r.id)}">Segna fatturato</button>`}</div></td></tr>`};
+  const hd='<thead><tr><th>Cliente</th><th>Intervento</th><th class="n">Ore ord.</th><th class="n">Ore extra</th><th class="n">In garanzia</th><th class="n">Viaggio</th><th class="n">Km</th><th class="n">Parti</th><th class="n">Da addebitare €</th><th>Firmato</th><th></th></tr></thead>';
   const form=UI.fatt?`<div class="confirm"><b>Fatturazione di ${esc((S.rapporti[UI.fatt.id]||{}).num)}</b><div class="g"><label>Numero fattura<input id="ff-n" data-fk="nf" value="${esc(UI.fatt.nf)}"></label><label>Data fattura<input id="ff-d" type="date" data-fk="df" value="${esc(UI.fatt.df)}"></label><label class="w2">Note<input id="ff-no" data-fk="note" value="${esc(UI.fatt.note)}"></label></div><div class="row"><button type="button" class="pri" data-act="savefatt">Segna fatturato</button><button type="button" data-act="nofatt">Annulla</button></div></div>`:'';
   return `<div class="top"><h2>Da fatturare</h2><span class="note">Ore in ore uomo (ore × nr. tecnici). Le ore oltre le 8 giornaliere sono extra.</span><span class="sp"></span>${da.length?'<button type="button" data-act="xlsadd">Esporta importi (Excel)</button>':''}<button type="button" data-act="listini">Listini</button></div>${form}${UI.lst?vListini():''}${UI.add&&S.rapporti[UI.add]?vAddebito(S.rapporti[UI.add]):''}
   <section class="panel"><h2>In attesa di fattura <small>${da.length}</small></h2>${da.length?`<div class="tw"><table>${hd}<tbody>${da.map(r=>row(r,false)).join('')}</tbody></table></div>`:'<p class="note" style="margin:0">Nessun rapporto firmato in attesa. Quando un tecnico fa firmare il cliente, il rapporto compare qui.</p>'}</section>
@@ -391,9 +392,11 @@ function vAddebito(r){
   <div class="tw" style="margin-top:12px"><table><thead><tr><th>Voce</th><th class="n">Quantità</th><th class="n">Prezzo €</th><th class="n">Importo €</th></tr></thead><tbody>
   ${A.righe.map(x=>`<tr><td>${esc(x.voce)}</td><td class="n num">${x.costo?'':String(x.qta).replace('.',',')+' '+x.um}</td><td class="n num">${x.costo?'':euro(x.prezzo)}</td><td class="n num">${euro(x.importo)}</td></tr>`).join('')||'<tr><td colspan="4" class="note">Niente da addebitare.</td></tr>'}
   </tbody><tfoot><tr><th>Totale (IVA esclusa)</th><th></th><th></th><th class="n num">${euro(A.totale)}</th></tr></tfoot></table></div>
+  ${A.ricambi.length?`<p class="note"><b>Parti da addebitare</b> (prezzo da listino ricambi): ${A.ricambi.map(x=>esc((x.cod?x.cod+' ':'')+x.des+' × '+x.q)).join('; ')}</p>`:''}
+  ${A.garanzia.righe.length||A.garanzia.parti.length?`<h3 style="margin:16px 0 6px">Eseguito in garanzia, non addebitato</h3><div class="tw"><table><thead><tr><th>Voce</th><th class="n">Quantità</th><th class="n">Prezzo €</th><th class="n">Valore €</th></tr></thead><tbody>${A.garanzia.righe.map(x=>`<tr><td>${esc(x.voce)}</td><td class="n num">${String(x.qta).replace('.',',')} ${x.um}</td><td class="n num">${euro(x.prezzo)}</td><td class="n num">${euro(x.importo)}</td></tr>`).join('')}</tbody><tfoot><tr><th>Valore non addebitato</th><th></th><th></th><th class="n num">${euro(A.garanzia.totale)}</th></tr></tfoot></table></div>${A.garanzia.parti.length?`<p class="note"><b>Parti in garanzia:</b> ${A.garanzia.parti.map(x=>esc((x.cod?x.cod+' ':'')+x.des+' × '+x.q)).join('; ')}</p>`:''}`:''}
   ${A.avvisi.length?`<p class="note">Da sapere: ${A.avvisi.map(esc).join('; ')}.</p>`:''}
   <p class="note">Lavoro: prime 8 ore dei giorni feriali a tariffa ordinaria, il resto e sabati, domeniche e festivi a tariffa extra. Viaggio: prime 8 ore al giorno per tecnico a tariffa base, poi tariffa oltre 8 ore. ${ADMIN?'Le scelte si salvano da sole.':'Solo chi gestisce il modulo può cambiare le scelte.'}</p>
-  <div class="row"><button type="button" data-act="noadd">Chiudi</button></div></section>`}
+  <div class="row"><button type="button" class="pri" data-act="addpdf" data-id="${esc(r.id)}">Riepilogo addebiti (PDF)</button><button type="button" data-act="noadd">Chiudi</button></div></section>`}
 async function salvaAddebito(id,k,v){
   if(!ADMIN){toast('Serve il permesso di gestione del modulo');return}
   const o=Object.assign({},S.addebiti[id]||{});
@@ -413,6 +416,12 @@ async function salvaListino(lk,v){
   const[id,k]=lk.split('.');const L=Object.assign({},LISTINO_BASE,S.listini[id]||{});
   L[k]=Math.max(0,+String(v).replace(',','.')||0);if(id==='EU')delete L.daVerificare;S.listini[id]=L;render();
   try{await db.doc('listini/'+id).set(L);toast('Listino aggiornato')}catch(e){toast('Non salvato: '+(e&&e.message||'errore'))}}
+async function doAddPdf(r){
+  if(!r)return;if(!DL){toast('Il download dei file non è disponibile in questa vista');return}
+  try{const A=addebitoDi(r),c=S.clienti[r.cli&&r.cli.id]||{},jsPDF=await CTX.jsPDF();
+    const blob=pdfAddebiti(jsPDF,r,A,{logo:LOGO,piva:c.piva||'',listino:A.lid==='EU'?'Europa':'Extra Europa',note:A.o.note||''}).output('blob');
+    await DL.save({filename:('Riepilogo addebiti '+r.num+' '+(r.cli&&r.cli.nome||'')).replace(/[\\/:*?"<>|]+/g,' ').trim()+'.pdf',data:blob})}
+  catch(e){if(e&&e.code==='declined')return;toast('Non riesco a creare il riepilogo: '+(e&&e.message||'errore'))}}
 async function esportaAddebiti(){
   if(!DL){toast('Il download dei file non è disponibile in questa vista');return}
   const L=Object.values(S.rapporti).filter(r=>r.firma&&r.firma.ts&&!S.fatture[r.id]).sort((a,b)=>(a.cli.nome||'').localeCompare(b.cli.nome||'','it'));
@@ -422,7 +431,12 @@ async function esportaAddebiti(){
     ws.getRow(1).font={bold:true};
     for(const r of L){const A=addebitoDi(r),base=[r.cli.nome||'',r.num,range(r),A.lid==='EU'?'Europa':'Extra Europa'];
       A.righe.forEach(x=>ws.addRow([...base,x.voce,x.costo?null:x.qta,x.um,x.costo?null:x.prezzo,x.importo,'']));
-      const t=ws.addRow([...base,'TOTALE RAPPORTO',null,'',null,A.totale,[A.o.note,...A.avvisi].filter(Boolean).join('; ')]);t.font={bold:true}}
+      A.ricambi.forEach(x=>ws.addRow([...base,'Parte: '+[x.cod,x.des].filter(Boolean).join(' – '),+String(x.q).replace(',','.')||x.q,'n.',null,null,'prezzo da listino ricambi']));
+      const t=ws.addRow([...base,'TOTALE DA ADDEBITARE',null,'',null,A.totale,[A.o.note,...A.avvisi].filter(Boolean).join('; ')]);t.font={bold:true};
+      A.garanzia.righe.forEach(x=>{const g=ws.addRow([...base,'Garanzia – '+x.voce,x.qta,x.um,x.prezzo,null,'valore non addebitato: '+euro(x.importo)+' €']);g.font={color:{argb:'FF2E7D4F'}}});
+      A.garanzia.parti.forEach(x=>{const g=ws.addRow([...base,'Garanzia – parte: '+[x.cod,x.des].filter(Boolean).join(' – '),+String(x.q).replace(',','.')||x.q,'n.',null,null,'non addebitata']);g.font={color:{argb:'FF2E7D4F'}}});
+      if(A.garanzia.righe.length){const g=ws.addRow([...base,'VALORE IN GARANZIA (NON ADDEBITATO)',null,'',null,null,euro(A.garanzia.totale)+' €']);g.font={bold:true,color:{argb:'FF2E7D4F'}}}
+      ws.addRow([])}
     ['H','I'].forEach(c=>ws.getColumn(c).numFmt='#,##0.00');
     const buf=await wb.xlsx.writeBuffer();
     await DL.save({filename:'Da fatturare '+today()+'.xlsx',data:new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})})}
