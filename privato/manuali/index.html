@@ -397,9 +397,9 @@ render();
   try { const user = await claude.use("user"); if (user) { const c = await user.can("data.write"); if (c === false) readOnly = true; } } catch {}
   [assets, downloads] = await Promise.all([claude.use("assets").catch(() => null), claude.use("downloads").catch(() => null)]);
   if (readOnly) { $("#banner").hidden = false; $("#banner").textContent = "Stai consultando il catalogo in sola lettura."; }
-  db.doc("config/main").onSnapshot(s => { if (s.exists) { const d = s.data(); config = {categorie: [...(d.categorie||[])], lingue: [...(d.lingue||["IT","EN"])]}; } render(); }, () => {});
+  db.doc("config/main").onSnapshot(s => { if (s.exists) { const d = s.data(); config = {categorie: [...(d.categorie||[])], lingue: [...(d.lingue||["IT","EN"])]}; } render(); }, e => { $("#banner").hidden = false; $("#banner").textContent = "Configurazione non caricata: " + ((e && (e.message || e.code)) || "errore sconosciuto"); });
   db.collection("macchine").onSnapshot(s => { machines = s.docs.map(d => ({id: d.id, ...d.data()})); render(); },
-    e => { $("#banner").hidden = false; $("#banner").textContent = "Aggiornamento in tempo reale interrotto: ricarica la pagina."; });
+    e => { $("#banner").hidden = false; $("#banner").textContent = "Il catalogo non si carica: " + ((e && (e.message || e.code)) || "errore sconosciuto"); });
 })();
 </script>
 
