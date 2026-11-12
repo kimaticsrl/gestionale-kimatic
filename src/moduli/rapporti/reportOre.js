@@ -30,16 +30,27 @@ export function nomiTecnici(s) {
 
 const ore = (min) => Math.round(min / 6) / 10; // in ore, al decimo
 
-// rapporti: righe della tabella (con dati); da/a: 'AAAA-MM-GG' compresi
-export function righeReport(rapporti, da, a) {
+// Il cliente è all'estero? Dal paese dell'Anagrafica clienti o, se manca, dall'indirizzo del rapporto
+const ITALIA = /\b(ital[iy]a?|italy)\b/i;
+const ESTERI = /\b(spagna|spain|españa|francia|france|germania|germany|deutschland|polonia|poland|polska|regno unito|united kingdom|uk|england|inghilterra|portogallo|portugal|austria|svizzera|switzerland|schweiz|belgio|belgium|olanda|paesi bassi|netherlands|grecia|greece|romania|bulgaria|croazia|slovenia|serbia|ungheria|hungary|rep\.? ceca|czech|slovacchia|turchia|turkey|tunisia|marocco|morocco|algeria|egitto|egypt|usa|stati uniti|united states|canada|messico|mexico|brasile|brazil|argentina|cile|chile|cina|china|india|israele|svezia|sweden|norvegia|norway|danimarca|denmark|finlandia|finland|irlanda|ireland|lituania|lettonia|estonia|ucraina|russia)\b/i;
+export function estero(paese, indirizzo) {
+  if (paese) return !ITALIA.test(paese);
+  return ESTERI.test(String(indirizzo || ''));
+}
+
+// rapporti: righe della tabella (con dati); da/a: 'AAAA-MM-GG' compresi;
+// paeseDi(r): paese del cliente dall'anagrafica (facoltativo)
+export function righeReport(rapporti, da, a, paeseDi) {
   const out = [];
   for (const row of rapporti) {
     const r = row.dati || {};
     const nomi = nomiTecnici(r.tecnici);
+    const fuori = estero(paeseDi ? paeseDi(r) : '', r.cli?.indirizzo);
     for (const g of r.giorni || []) {
       if (!g.d || g.d < da || g.d > a) continue;
-      const s = RI.split(g), nt = Math.max(1, +g.nt || 1), v = g.v || {}, vnt = Math.max(1, +v.nt || 1);
-      const viaggio = RI.DUR(v.da, v.a), tr = g.tr || {}, training = RI.DUR(tr.da, tr.a);
+      const s = RI.split(g), nt = Math.max(1, +g.nt || 1), vv = RI.viaggi(g).filter((v) => v.da || v.a || v.km);
+      const viaggio = vv.reduce((t, v) => t + RI.DURV(v), 0), km = vv.reduce((t, v) => t + (+v.km || 0), 0), tr = g.tr || {}, training = RI.DUR(tr.da, tr.a);
+      const vnt = vv.length ? Math.max(...vv.map((v) => Math.max(1, +v.nt || 1))) : nt;
       const notte = RI.notte(r, g);
       const n = RI.d2n(g.d), dw = RI.dow(n), fest = festivo(g.d);
       const avvisi = [];
@@ -52,8 +63,8 @@ export function righeReport(rapporti, da, a) {
         out.push({
           tecnico: t, data: g.d, giorno: GIORNI[dw], festivo: fest || (dw === 6 ? 'domenica' : dw === 5 ? 'sabato' : ''),
           cliente: r.cli?.nome || '', rapporto: r.num || '', stato: r.firma ? 'firmato' : 'in compilazione',
-          lavoro: ore(s.tot), ordinarie: ore(s.tOrd), straordinario: ore(s.tExt), viaggio: ore(viaggio), km: +v.km || 0,
-          training: ore(training), notte: notte ? 1 : 0, garanzia: g.gar ? 'sì' : '', avvisi: avvisi.join('; '),
+          lavoro: ore(s.tot), ordinarie: ore(s.tOrd), straordinario: ore(s.tExt), viaggio: ore(viaggio), km,
+          training: ore(training), notte: notte ? 1 : 0, estero: fuori, garanzia: g.gar ? 'sì' : '', avvisi: avvisi.join('; '),
         });
       }
     }
@@ -64,9 +75,9 @@ export function righeReport(rapporti, da, a) {
 export function riepilogo(righe) {
   const m = new Map();
   for (const x of righe) {
-    const t = m.get(x.tecnico) || { tecnico: x.tecnico, giornate: new Set(), lavoro: 0, ordinarie: 0, straordinario: 0, viaggio: 0, km: 0, notti: 0, festivi: 0 };
+    const t = m.get(x.tecnico) || { tecnico: x.tecnico, giornate: new Set(), lavoro: 0, ordinarie: 0, straordinario: 0, viaggio: 0, km: 0, notti: 0, nottiIt: 0, nottiEst: 0, festivi: 0 };
     t.giornate.add(x.data); t.lavoro += x.lavoro; t.ordinarie += x.ordinarie; t.straordinario += x.straordinario;
-    t.viaggio += x.viaggio; t.km += x.km; t.notti += x.notte; if (x.festivo) t.festivi += x.lavoro;
+    t.viaggio += x.viaggio; t.km += x.km; t.notti += x.notte; if (x.notte) { if (x.estero) t.nottiEst++; else t.nottiIt++; } if (x.festivo) t.festivi += x.lavoro;
     m.set(x.tecnico, t);
   }
   const r1 = (n) => Math.round(n * 10) / 10;
@@ -93,17 +104,17 @@ export async function creaExcel(ExcelJS, righe, da, a) {
   const R = riepilogo(righe);
   const w1 = wb.addWorksheet('Riepilogo per tecnico', { views: [{ state: 'frozen', ySplit: 4 }] });
   intest(w1, 'Report ore tecnici – riepilogo');
-  testata(w1, [['Tecnico', 26], ['Giornate', 10], ['Ore lavoro', 11], ['di cui ordinarie', 12], ['Straordinario (oltre 8 h/giorno)', 15], ['di cui sab./dom./festivi', 13], ['Ore viaggio', 11], ['Km', 9], ['Notti fuori = indennità di trasferta', 16]]);
-  R.forEach((t) => w1.addRow([t.tecnico, t.giornate, t.lavoro, t.ordinarie, t.straordinario, t.festivi, t.viaggio, t.km, t.notti]));
-  const tot = w1.addRow(['Totale', ...['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'].map((c) => ({ formula: `SUM(${c}5:${c}${4 + R.length})` }))]);
+  testata(w1, [['Tecnico', 26], ['Giornate', 10], ['Ore lavoro', 11], ['di cui ordinarie', 12], ['Straordinario (oltre 8 h/giorno)', 15], ['di cui sab./dom./festivi', 13], ['Ore viaggio', 11], ['Km', 9], ['Notti fuori Italia (indennità)', 14], ['Notti fuori estero (indennità)', 14]]);
+  R.forEach((t) => w1.addRow([t.tecnico, t.giornate, t.lavoro, t.ordinarie, t.straordinario, t.festivi, t.viaggio, t.km, t.nottiIt, t.nottiEst]));
+  const tot = w1.addRow(['Totale', ...['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'].map((c) => ({ formula: `SUM(${c}5:${c}${4 + R.length})` }))]);
   tot.font = { bold: true };
   [3, 4, 5, 6, 7].forEach((c) => { w1.getColumn(c).numFmt = '0.0'; });
 
   const w2 = wb.addWorksheet('Dettaglio giornate', { views: [{ state: 'frozen', ySplit: 4 }] });
   intest(w2, 'Report ore tecnici – dettaglio giornate');
-  testata(w2, [['Tecnico', 22], ['Data', 11], ['Giorno', 11], ['Sab./dom./festivo', 15], ['Cliente', 28], ['Rapporto', 18], ['Stato', 14], ['Ore lavoro', 9], ['Ordinarie', 9], ['Straordinario', 12], ['Ore viaggio', 9], ['Km', 8], ['Training', 9], ['Notte fuori (indennità)', 12], ['Garanzia', 9], ['Da verificare', 40]]);
+  testata(w2, [['Tecnico', 22], ['Data', 11], ['Giorno', 11], ['Sab./dom./festivo', 15], ['Cliente', 28], ['Rapporto', 18], ['Stato', 14], ['Ore lavoro', 9], ['Ordinarie', 9], ['Straordinario', 12], ['Ore viaggio', 9], ['Km', 8], ['Training', 9], ['Notte fuori (indennità)', 14], ['Garanzia', 9], ['Da verificare', 40]]);
   righe.forEach((x) => {
-    const r = w2.addRow([x.tecnico, new Date(x.data + 'T00:00:00Z'), x.giorno, x.festivo, x.cliente, x.rapporto, x.stato, x.lavoro, x.ordinarie, x.straordinario, x.viaggio, x.km, x.training, x.notte ? 'sì' : '', x.garanzia, x.avvisi]);
+    const r = w2.addRow([x.tecnico, new Date(x.data + 'T00:00:00Z'), x.giorno, x.festivo, x.cliente, x.rapporto, x.stato, x.lavoro, x.ordinarie, x.straordinario, x.viaggio, x.km, x.training, x.notte ? (x.estero ? 'sì – estero' : 'sì – Italia') : '', x.garanzia, x.avvisi]);
     if (x.festivo) r.getCell(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
     if (x.notte) r.getCell(14).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDDEBF7' } };
     if (x.avvisi) r.getCell(16).font = { color: { argb: 'FFB3261E' } };
@@ -116,10 +127,10 @@ export async function creaExcel(ExcelJS, righe, da, a) {
 }
 
 // PDF del report ore di un singolo rapporto (A4 verticale)
-export function pdfReport(jsPDF, r, logo) {
+export function pdfReport(jsPDF, r, logo, paeseDi) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const L = 12, R = 198, W = R - L, FONDO = 282;
-  const righe = righeReport([{ dati: r }], '0000-01-01', '9999-12-31');
+  const righe = righeReport([{ dati: r }], '0000-01-01', '9999-12-31', paeseDi ? () => paeseDi(r) : null);
   const tot = riepilogo(righe);
   const num = (n) => (n ? String(Math.round(n * 10) / 10).replace('.', ',') : '–');
   const t = (s, x, y, o = {}) => { doc.setFont('helvetica', o.b ? 'bold' : 'normal'); doc.setFontSize(o.sz || 8.5); doc.setTextColor(o.c || '#1b1b1b'); doc.text(String(s ?? ''), x, y, { align: o.al || 'left', maxWidth: o.mw }); };
@@ -175,16 +186,17 @@ export function pdfReport(jsPDF, r, logo) {
   else {
     tabella('Giornate', [
       { t: 'Data', w: 18, v: (d) => RI.fd(d.data) }, { t: 'Giorno', w: 22, v: (d) => d.festivo && d.festivo !== d.giorno ? `${d.giorno} (${d.festivo})` : d.giorno },
-      { t: 'Tecnico', w: 34, v: (d) => d.tecnico }, { t: 'Lavoro', w: 14, n: 1, v: (d) => num(d.lavoro) }, { t: 'Ordinarie', w: 16, n: 1, v: (d) => num(d.ordinarie) },
-      { t: 'Straord.', w: 15, n: 1, v: (d) => num(d.straordinario) }, { t: 'Viaggio', w: 15, n: 1, v: (d) => num(d.viaggio) }, { t: 'Km', w: 12, n: 1, v: (d) => d.km || '–' },
-      { t: 'Training', w: 15, n: 1, v: (d) => num(d.training) }, { t: 'Notte fuori', w: 25, v: (d) => (d.notte ? '   sì – indennità' : '   no') },
+      { t: 'Tecnico', w: 38, v: (d) => d.tecnico }, { t: 'Lavoro', w: 15, n: 1, v: (d) => num(d.lavoro) }, { t: 'Ordinarie', w: 17, n: 1, v: (d) => num(d.ordinarie) },
+      { t: 'Straord.', w: 16, n: 1, v: (d) => num(d.straordinario) }, { t: 'Viaggio', w: 16, n: 1, v: (d) => num(d.viaggio) }, { t: 'Km', w: 14, n: 1, v: (d) => d.km || '–' },
+      { t: 'Notte fuori', w: 30, v: (d) => (d.notte ? (d.estero ? '   sì – estero' : '   sì – Italia') : '   no') },
     ], righe, { evidenzia: (d) => !!d.festivo });
 
     tabella('Totali per tecnico', [
-      { t: 'Tecnico', w: 40, v: (d) => d.tecnico }, { t: 'Giornate', w: 15, n: 1, v: (d) => d.giornate }, { t: 'Lavoro', w: 16, n: 1, v: (d) => num(d.lavoro) },
-      { t: 'Ordinarie', w: 17, n: 1, v: (d) => num(d.ordinarie) }, { t: 'Straord.', w: 17, n: 1, v: (d) => num(d.straordinario) },
-      { t: 'Sab/dom/fest.', w: 21, n: 1, v: (d) => num(d.festivi) }, { t: 'Viaggio', w: 16, n: 1, v: (d) => num(d.viaggio) }, { t: 'Km', w: 14, n: 1, v: (d) => d.km || '–' },
-      { t: 'Indennità trasferta', w: 30, n: 1, v: (d) => (d.notti ? `${d.notti} ${d.notti === 1 ? 'notte' : 'notti'}` : '–') },
+      { t: 'Tecnico', w: 34, v: (d) => d.tecnico }, { t: 'Giornate', w: 14, n: 1, v: (d) => d.giornate }, { t: 'Lavoro', w: 14, n: 1, v: (d) => num(d.lavoro) },
+      { t: 'Ordinarie', w: 15, n: 1, v: (d) => num(d.ordinarie) }, { t: 'Straord.', w: 15, n: 1, v: (d) => num(d.straordinario) },
+      { t: 'Sab/dom/fest.', w: 19, n: 1, v: (d) => num(d.festivi) }, { t: 'Viaggio', w: 14, n: 1, v: (d) => num(d.viaggio) }, { t: 'Km', w: 13, n: 1, v: (d) => d.km || '–' },
+      { t: 'Indenn. Italia', w: 24, n: 1, v: (d) => (d.nottiIt ? `${d.nottiIt} ${d.nottiIt === 1 ? 'notte' : 'notti'}` : '–') },
+      { t: 'Indenn. estero', w: 24, n: 1, v: (d) => (d.nottiEst ? `${d.nottiEst} ${d.nottiEst === 1 ? 'notte' : 'notti'}` : '–') },
     ], tot, { grassetto: () => true });
 
     const avvisi = [...new Set(righe.filter((d) => d.avvisi).map((d) => `${RI.fd(d.data)}: ${d.avvisi}`))];
@@ -195,7 +207,7 @@ export function pdfReport(jsPDF, r, logo) {
       y += 3;
     }
     nuovaPagina(14);
-    t("Ore in ore e decimi (7,5 = 7 ore e 30 minuti). Straordinario: ore oltre le 8 nella stessa giornata. Notte fuori: indicata dal tecnico o, se non indicata, quando il giorno dopo c'è un'altra giornata dello stesso rapporto.", L, y, { sz: 7.3, c: '#666666', mw: W });
+    t("Ore in ore e decimi (7,5 = 7 ore e 30 minuti). Straordinario: ore oltre le 8 nella stessa giornata. Notte fuori: indicata dal tecnico o, se non indicata, quando il giorno dopo c'è un'altra giornata dello stesso rapporto; Italia o estero secondo il paese del cliente.", L, y, { sz: 7.3, c: '#666666', mw: W });
   }
 
   const n = doc.getNumberOfPages();

@@ -113,3 +113,9 @@
 .ri main{padding-top:12px;max-width:none}
 .ri .toast{position:fixed}
 .ri [data-ri=app]{display:flex;flex-direction:column;gap:14px;padding-top:12px;max-width:1040px}
+
+/* campi orario con il tasto «Adesso» e km con «Calcola» */
+.ri .ora{display:flex;gap:4px;align-items:center;min-width:0}
+.ri .ora input{flex:1;min-width:0}
+.ri .ora .ora-b{flex:none;padding:4px 8px;font-size:12px}
+.ri .fascia{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr) auto;max-width:520px}

@@ -27,7 +27,14 @@ export function creaDb(supabase) {
 
   async function carica(nome) {
     const t = TABELLE[nome];
-    const { data, error } = await supabase.from(t.tabella).select(t.campi);
+    // a pagine da 1000 righe (limite di Supabase per ogni richiesta)
+    let data = [], error = null;
+    for (let da = 0; ; da += 1000) {
+      const res = await supabase.from(t.tabella).select(t.campi).order(t.chiave).range(da, da + 999);
+      if (res.error) { error = res.error; break; }
+      data = data.concat(res.data || []);
+      if (!res.data || res.data.length < 1000) break;
+    }
     const L = ascolti[nome] || [];
     if (error) { L.forEach((a) => a.err && a.err(error)); return; }
     ultimi[nome] = new Set(data.map((r) => r[t.chiave]));

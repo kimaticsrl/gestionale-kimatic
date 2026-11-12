@@ -41,8 +41,8 @@ async function checkInteg(r){if(!r.firma||!r.firma.hash)return;const h=await dig
 function newRap(){
   const d=new Date(),yy=String(d.getFullYear()).slice(2),md=String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
   const id='r'+Date.now().toString(36)+rid();
-  return{id,num:'RI-'+yy+md+'-'+rid().slice(0,3).toUpperCase(),tipo:'man',cli:{id:'',nome:'',indirizzo:'',contatto:''},matr:'',macDesc:'',oreMac:'',sacchi:'',tecnici:'',
-    giorni:[{id:rid(),d:today(),v:{},tr:{},f:[{da:'08:00',a:'12:00'},{da:'13:00',a:'17:00'}],nt:'1',gar:false,att:''}],ric:[],note:'',by:ME||'',cr:new Date().toISOString()};
+  return{id,num:'RI-'+yy+md+'-'+rid().slice(0,3).toUpperCase(),tipo:'man',cli:{id:'',nome:'',indirizzo:'',contatto:''},matr:'',macDesc:'',oreMac:'',sacchi:'',tecnici:CTX.nome||'',
+    giorni:[{id:rid(),d:today(),v:{},vr:{},tr:{},f:[{da:'08:00',a:'12:00'},{da:'13:00',a:'17:00'}],nt:'1',gar:false,att:''}],ric:[],note:'',by:ME||'',cr:new Date().toISOString()};
 }
 function queueSave(){DIRTY=true;setSync('Modifiche da salvare…');clearTimeout(ST);ST=setTimeout(flush,700)}
 async function flush(){
@@ -131,14 +131,40 @@ function vEdit(){
 }
 function vDay(g,i,dis){
   const n=RI.d2n(g.d),s=RI.split(g),v=g.v||{},tr=g.tr||{},lk=!!dis;
-  const ft=(g.f||[]).map((f,j)=>`<div class="fascia"><input id="d${i}f${j}a" type="time" data-k="giorni.${i}.f.${j}.da" value="${esc(f.da)}" aria-label="Dalle"${dis}><span>–</span><input id="d${i}f${j}b" type="time" data-k="giorni.${i}.f.${j}.a" value="${esc(f.a)}" aria-label="Alle"${dis}>${lk?'<span></span>':`<button type="button" class="sm dng" data-delf="${i}.${j}" aria-label="Elimina fascia">✕</button>`}</div>`).join('');
+  const ft=(g.f||[]).map((f,j)=>`<div class="fascia"><span class="ora"><input id="d${i}f${j}a" type="time" data-k="giorni.${i}.f.${j}.da" value="${esc(f.da)}" aria-label="Dalle"${dis}>${lk?'':`<button type="button" class="sm ora-b" data-ora="giorni.${i}.f.${j}.da" title="Inizio adesso">Adesso</button>`}</span><span>–</span><span class="ora"><input id="d${i}f${j}b" type="time" data-k="giorni.${i}.f.${j}.a" value="${esc(f.a)}" aria-label="Alle"${dis}>${lk?'':`<button type="button" class="sm ora-b" data-ora="giorni.${i}.f.${j}.a" title="Fine adesso">Adesso</button>`}</span>${lk?'<span></span>':`<button type="button" class="sm dng" data-delf="${i}.${j}" aria-label="Elimina fascia">✕</button>`}</div>`).join('');
   return `<div class="day"><div class="dh"><input id="d${i}d" type="date" data-k="giorni.${i}.d" value="${esc(g.d)}" aria-label="Data"${dis}><span class="dn">${n!=null?GG[RI.dow(n)]:''}</span><span class="sp"></span>${lk?'':`<button type="button" class="sm dng" data-delday="${i}">Elimina giornata</button>`}</div>
+   ${vViaggio(g,i,'v','Viaggio di andata',dis)}
    <div class="blk"><b>Lavoro presso il cliente</b><div class="fasce">${ft}</div>${lk?'':`<div class="row"><button type="button" class="sm" data-addf="${i}">+ Fascia oraria</button></div>`}
     <div class="g"><label>Nr. tecnici<input id="d${i}nt" type="number" min="1" data-k="giorni.${i}.nt" value="${esc(g.nt)}"${dis}></label><label class="chk" style="align-self:end;padding-bottom:8px"><input id="d${i}g" type="checkbox" data-k="giorni.${i}.gar" ${g.gar?'checked':''}${dis}> Intervento in garanzia</label></div>
     <div class="calc" id="calc${i}">${calcTxt(g)}</div></div>
-   <div class="blk"><b>Viaggio</b><div class="g"><label>Partenza<input id="d${i}va" type="time" data-k="giorni.${i}.v.da" value="${esc(v.da)}"${dis}></label><label>Arrivo<input id="d${i}vb" type="time" data-k="giorni.${i}.v.a" value="${esc(v.a)}"${dis}></label><label>Km totali<input id="d${i}vk" inputmode="numeric" data-k="giorni.${i}.v.km" value="${esc(v.km)}"${dis}></label><label>Nr. tecnici<input id="d${i}vn" type="number" min="1" data-k="giorni.${i}.v.nt" value="${esc(v.nt)}"${dis}></label></div><label class="chk" style="margin-top:8px"><input id="d${i}nf" type="checkbox" data-k="giorni.${i}.notte" ${RI.notte(CUR,g)?'checked':''}${dis}> Notte fuori sede (indennità di trasferta)${g.notte==null?' <span class="note">· proposta automatica</span>':''}</label></div>
+   ${vViaggio(g,i,'vr','Viaggio di ritorno',dis)}
+   <div class="blk"><label class="chk" style="margin-top:8px"><input id="d${i}nf" type="checkbox" data-k="giorni.${i}.notte" ${RI.notte(CUR,g)?'checked':''}${dis}> Notte fuori sede (indennità di trasferta)${g.notte==null?' <span class="note">· proposta automatica</span>':''}</label></div>
    <div class="blk"><b>Training</b><div class="g"><label>Dalle<input id="d${i}ta" type="time" data-k="giorni.${i}.tr.da" value="${esc(tr.da)}"${dis}></label><label>Alle<input id="d${i}tb" type="time" data-k="giorni.${i}.tr.a" value="${esc(tr.a)}"${dis}></label><label class="w2">Nome partecipante<input id="d${i}tn" data-k="giorni.${i}.tr.nome" value="${esc(tr.nome)}"${dis}></label></div></div>
    <div class="blk"><b>Attività svolte</b><textarea id="d${i}at" data-k="giorni.${i}.att" placeholder="Cosa è stato fatto oggi, problemi trovati, prove eseguite"${dis}>${esc(g.att)}</textarea></div></div>`;
+}
+function vViaggio(g,i,k,titolo,dis){
+  const v=g[k]||{},lk=!!dis,p=`giorni.${i}.${k}`;
+  const ora=(c,lab)=>{const off=v[c+'Off'],z=v[c+'Tz'];return `<label>${lab}<span class="ora"><input id="d${i}${k}${c}" type="time" data-k="${p}.${c}" value="${esc(v[c])}"${dis}>${lk?'':`<button type="button" class="sm ora-b" data-ora="${p}.${c}" title="${lab} adesso">Adesso</button>`}</span>${z?`<span class="note">ora locale · ${esc(z)}${typeof off==='number'?' (UTC'+(off>=0?'+':'−')+String(Math.abs(off/60)).replace('.',',')+')':''}</span>`:''}</label>`};
+  const dur=RI.DURV(v);
+  return `<div class="blk"><b>${titolo}</b><div class="g">${ora('da','Partenza')}${ora('a','Arrivo')}<label>Km<span class="ora"><input id="d${i}${k}km" inputmode="numeric" data-k="${p}.km" value="${esc(v.km)}"${dis}>${lk?'':`<button type="button" class="sm ora-b" data-km="${p}" title="Calcola i km dalla sede Kimatic all'indirizzo del cliente">Calcola</button>`}</span>${v.kmAuto&&String(v.km)===String(v.kmAuto)?'<span class="note">proposti dal percorso stradale</span>':''}</label><label>Nr. tecnici<input id="d${i}${k}nt" type="number" min="1" data-k="${p}.nt" value="${esc(v.nt)}"${dis}></label></div>${dur?`<div class="calc"><span>Durata <b>${H(dur)}</b></span></div>`:''}</div>`;
+}
+/* orario esatto del dispositivo (fuso di dove si trova il tecnico) */
+function adesso(k){
+  const d=new Date(),hh=String(d.getHours()).padStart(2,'0'),mm=String(d.getMinutes()).padStart(2,'0');
+  setK(CUR,k,hh+':'+mm);
+  if(/\.(v|vr)\.(da|a)$/.test(k)){let tz='';try{tz=Intl.DateTimeFormat().resolvedOptions().timeZone||''}catch(e){}setK(CUR,k+'Off',-d.getTimezoneOffset());setK(CUR,k+'Tz',tz)}
+}
+/* km dalla sede all'indirizzo del cliente (percorso stradale, sola andata) */
+const KM={};
+async function calcolaKm(p,silenzioso){
+  const c=CUR.cli||{},an=S.clienti[c.id]||{};
+  const ind=[c.indirizzo||an.indirizzo,an.provincia,an.paese].filter(Boolean).join(', ');
+  if(!(c.indirizzo||an.indirizzo)){if(!silenzioso)toast('Manca l\'indirizzo del cliente: inseriscilo nei dati del rapporto');return}
+  try{
+    if(!KM[ind]){const res=await fetch('/api/km?'+new URLSearchParams({indirizzo:ind,nome:c.nome||''}));const j=await res.json();if(!res.ok)throw new Error(j.errore||'non calcolati');KM[ind]=j}
+    const j=KM[ind];setK(CUR,p+'.km',String(j.km));setK(CUR,p+'.kmAuto',String(j.km));queueSave();render();
+    if(!silenzioso)toast(`${j.km} km fino a: ${j.arrivo}`);
+  }catch(e){if(!silenzioso)toast('Km non calcolati: '+(e&&e.message||'errore'))}
 }
 function calcTxt(g){const s=RI.split(g),nt=Math.max(1,+g.nt||1);if(!s.tot)return'Inserisci le fasce orarie di lavoro.';return `<span>Totale <b>${H(s.tot)}</b></span><span>Ordinarie <b>${H(s.tOrd)}</b></span>${s.tExt?`<span class="x">Extra (oltre 8 h) <b>${H(s.tExt)}</b></span>`:''}${nt>1?`<span>Ore uomo <b>${H(s.tot*nt)}</b></span>`:''}`}
 
@@ -170,7 +196,9 @@ ROOT.addEventListener('click',async e=>{
   if(d.clr){const c=document.getElementById(d.clr);c.getContext('2d').clearRect(0,0,c.width,c.height);c.dataset.ink='';return}
   if(d.opencli){UI.cli=d.opencli;UI.cliEdit=null;saveUI();render();return}
   if(d.fatt){UI.fatt={id:d.fatt,nf:'',df:today(),note:''};render();return}
-  if((locked()||!CAN_EDIT)&&CUR&&(d.addf||d.delf||d.delday||d.delric)){return}
+  if((locked()||!CAN_EDIT)&&CUR&&(d.addf||d.delf||d.delday||d.delric||d.ora||d.km)){return}
+  if(d.ora&&CUR){adesso(d.ora);const m=/^(giorni\.\d+\.(?:v|vr))\.da$/.exec(d.ora);if(m){const g=CUR.giorni[+d.ora.split('.')[1]],v=g[d.ora.split('.')[2]]||{};if(!v.km)calcolaKm(m[1],true)}queueSave();render();return}
+  if(d.km&&CUR){calcolaKm(d.km);return}
   if(d.addf){const g=CUR.giorni[+d.addf];const last=(g.f||[]).slice(-1)[0];(g.f??=[]).push({da:last&&last.a?last.a:'',a:''});queueSave();render();return}
   if(d.delf){const[i,j]=d.delf.split('.').map(Number);CUR.giorni[i].f.splice(j,1);queueSave();render();return}
   if(d.delday){if(!confirmTwice(b,'Tocca di nuovo per eliminare la giornata'))return;CUR.giorni.splice(+d.delday,1);queueSave();render();return}
@@ -178,7 +206,7 @@ ROOT.addEventListener('click',async e=>{
   switch(d.act){
     case'nuovo':{const r=newRap();S.rapporti[r.id]=r;CUR=r;UI.open=r.id;UI.sign=false;DIRTY=true;await flush();saveUI();render();scrollTo(0,0);break}
     case'back':flush();UI.open=null;CUR=null;UI.sign=false;saveUI();render();break;
-    case'addday':{const L=CUR.giorni,last=L.slice(-1)[0];let nd=today();if(last&&last.d){const n=RI.d2n(last.d);if(n!=null)nd=RI.n2s(n+1)}if(L.some(g=>g.d===nd)&&!L.some(g=>g.d===today()))nd=today();L.push({id:rid(),d:nd,v:{},tr:{},f:last&&last.f?last.f.map(f=>({da:f.da,a:f.a})):[{da:'08:00',a:'12:00'},{da:'13:00',a:'17:00'}],nt:last?last.nt:'1',gar:last?last.gar:false,att:''});queueSave();render();break}
+    case'addday':{const L=CUR.giorni,last=L.slice(-1)[0];let nd=today();if(last&&last.d){const n=RI.d2n(last.d);if(n!=null)nd=RI.n2s(n+1)}if(L.some(g=>g.d===nd)&&!L.some(g=>g.d===today()))nd=today();L.push({id:rid(),d:nd,v:{},vr:{},tr:{},f:last&&last.f?last.f.map(f=>({da:f.da,a:f.a})):[{da:'08:00',a:'12:00'},{da:'13:00',a:'17:00'}],nt:last?last.nt:'1',gar:last?last.gar:false,att:''});queueSave();render();break}
     case'addric':(CUR.ric??=[]).push({cod:'',des:'',q:'1',gar:false});queueSave();render();break;
     case'firma':flush();UI.sign=true;render();ROOT.querySelector('.confirm').scrollIntoView({behavior:'smooth',block:'start'});break;
     case'nofirma':UI.sign=false;render();break;
@@ -235,7 +263,7 @@ async function doPdf(r){
 async function doOrePdf(r){
   if(!r)return;
   if(!DL){toast('Il download dei file non è disponibile in questa vista');return}
-  try{const jsPDF=await CTX.jsPDF();const blob=pdfReport(jsPDF,r,LOGO).output('blob');
+  try{const jsPDF=await CTX.jsPDF();const blob=pdfReport(jsPDF,r,LOGO,x=>{const c=S.clienti[x.cli&&x.cli.id]||{};return c.paese||''}).output('blob');
     const nm=('Report ore '+r.num+' '+(r.cli&&r.cli.nome||'')).replace(/[\\/:*?"<>|]+/g,' ').trim()+'.pdf';
     await DL.save({filename:nm,data:blob})}
   catch(e){if(e&&e.code==='declined')return;toast('Non riesco a creare il report: '+(e&&e.message||'errore'))}

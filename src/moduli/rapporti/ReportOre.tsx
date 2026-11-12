@@ -32,7 +32,14 @@ export default function ReportOre() {
         if (!data || data.length < 1000) break;
       }
       const [{ righeReport, creaExcel }, ExcelJS] = await Promise.all([import("./reportOre.js"), import("exceljs")]);
-      const righe = righeReport(tutti, da, a);
+      // paese dei clienti dall'Anagrafica, per distinguere le trasferte in Italia e all'estero
+      const paesi: Record<string, string> = {};
+      for (let i = 0; ; i += 1000) {
+        const { data } = await sb.from("clienti").select("id,dati").range(i, i + 999);
+        (data ?? []).forEach((c: { id: string; dati: { paese?: string } }) => { paesi[c.id] = c.dati?.paese || ""; });
+        if (!data || data.length < 1000) break;
+      }
+      const righe = righeReport(tutti, da, a, (r: { cli?: { id?: string } }) => paesi[r.cli?.id || ""] || "");
       if (!righe.length) { setStato("Nessuna giornata di intervento in questo periodo."); return; }
       const blob = await creaExcel(ExcelJS.default ?? ExcelJS, righe, da, a);
       const url = URL.createObjectURL(blob), el = document.createElement("a");
@@ -53,7 +60,7 @@ export default function ReportOre() {
           <h2>Report ore per l&apos;amministrazione</h2>
           <p className="note" style={{ margin: "0 0 10px" }}>
             File Excel con ore di lavoro (ordinarie e straordinarie oltre le 8 ore), ore di viaggio, km, sabati/domeniche/festivi
-            e notti fuori sede, cioè le giornate con indennità di trasferta. Una riga per tecnico e per giornata, più il riepilogo.
+            e notti fuori sede (indennità di trasferta), distinte tra Italia ed estero. Una riga per tecnico e per giornata, più il riepilogo.
           </p>
           <div className="row" style={{ gap: 8, marginBottom: 8 }}>
             <button type="button" className="sm" onClick={() => mese(-1)}>Mese scorso</button>

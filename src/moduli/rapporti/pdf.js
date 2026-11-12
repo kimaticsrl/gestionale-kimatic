@@ -11,6 +11,14 @@ export const RI = (function () {
   const fd = s => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : ''; };
   const dow = n => (((n + 3) % 7) + 7) % 7; // 0 = lunedì
   const DUR = (a, b) => { a = tm(a); b = tm(b); if (a == null || b == null) return 0; let d = b - a; if (d < 0) d += 1440; return d; };
+  /* durata di un viaggio: se partenza e arrivo sono stati presi col tasto «Adesso» in fusi diversi,
+     tiene conto della differenza di fuso (daOff / aOff = minuti rispetto a UTC) */
+  const DURV = (v) => {
+    v = v || {}; const a = tm(v.da), b = tm(v.a); if (a == null || b == null) return 0;
+    let d = b - a; if (typeof v.daOff === 'number' && typeof v.aOff === 'number') d -= v.aOff - v.daOff;
+    while (d < 0) d += 1440; while (d >= 1440) d -= 1440; return d;
+  };
+  const viaggi = (g) => [g.v || {}, g.vr || {}];
 
   /* divide le fasce di lavoro: le prime 8 ore sono ordinarie, il resto straordinario */
   function split(day) {
@@ -32,7 +40,7 @@ export const RI = (function () {
       const s = split(g), nt = Math.max(1, +g.nt || 1);
       ord += s.tOrd; ext += s.tExt; ordU += s.tOrd * nt; extU += s.tExt * nt;
       if (g.gar) { ordG += s.tOrd * nt; extG += s.tExt * nt; }
-      const v = g.v || {}; km += +v.km || 0; const vd = DUR(v.da, v.a); viaggio += vd; viaggioU += vd * Math.max(1, +v.nt || 1);
+      viaggi(g).forEach(v => { km += +v.km || 0; const vd = DURV(v); viaggio += vd; viaggioU += vd * Math.max(1, +v.nt || 1); });
       const t = g.tr || {}; training += DUR(t.da, t.a);
     });
     return { giorni: (r.giorni || []).length, ord, ext, ordU, extU, ordG, extG, km, viaggio, viaggioU, training, ricambi: (r.ric || []).filter(x => x.cod || x.des).length };
@@ -116,9 +124,12 @@ export const RI = (function () {
         txt(DAYS[d][0] + '/' + DAYS[d][1], L + 1.2, y + 3.3, { sz: 5.5, b: 1, i: 1 });
         const gs = wk.days[d] || []; const g = gs[0];
         if (g) {
-          const v = g.v || {}, tr = g.tr || {};
+          const va = g.v || {}, vr = g.vr || {}, tr = g.tr || {};
+          const due = (va.da || va.a) && (vr.da || vr.a);
+          const v = due ? { da: 'A ' + (va.da || '–') + ' R ' + (vr.da || '–'), a: 'A ' + (va.a || '–') + ' R ' + (vr.a || '–'), km: (+va.km || 0) + (+vr.km || 0) || '', nt: va.nt || vr.nt }
+            : (vr.da || vr.a || vr.km) && !(va.da || va.a || va.km) ? vr : va;
           const c = (x1, x2, s) => txt(s, (x1 + x2) / 2, y + 3.4, { sz: 7.5, al: 'center' });
-          if (v.da || v.a || v.km) { c(cV[1], cV[2], fd(g.d)); c(cV[2], cV[3], v.da); c(cV[3], cV[4], v.a); c(cV[4], cV[5], v.km); c(cV[5], cV[6], v.nt); }
+          if (v.da || v.a || v.km) { c(cV[1], cV[2], fd(g.d)); if (due) { txt(v.da, (cV[2] + cV[3]) / 2, y + 3.4, { sz: 6, al: 'center' }); txt(v.a, (cV[3] + cV[4]) / 2, y + 3.4, { sz: 6, al: 'center' }); } else { c(cV[2], cV[3], v.da); c(cV[3], cV[4], v.a); } c(cV[4], cV[5], v.km); c(cV[5], cV[6], v.nt); }
           if (tr.da || tr.a || tr.nome) { c(cT[0], cT[1], fd(g.d)); c(cT[1], cT[2], tr.da); c(cT[2], cT[3], tr.a); txt(fit(tr.nome, 29, 7), cT[3] + 1, y + 3.4, { sz: 7 }); }
         }
         y += rh;
@@ -209,5 +220,5 @@ export const RI = (function () {
     return (r.giorni || []).some(x => d2n(x.d) === n + 1);
   }
 
-  return { build, split, totals, notte, tm, hm, hrs, fd, d2n, n2s, dow, DUR };
+  return { build, split, totals, notte, tm, hm, hrs, fd, d2n, n2s, dow, DUR, DURV, viaggi };
 })();
