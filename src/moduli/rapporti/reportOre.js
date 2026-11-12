@@ -114,18 +114,34 @@ export async function creaExcel(ExcelJS, righe, da, a) {
   tot.font = { bold: true };
   [4, 5, 6, 7, 8].forEach((c) => { w1.getColumn(c).numFmt = '0.0'; });
 
-  const w2 = wb.addWorksheet('Dettaglio giornate', { views: [{ state: 'frozen', ySplit: 4 }] });
-  intest(w2, 'Report ore tecnici – dettaglio giornate');
-  testata(w2, [['Tecnico', 22], ['Data', 11], ['Giorno', 11], ['Sab./dom./festivo', 15], ['Cliente', 28], ['Rapporto', 18], ['Stato', 14], ['Ore lavoro', 9], ['Ordinarie', 9], ['Straordinario', 12], ['Ore viaggio', 9], ['Training', 9], ['Notte fuori (indennità)', 14], ['Garanzia', 9], ['Da verificare', 40]]);
-  righe.forEach((x) => {
-    const r = w2.addRow([x.tecnico, new Date(x.data + 'T00:00:00Z'), x.giorno, x.festivo, x.cliente, x.rapporto, x.stato, x.lavoro, x.ordinarie, x.straordinario, x.viaggio, x.training, x.notte ? (x.estero ? 'sì – estero' : 'sì – Italia') : '', x.garanzia, x.avvisi]);
-    if (x.festivo) r.getCell(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
-    if (x.notte) r.getCell(13).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDDEBF7' } };
-    if (x.avvisi) r.getCell(15).font = { color: { argb: 'FFB3261E' } };
-  });
-  w2.getColumn(2).numFmt = 'dd/mm/yyyy';
-  [8, 9, 10, 11, 12].forEach((c) => { w2.getColumn(c).numFmt = '0.0'; });
-  w2.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: 15 } };
+  // Un foglio per ogni tecnico: le sue giornate, con il totale di ogni mese
+  const usati = new Set();
+  for (const tec of [...new Set(righe.map((x) => x.tecnico))]) {
+    let nome = tec.replace(/[\[\]:*?\/\\]/g, ' ').slice(0, 31).trim() || 'Tecnico';
+    for (let i = 2; usati.has(nome.toLowerCase()); i++) nome = nome.slice(0, 28) + ' ' + i;
+    usati.add(nome.toLowerCase());
+    const w2 = wb.addWorksheet(nome, { views: [{ state: 'frozen', ySplit: 4 }] });
+    intest(w2, 'Report ore – ' + tec);
+    testata(w2, [['Data', 11], ['Giorno', 11], ['Sab./dom./festivo', 15], ['Cliente', 28], ['Rapporto', 18], ['Stato', 14], ['Ore lavoro', 9], ['Ordinarie', 9], ['Straordinario', 12], ['Ore viaggio', 9], ['Training', 9], ['Notte fuori (indennità)', 14], ['Garanzia', 9], ['Da verificare', 40]]);
+    const mie = righe.filter((x) => x.tecnico === tec);
+    for (const m of [...new Set(mie.map((x) => x.data.slice(0, 7)))].sort()) {
+      const rm = mie.filter((x) => x.data.startsWith(m));
+      rm.forEach((x) => {
+        const r = w2.addRow([new Date(x.data + 'T00:00:00Z'), x.giorno, x.festivo, x.cliente, x.rapporto, x.stato, x.lavoro, x.ordinarie, x.straordinario, x.viaggio, x.training, x.notte ? (x.estero ? 'sì – estero' : 'sì – Italia') : '', x.garanzia, x.avvisi]);
+        if (x.festivo) r.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
+        if (x.notte) r.getCell(12).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDDEBF7' } };
+        if (x.avvisi) r.getCell(14).font = { color: { argb: 'FFB3261E' } };
+      });
+      const t = riepilogo(rm)[0];
+      const tr = w2.addRow([`Totale ${nomeMese(m)}`, '', '', `${t.giornate} giornate`, '', '', t.lavoro, t.ordinarie, t.straordinario, t.viaggio, '',
+        [t.nottiIt ? `${t.nottiIt} Italia` : '', t.nottiEst ? `${t.nottiEst} estero` : ''].filter(Boolean).join(', ') || '–']);
+      tr.font = { bold: true };
+      tr.eachCell((c) => { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE1ECF4' } }; });
+      w2.addRow([]);
+    }
+    w2.getColumn(1).numFmt = 'dd/mm/yyyy';
+    [7, 8, 9, 10, 11].forEach((c) => { w2.getColumn(c).numFmt = '0.0'; });
+  }
 
   return new Blob([await wb.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
@@ -187,35 +203,36 @@ export function pdfReport(jsPDF, r, logo, paeseDi) {
 
   if (!righe.length) { t('Nessuna giornata compilata in questo rapporto.', L, y, { sz: 10 }); }
   else {
-    // Un intervento a cavallo di due mesi viene diviso per mese (ogni mese da una nuova pagina)
+    // Una sezione (e una pagina) per ogni tecnico e, se l'intervento è a cavallo di più mesi, per ogni mese
     const mesi = [...new Set(righe.map((d) => d.data.slice(0, 7)))].sort();
-    if (mesi.length > 1) {
-      t(`Intervento a cavallo di ${mesi.length} mesi: giornate e totali sono divisi per mese.`, L, y - 4, { sz: 8.5, c: '#1f3a5f', b: true });
-      y += 3;
-    }
-    mesi.forEach((m, mi) => {
-      const rm = righe.filter((d) => d.data.startsWith(m)), totm = riepilogo(rm);
-      const nm = mesi.length > 1 ? ' – ' + nomeMese(m) : '';
-      if (mesi.length > 1) {
-        if (mi > 0) { doc.addPage(); testata(); }
-        doc.setFillColor('#e1ecf4'); doc.rect(L, y - 5, W, 8, 'F');
-        t(nomeMese(m).toUpperCase(), L + 2, y + 0.5, { b: true, sz: 11, c: '#1f3a5f' }); y += 9;
-      }
-      tabella('Giornate' + nm, [
-        { t: 'Data', w: 18, v: (d) => RI.fd(d.data) }, { t: 'Giorno', w: 22, v: (d) => d.festivo && d.festivo !== d.giorno ? `${d.giorno} (${d.festivo})` : d.giorno },
-        { t: 'Tecnico', w: 40, v: (d) => d.tecnico }, { t: 'Lavoro', w: 16, n: 1, v: (d) => num(d.lavoro) }, { t: 'Ordinarie', w: 18, n: 1, v: (d) => num(d.ordinarie) },
-        { t: 'Straord.', w: 17, n: 1, v: (d) => num(d.straordinario) }, { t: 'Ore viaggio', w: 21, n: 1, v: (d) => num(d.viaggio) },
-        { t: 'Notte fuori', w: 34, v: (d) => (d.notte ? (d.estero ? '   sì – estero' : '   sì – Italia') : '   no') },
+    const tecnici = [...new Set(righe.map((d) => d.tecnico))];
+    const nota = [tecnici.length > 1 ? `una pagina per ciascuno dei ${tecnici.length} tecnici` : '', mesi.length > 1 ? `ore divise per mese (${mesi.map(nomeMese).join(', ')})` : ''].filter(Boolean).join('; ');
+    if (nota) { t(nota.charAt(0).toUpperCase() + nota.slice(1) + '.', L, y - 4, { sz: 8.5, c: '#1f3a5f', b: true }); y += 3; }
+    let prima = true;
+    tecnici.forEach((tec) => mesi.forEach((m) => {
+      const rm = righe.filter((d) => d.tecnico === tec && d.data.startsWith(m));
+      if (!rm.length) return;
+      if (!prima) { doc.addPage(); testata(); }
+      prima = false;
+      doc.setFillColor('#1f3a5f'); doc.rect(L, y - 5.5, W, 10, 'F');
+      t(tec.toUpperCase(), L + 3, y + 1.2, { b: true, sz: 12, c: '#ffffff' });
+      t(nomeMese(m), R - 3, y + 1.2, { b: true, sz: 10, c: '#ffffff', al: 'right' });
+      y += 12;
+      tabella('Giornate', [
+        { t: 'Data', w: 22, v: (d) => RI.fd(d.data) }, { t: 'Giorno', w: 40, v: (d) => d.festivo && d.festivo !== d.giorno ? `${d.giorno} (${d.festivo})` : d.giorno },
+        { t: 'Ore lavoro', w: 21, n: 1, v: (d) => num(d.lavoro) }, { t: 'Ordinarie', w: 21, n: 1, v: (d) => num(d.ordinarie) },
+        { t: 'Straordinario', w: 24, n: 1, v: (d) => num(d.straordinario) }, { t: 'Ore viaggio', w: 22, n: 1, v: (d) => num(d.viaggio) },
+        { t: 'Notte fuori', w: 36, v: (d) => (d.notte ? (d.estero ? '   sì – estero' : '   sì – Italia') : '   no') },
       ], rm, { evidenzia: (d) => !!d.festivo });
-
-      tabella('Totali per tecnico' + nm, [
-        { t: 'Tecnico', w: 34, v: (d) => d.tecnico }, { t: 'Giornate', w: 14, n: 1, v: (d) => d.giornate }, { t: 'Lavoro', w: 14, n: 1, v: (d) => num(d.lavoro) },
-        { t: 'Ordinarie', w: 15, n: 1, v: (d) => num(d.ordinarie) }, { t: 'Straord.', w: 15, n: 1, v: (d) => num(d.straordinario) },
-        { t: 'Sab/dom/fest.', w: 19, n: 1, v: (d) => num(d.festivi) }, { t: 'Ore viaggio', w: 20, n: 1, v: (d) => num(d.viaggio) },
-        { t: 'Indenn. Italia', w: 27, n: 1, v: (d) => (d.nottiIt ? `${d.nottiIt} ${d.nottiIt === 1 ? 'notte' : 'notti'}` : '–') },
-        { t: 'Indenn. estero', w: 28, n: 1, v: (d) => (d.nottiEst ? `${d.nottiEst} ${d.nottiEst === 1 ? 'notte' : 'notti'}` : '–') },
-      ], totm, { grassetto: () => true });
-    });
+      const tt = riepilogo(rm)[0];
+      tabella('Totale ' + tec + ' – ' + nomeMese(m), [
+        { t: 'Giornate', w: 18, n: 1, v: (d) => d.giornate }, { t: 'Ore lavoro', w: 21, n: 1, v: (d) => num(d.lavoro) },
+        { t: 'Ordinarie', w: 20, n: 1, v: (d) => num(d.ordinarie) }, { t: 'Straordinario', w: 24, n: 1, v: (d) => num(d.straordinario) },
+        { t: 'di cui sab/dom/fest.', w: 29, n: 1, v: (d) => num(d.festivi) }, { t: 'Ore viaggio', w: 22, n: 1, v: (d) => num(d.viaggio) },
+        { t: 'Indenn. Italia', w: 26, n: 1, v: (d) => (d.nottiIt ? `${d.nottiIt} ${d.nottiIt === 1 ? 'notte' : 'notti'}` : '–') },
+        { t: 'Indenn. estero', w: 26, n: 1, v: (d) => (d.nottiEst ? `${d.nottiEst} ${d.nottiEst === 1 ? 'notte' : 'notti'}` : '–') },
+      ], [tt], { grassetto: () => true });
+    }));
 
     const avvisi = [...new Set(righe.filter((d) => d.avvisi).map((d) => `${RI.fd(d.data)}: ${d.avvisi}`))];
     if (avvisi.length) {
