@@ -888,7 +888,9 @@ const STS=[['bozza','Da inviare'],['inviata','Inviata, in attesa'],['vinta','Vin
 const MOTP=['Prezzo troppo alto','Scelto un concorrente','Tempi di consegna','Progetto sospeso o annullato','Nessuna risposta del cliente','Altro'];
 const stOf=o=>STP[o&&o.st]!=null?o.st:'bozza',stLab=o=>(STS.find(x=>x[0]===stOf(o))||STS[0])[1];
 const stPill=o=>`<span class="pill ${STP[stOf(o)]}">${esc(({bozza:'Da inviare',inviata:'Inviata',vinta:'Vinta',persa:'Persa'})[stOf(o)])}</span>`;
-function groupsOf(){const m=new Map();S.offers.forEach(o=>{const k=o.num||'(senza numero)';(m.get(k)||m.set(k,[]).get(k)).push(o)});return[...m.entries()].map(([k,v])=>({num:k,revs:v.sort((x,y)=>(+y.rev||0)-(+x.rev||0))})).sort((x,y)=>String(y.revs[0].cr||'').localeCompare(String(x.revs[0].cr||''))||String(y.num).localeCompare(String(x.num),'it',{numeric:true}))}
+function groupsOf(){const m=new Map();S.offers.forEach(o=>{const k=o.num||'(senza numero)';(m.get(k)||m.set(k,[]).get(k)).push(o)});return[...m.entries()].map(([k,v])=>({num:k,revs:v.sort((x,y)=>(+y.rev||0)-(+x.rev||0))})).sort((x,y)=>{const a=numKey(x.num),b=numKey(y.num);return b[0]-a[0]||b[1]-a[1]||String(y.revs[0].cr||'').localeCompare(String(x.revs[0].cr||''))})}
+// Ordine per numero d'offerta: anno più recente prima, poi numero progressivo decrescente (es. 217-2026 sopra 211-2026)
+function numKey(n){n=String(n||'');const y=/-(\d{4})\s*$/.exec(n),p=/^\s*(\d+)/.exec(n);return[y?+y[1]:-1,p?+p[1]:-1]}
 function listHtml(ro){
  const q=S.q.trim().toLowerCase();
  const G0=groupsOf(),cnt={};G0.forEach(g=>{const k=stOf(g.revs[0]);cnt[k]=(cnt[k]||0)+1});
