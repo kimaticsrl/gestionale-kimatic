@@ -49,7 +49,7 @@ export function pdfNC(jsPDF: JsPDF, nc: NC, o: { logo: string; immagini: string[
   };
   let y = 0;
   const testata = () => {
-    if (o.logo) { try { doc.addImage(o.logo, "PNG", X, 9, 38, 12); } catch { /* senza logo */ } }
+    if (o.logo) { try { const p = doc.getImageProperties(o.logo), h = 16, w = Math.min(60, h * p.width / p.height); doc.addImage(o.logo, "PNG", X, 7, w, w * p.height / p.width); } catch { /* senza logo */ } } // proporzioni originali
     txt(t.titolo, R, 14, { b: true, sz: 14, al: "right" });
     txt(`${nc.numero}  ·  ${fd(d.data)}`, R, 20, { sz: 10, al: "right", c: "#444444" });
     doc.setDrawColor("#1f3a5f"); doc.setLineWidth(0.7); doc.line(X, 24, R, 24);

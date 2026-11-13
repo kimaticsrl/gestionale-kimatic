@@ -89,7 +89,7 @@ export function pdfAddebiti(jsPDF, r, A, info) {
   const taglia = (s, w, sz) => { doc.setFontSize(sz); let x = String(s ?? ''); if (doc.getTextWidth(x) <= w) return x; while (x && doc.getTextWidth(x + '…') > w) x = x.slice(0, -1); return x + '…'; };
   let y = 14;
   function testata() {
-    if (info.logo) { try { doc.addImage(info.logo, 'PNG', L, 8, 34, 11); } catch (e) { /* senza logo */ } }
+    if (info.logo) { try { const p = doc.getImageProperties(info.logo), k = Math.min(34 / p.width, 11 / p.height); doc.addImage(info.logo, 'PNG', L, 8, p.width * k, p.height * k); } catch (e) { /* senza logo */ } }
     t('RIEPILOGO ADDEBITI', R, 13, { b: true, sz: 13, al: 'right' });
     t(`${r.num || ''} · ${r.firma && r.firma.ts ? 'firmato il ' + RI.fd(r.firma.ts.slice(0, 10)) : 'non ancora firmato'}`, R, 18.5, { sz: 9, al: 'right', c: '#555555' });
     doc.setDrawColor(BLU); doc.setLineWidth(0.6); doc.line(L, 22, R, 22); y = 28;

@@ -157,7 +157,7 @@ export function pdfReport(jsPDF, r, logo, paeseDi) {
   let y = 14;
 
   function testata() {
-    if (logo) { try { doc.addImage(logo, 'PNG', L, 8, 34, 11); } catch (e) { /* senza logo */ } }
+    if (logo) { try { const p = doc.getImageProperties(logo), k = Math.min(34 / p.width, 11 / p.height); doc.addImage(logo, 'PNG', L, 8, p.width * k, p.height * k); } catch (e) { /* senza logo */ } }
     t("REPORT ORE D'INTERVENTO", R, 13, { b: true, sz: 13, al: 'right' });
     t(`${r.num || ''} · ${r.firma ? 'firmato dal cliente' : 'in compilazione'}`, R, 18.5, { sz: 9, al: 'right', c: '#555555' });
     doc.setDrawColor('#1f3a5f'); doc.setLineWidth(0.6); doc.line(L, 22, R, 22);
