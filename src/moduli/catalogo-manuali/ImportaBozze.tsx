@@ -15,6 +15,7 @@ export default function ImportaBozze({ sb, chiudi, fatto }: { sb: SupabaseClient
   const [macchine, setMacchine] = useState<Macchina[]>([]);
   const [stato, setStato] = useState("");
   const [lavoro, setLavoro] = useState(false);
+  const [statoNuovo, setStatoNuovo] = useState<"bozza" | "ok">("bozza");
 
   async function scelta(files: FileList | null) {
     if (!files?.length) return;
@@ -57,9 +58,9 @@ export default function ImportaBozze({ sb, chiudi, fatto }: { sb: SupabaseClient
         const pid = nuovoId();
         const { error } = await sb.storage.from("manuali").upload(`${pid}.pdf`, r.file, { contentType: "application/pdf" });
         if (error) { r.esito = "errore: " + error.message; continue; }
-        lingue[r.lingua] = { ...(prima || {}), rev: r.rev, data: "", stato: "bozza", note: NOTA, pdf: { id: pid, nome: r.file.name, size: r.file.size } };
+        lingue[r.lingua] = { ...(prima || {}), rev: r.rev, data: "", stato: statoNuovo, note: statoNuovo === "bozza" ? NOTA : "Traduzione approvata", pdf: { id: pid, nome: r.file.name, size: r.file.size } };
         lingueNuove.add(r.lingua);
-        r.esito = prima?.pdf ? "bozza aggiornata" : "caricato come bozza";
+        r.esito = statoNuovo === "ok" ? "caricato come tradotto" : prima?.pdf ? "bozza aggiornata" : "caricato come bozza";
       }
       const { error } = await sb.from("man_docs").upsert({ coll: "macchine", id, dati: { ...m, lingue, aggiornato: new Date().toISOString() } });
       if (error) lista.forEach((r) => (r.esito = "errore nel salvataggio: " + error.message));
@@ -70,15 +71,15 @@ export default function ImportaBozze({ sb, chiudi, fatto }: { sb: SupabaseClient
       await sb.from("man_docs").upsert({ coll: "config", id: "main", dati: { ...cfg, lingue: [...new Set([...(cfg.lingue || []), ...lingueNuove])] } });
     }
     setRighe(out); setLavoro(false);
-    const ok = out.filter((r) => /bozza/.test(r.esito || "")).length;
-    setStato(`Fatto: ${ok} PDF caricati come bozza, ${out.length - ok} non caricati (vedi la colonna Esito).`);
+    const ok = out.filter((r) => /^(caricato|bozza)/.test(r.esito || "")).length;
+    setStato(`Fatto: ${ok} PDF caricati, ${out.length - ok} non caricati (vedi la colonna Esito).`);
     fatto();
   }
 
   return (
     <div className="box" style={{ marginBottom: 12, display: "flex", flexDirection: "column", gap: 10 }}>
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <h2 style={{ margin: 0 }}>Carica traduzioni come bozze</h2>
+        <h2 style={{ margin: 0 }}>Carica traduzioni</h2>
         <button className="btn sec" onClick={chiudi} disabled={lavoro}>Chiudi</button>
       </div>
       <p className="tag" style={{ margin: 0 }}>
@@ -108,7 +109,10 @@ export default function ImportaBozze({ sb, chiudi, fatto }: { sb: SupabaseClient
               })}</tbody>
             </table>
           </div>
-          {!righe.some((r) => r.esito) && <div className="row"><button className="btn" onClick={carica} disabled={lavoro || !righe.some((r) => r.macchina)}>{lavoro ? "Carico…" : `Carica ${righe.filter((r) => r.macchina).length} PDF come bozza`}</button></div>}
+          {!righe.some((r) => r.esito) && <div className="row">
+            <label>Stato <select value={statoNuovo} onChange={(e) => setStatoNuovo(e.target.value as "bozza" | "ok")} disabled={lavoro}>
+              <option value="bozza">Bozza – da revisionare</option><option value="ok">Tradotto (approvato)</option></select></label>
+            <button className="btn" onClick={carica} disabled={lavoro || !righe.some((r) => r.macchina)}>{lavoro ? "Carico…" : `Carica ${righe.filter((r) => r.macchina).length} PDF`}</button></div>}
         </>
       )}
     </div>

@@ -37,7 +37,7 @@ export default function Manuali({ livello, utente }: { livello: string; utente: 
     <>
       {livello === "gestisce" && !importa && !bozze && (
         <div className="row" style={{ justifyContent: "flex-end", marginBottom: 8 }}>
-          <button className="btn sec" onClick={() => setBozze(true)}>Carica traduzioni come bozze</button>
+          <button className="btn sec" onClick={() => setBozze(true)}>Carica traduzioni</button>
           <button className="btn sec" onClick={() => setImporta(true)}>Importa cartella di manuali</button>
         </div>
       )}
