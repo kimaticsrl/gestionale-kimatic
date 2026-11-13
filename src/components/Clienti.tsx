@@ -9,6 +9,10 @@ type Cliente = { id: string; nome: string; dati: Dati };
 type Offerta = { id: string; num: string; cliente: string; cr: string; addr?: string[]; rifC?: string; mailC?: string; lang?: string };
 type Rapporto = { id: string; numero: string; firma_ts: string | null; creato_il: string; cli: { id?: string; nome?: string } | null };
 type Caso = { id: string; titolo: string; cliente: string; data: string };
+type RigaSam = { cod: string; desc: string; q: number | null; um: string; tipo: "macchina" | "gruppo" | "ricambio" | "servizio" | "voce" };
+type CommessaSam = { id: string; anno: number; numero: number; data: string | null; intestatario: string; destinatario: string | null; leasing: boolean; cliente_nome: string; cliente_id: string | null; tipo: string; totale: number | null; valuta: string | null; righe: RigaSam[] };
+const principali = (k: CommessaSam) => { const m = k.righe.filter((r) => r.tipo === "macchina" || r.tipo === "gruppo"); return m.length ? m : k.tipo === "senza codici" ? k.righe.filter((r) => r.tipo === "voce") : []; };
+const eur = (n: number | null, v?: string | null) => n == null ? "" : n.toLocaleString("it-IT", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + " " + (!v || v === "EURO" ? "€" : v);
 
 const CAMPI: [keyof Dati, string][] = [["codice_sam", "Codice SAM"], ["ragione_sociale", "Ragione sociale completa"], ["indirizzo", "Indirizzo"], ["cap", "CAP"], ["citta", "Città"], ["provincia", "Provincia"], ["paese", "Paese"], ["piva", "P.IVA / VAT"], ["contatto", "Persona di riferimento"], ["email", "E-mail"], ["telefono", "Telefono"], ["cellulare", "Cellulare"], ["agente", "Agente"], ["lingua", "Lingua documenti"], ["cliente_dal", "In SAM dal"]];
 const norm = (s: string) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\b(srl|s\.r\.l\.|spa|s\.p\.a\.|ltd|llc|gmbh|sa|sas|snc|oy|ab|uab)\b/g, "").replace(/[^a-z0-9]+/g, " ").trim();
@@ -22,6 +26,7 @@ export default function Clienti({ gestisce }: { gestisce: boolean }) {
   const [offerte, setOfferte] = useState<Offerta[]>([]);
   const [rapporti, setRapporti] = useState<Rapporto[]>([]);
   const [casi, setCasi] = useState<Caso[]>([]);
+  const [sam, setSam] = useState<CommessaSam[]>([]);
   const [q, setQ] = useState("");
   const [sel, setSel] = useState<string | null>(null);
   const [ed, setEd] = useState<Cliente | null>(null);
@@ -29,12 +34,14 @@ export default function Clienti({ gestisce }: { gestisce: boolean }) {
   const [carico, setCarico] = useState(true);
 
   async function carica() {
-    const [c, o, r, t] = await Promise.all([
+    const [c, o, r, t, k] = await Promise.all([
       sb.from("clienti").select("id,nome,dati").order("nome"),
       sb.from("bm_docs").select("id,num:dati->>num,cliente:dati->>cliente,cr:dati->>cr,addr:dati->addr,rifC:dati->>rifC,mailC:dati->>mailC,lang:dati->>lang").eq("coll", "offerte"),
       sb.from("rapporti").select("id,numero,firma_ts,creato_il,cli:dati->cli"),
       sb.from("ts_casi").select("id,titolo:dati->>titolo,cliente:dati->>cliente,data:dati->>data"),
+      sb.from("commesse_clienti").select("id,anno,numero,data,intestatario,destinatario,leasing,cliente_nome,cliente_id,tipo,totale,valuta,righe").order("data", { ascending: false }),
     ]);
+    setSam(k.error ? [] : (k.data ?? []) as CommessaSam[]);
     setClienti((c.data ?? []) as Cliente[]);
     setOfferte(((o.data ?? []) as Offerta[]).filter((x) => x.cliente && !/da inserire/i.test(x.cliente)));
     setRapporti((r.data ?? []) as Rapporto[]);
@@ -43,10 +50,19 @@ export default function Clienti({ gestisce }: { gestisce: boolean }) {
   }
   useEffect(() => { carica(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const samDi = useMemo(() => { const m = new Map<string, CommessaSam[]>(); sam.forEach((k) => { if (k.cliente_id) m.set(k.cliente_id, [...(m.get(k.cliente_id) || []), k]); }); return m; }, [sam]);
   const lista = useMemo(() => {
     const n = norm(q);
-    return clienti.filter((c) => !n || norm([c.nome, c.dati.ragione_sociale, c.dati.codice_sam, c.dati.piva, c.dati.paese, c.dati.citta, c.dati.cap, c.dati.contatto, c.dati.indirizzo, ...(c.dati.commesse || []).flatMap((k) => [k.num, ...(k.macchine || []).map((m) => m.matr)])].join(" ")).includes(n));
-  }, [clienti, q]);
+    return clienti.filter((c) => !n || norm([c.nome, c.dati.ragione_sociale, c.dati.codice_sam, c.dati.piva, c.dati.paese, c.dati.citta, c.dati.cap, c.dati.contatto, c.dati.indirizzo, ...(c.dati.commesse || []).flatMap((k) => [k.num, ...(k.macchine || []).map((m) => m.matr)]),
+      ...(samDi.get(c.id) || []).flatMap((k) => [k.id, ...principali(k).map((r) => r.desc)])].join(" ")).includes(n));
+  }, [clienti, q, samDi]);
+  const samSenza = useMemo(() => sam.filter((k) => !k.cliente_id), [sam]);
+  async function abbina(k: CommessaSam, cliente: string) {
+    const { error } = await sb.from("commesse_clienti").update({ cliente_id: cliente || null, abbinato_a_mano: !!cliente }).eq("id", k.id);
+    if (error) { setMsg("Abbinamento non salvato: " + error.message); return; }
+    setSam((L) => L.map((x) => (x.id === k.id ? { ...x, cliente_id: cliente || null } : x)));
+    setMsg(cliente ? `Commessa ${k.id} abbinata a ${clienti.find((c) => c.id === cliente)?.nome || cliente}.` : `Commessa ${k.id} tolta dal cliente.`);
+  }
 
   // Clienti presenti nelle offerte ma non ancora in anagrafica
   const mancanti = useMemo(() => {
@@ -105,11 +121,22 @@ export default function Clienti({ gestisce }: { gestisce: boolean }) {
             {carico ? <p className="sub">Caricamento…</p> : lista.map((x) => (
               <button key={x.id} type="button" className="btn sec" onClick={() => { setSel(x.id); setEd(null); setMsg(""); }}
                 style={{ justifyContent: "flex-start", textAlign: "left", flexDirection: "column", alignItems: "flex-start", gap: 0, fontWeight: 500, borderColor: sel === x.id ? "var(--accent)" : "var(--line)", background: sel === x.id ? "var(--accent-soft)" : "transparent", color: "var(--fg)" }}>
-                <b>{x.nome}</b><small style={{ color: "var(--muted)" }}>{[[x.dati.citta, x.dati.paese].filter(Boolean).join(", "), (x.dati.commesse || []).length ? (x.dati.commesse || []).length + " commesse" : "", x.dati.contatto].filter(Boolean).join(" · ") || "—"}</small>
+                <b>{x.nome}</b><small style={{ color: "var(--muted)" }}>{[[x.dati.citta, x.dati.paese].filter(Boolean).join(", "), (x.dati.commesse || []).length ? (x.dati.commesse || []).length + " commesse" : "", samDi.get(x.id)?.length ? samDi.get(x.id)!.length + " commesse SAM" : "", x.dati.contatto].filter(Boolean).join(" · ") || "—"}</small>
               </button>
             ))}
             {!carico && !lista.length && <p className="sub">Nessun cliente.</p>}
           </div>
+          {gestisce && samSenza.length > 0 && (
+            <details style={{ marginTop: 8 }}>
+              <summary>Commesse SAM senza cliente in anagrafica ({samSenza.length})</summary>
+              <p className="tag">Scegli il cliente a cui appartengono, oppure aggiungilo all&apos;anagrafica: le sue commesse si abbinano da sole.</p>
+              <ul style={{ paddingLeft: 16, display: "flex", flexDirection: "column", gap: 6 }}>{samSenza.map((k) => (
+                <li key={k.id}><b>{k.id}</b> {k.cliente_nome}{k.leasing ? <small> (leasing {k.intestatario})</small> : null}<br />
+                  <select aria-label={"Cliente per la commessa " + k.id} value="" onChange={(e) => abbina(k, e.target.value)} style={{ maxWidth: "100%" }}>
+                    <option value="">Abbina a…</option>{clienti.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                  </select></li>))}</ul>
+            </details>
+          )}
           {gestisce && mancanti.length > 0 && (
             <details style={{ marginTop: 8 }}>
               <summary>Nelle offerte ma non in anagrafica ({mancanti.length})</summary>
@@ -171,6 +198,38 @@ export default function Clienti({ gestisce }: { gestisce: boolean }) {
                   </tbody></table></div>
                 ) : <p className="sub">Nessuna commessa.</p>}
               </div>
+              {(() => {
+                const ks = samDi.get(c.id) || [];
+                const macchine = ks.flatMap((k) => principali(k).map((r) => ({ r, k })));
+                return (
+                  <div className="box">
+                    <h2>Macchine acquistate · storico commesse SAM</h2>
+                    {!ks.length ? <p className="sub">Nessuna commessa SAM abbinata a questo cliente.</p> : <>
+                      <p className="tag">{ks.length} commesse dal {fd(ks[ks.length - 1].data)} al {fd(ks[0].data)}. Le commesse intestate a una società di leasing sono abbinate al cliente che ha ricevuto la merce.</p>
+                      <div className="mx"><table><thead><tr><th>Commessa</th><th>Data</th><th>Macchine e gruppi</th></tr></thead><tbody>
+                        {ks.filter((k) => principali(k).length).map((k) => (
+                          <tr key={k.id}><td style={{ whiteSpace: "nowrap" }}><b>{k.id}</b>{k.leasing && <><br /><small style={{ color: "var(--muted)" }}>leasing {k.intestatario}</small></>}</td><td style={{ whiteSpace: "nowrap" }}>{fd(k.data)}</td>
+                            <td>{principali(k).map((r, i) => <div key={i}>{r.q && r.q !== 1 ? r.q + " × " : ""}{r.desc}{r.cod && <small style={{ color: "var(--muted)", fontFamily: "var(--f-mono)" }}> {r.cod}</small>}</div>)}</td></tr>
+                        ))}
+                      </tbody></table></div>
+                      {macchine.length === 0 && <p className="sub">Nelle commesse di questo cliente non ci sono macchine: solo ricambi o servizi.</p>}
+                      <details style={{ marginTop: 10 }}>
+                        <summary>Tutte le commesse con il dettaglio delle righe ({ks.length})</summary>
+                        {ks.map((k) => (
+                          <details key={k.id} style={{ margin: "6px 0 0 12px" }}>
+                            <summary><b>{k.id}</b> · {fd(k.data)} · {k.tipo}{gestisce && k.totale != null ? " · " + eur(k.totale, k.valuta) : ""}{k.leasing ? ` · intestata a ${k.intestatario}` : ""}</summary>
+                            <table style={{ marginTop: 4 }}><tbody>{k.righe.map((r, i) => (
+                              <tr key={i}><td style={{ fontFamily: "var(--f-mono)", whiteSpace: "nowrap" }}>{r.cod}</td><td>{r.desc}</td><td style={{ whiteSpace: "nowrap" }}>{r.q != null ? r.q + " " + (r.um || "") : ""}</td><td><small style={{ color: "var(--muted)" }}>{r.tipo}</small></td></tr>
+                            ))}</tbody></table>
+                            {gestisce && <p className="tag">Non è di questo cliente? <select aria-label={"Sposta la commessa " + k.id} value="" onChange={(e) => abbina(k, e.target.value === "-" ? "" : e.target.value)}>
+                              <option value="">Sposta a…</option><option value="-">— nessun cliente —</option>{clienti.filter((x) => x.id !== c.id).map((x) => <option key={x.id} value={x.id}>{x.nome}</option>)}</select></p>}
+                          </details>
+                        ))}
+                      </details>
+                    </>}
+                  </div>
+                );
+              })()}
               <div className="box">
                 <h2>Collegati a questo cliente</h2>
                 <p className="tag">Trovati per nome del cliente: vedi solo quelli dei moduli a cui hai accesso.</p>
