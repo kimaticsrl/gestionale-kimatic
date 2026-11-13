@@ -509,7 +509,7 @@ table.mx th.n,table.mx td.cl{border-left:1px solid var(--line)}table.mx th.nm,ta
       tail = replaceText(tail, 'Eos Plast srl', offer.cliente, true);
       if (offer.tdc) tail = replaceText(tail, '24/26', offer.tdc, true);
     }
-    let bodyXml = cover + bodyDescs + prices + tail;
+    let bodyXml = offer.onlyDescs ? bodyDescs.replace(/^<w:p><w:pPr><w:pageBreakBefore\/><w:spacing [^>]*\/><\/w:pPr><\/w:p>/, '') : cover + bodyDescs + prices + tail;
     let docXml = base.docHead + bodyXml + base.final + '</w:body></w:document>';
     let head = base.docHead;
     const have = {}; for (const m of head.matchAll(/xmlns:(\w+)=/g)) have[m[1]] = 1;
@@ -862,9 +862,9 @@ function render(){
  if(S.tab==='txt'&&document.activeElement&&document.activeElement.isContentEditable){S.rpend=true;return}
  const a=$('#app');if(!a)return;const ro=!S.canW||!db,roO=ro||!can('offerte'),roL=ro||!can('listino'),roI=ro||!can('impost');
  const t=S.tab==='imp'&&!(S.isAdmin||can('impost')||can('costi'))?'off':S.tab,o=cur();
- a.innerHTML=`<div class="bar"><h1>BMTEK <small>offerte</small></h1><div class="tabs">${[['off','Offerte'],['wz','Offerta guidata'],['lis','Listino'],...(S.isAdmin||can('listino')?[['txt','Testi Word']]:[]),...(S.isAdmin||can('impost')||can('costi')?[['imp','Impostazioni']]:[])].map(([k,v])=>`<button data-a="tab" data-v="${k}" aria-pressed="${t===k}">${v}</button>`).join('')}</div><span class="sp"></span><select id="uilang" class="uil" data-notr aria-label="Lingua / Language" title="Lingua / Language"><option value="IT" ${S.ui==='EN'?'':'selected'}>Italiano</option><option value="EN" ${S.ui==='EN'?'selected':''}>English</option></select><span class="sync" id="sync" aria-live="polite">${!db?'':(S.canW?'':'Sola lettura')}</span></div>
+ a.innerHTML=`<div class="bar"><h1>BMTEK <small>offerte</small></h1><div class="tabs">${[['off','Offerte'],['wz','Offerta guidata'],['lis','Listino'],...(S.isAdmin||can('listino')?[['txt','Testi Word'],['src','File sorgenti']]:[]),...(S.isAdmin||can('impost')||can('costi')?[['imp','Impostazioni']]:[])].map(([k,v])=>`<button data-a="tab" data-v="${k}" aria-pressed="${t===k}">${v}</button>`).join('')}</div><span class="sp"></span><select id="uilang" class="uil" data-notr aria-label="Lingua / Language" title="Lingua / Language"><option value="IT" ${S.ui==='EN'?'':'selected'}>Italiano</option><option value="EN" ${S.ui==='EN'?'selected':''}>English</option></select><span class="sync" id="sync" aria-live="polite">${!db?'':(S.canW?'':'Sola lettura')}</span></div>
  <div class="main">${!db?'<div class="banner">I dati non sono disponibili in questa vista: apri l’app dal suo link per lavorare sulle offerte.</div>':!S.canW?'<div class="banner">Hai l’accesso in sola lettura: puoi guardare le offerte ma non modificarle.</div>':S.ready&&!S.prof&&!S.isAdmin?`<div class="banner">Il tuo utente non è ancora abilitato: puoi solo guardare. ${S.asked?'Richiesta inviata: l’amministratore la vedrà in Impostazioni → Utenti.':'<button data-a="ureq">Richiedi l’accesso</button>'}</div>`:S.prof&&S.prof.att===false?'<div class="banner">Il tuo utente è disattivato.</div>':''}
- ${t==='off'?offView(o,roO):t==='wz'?wzView():t==='lis'?lisView(roL):t==='txt'?txView(roL):impView(roI)}</div>${S.zoom?`<div class="zoom" data-a="unzoom" role="dialog" aria-label="Immagine ingrandita"><img src="${esc(S.zoom)}" alt="">${S.zl&&S.zl.length>1?`<button class="zn zp" data-a="znav" data-d="-1" aria-label="Foto precedente">‹</button><button class="zn zx" data-a="znav" data-d="1" aria-label="Foto successiva">›</button><span class="zc">${S.zi+1} / ${S.zl.length}</span>`:''}</div>`:''}`;txAfter();trApp()}
+ ${t==='off'?offView(o,roO):t==='wz'?wzView():t==='lis'?lisView(roL):t==='txt'?txView(roL):t==='src'?srcView():impView(roI)}</div>${S.zoom?`<div class="zoom" data-a="unzoom" role="dialog" aria-label="Immagine ingrandita"><img src="${esc(S.zoom)}" alt="">${S.zl&&S.zl.length>1?`<button class="zn zp" data-a="znav" data-d="-1" aria-label="Foto precedente">‹</button><button class="zn zx" data-a="znav" data-d="1" aria-label="Foto successiva">›</button><span class="zc">${S.zi+1} / ${S.zl.length}</span>`:''}</div>`:''}`;txAfter();trApp()}
 /* ---- diario attività dell'offerta ---- */
 const AZK=[['tel','Telefonata al cliente'],['mail','Email inviata'],['sol','Sollecito inviato'],['inc','Incontro o visita'],['ris','Risposta del cliente'],['att','Attendo risposta'],['mod','Richiesta di modifiche'],['nota','Nota interna']];
 const azLab=k=>k==='st'?'Cambio di stato':k==='rev'?'Revisione':((AZK.find(x=>x[0]===k)||[])[1]||'Nota');
@@ -1215,6 +1215,91 @@ function txCats(){
  const m={};Object.keys(cnt).forEach(n=>{const e=Object.entries(cnt[n]).filter(([c])=>+c>0).sort((a,b)=>b[1]-a[1]);m[n]=e.length?+e[0][0]:0});return m}
 const txCatMan=n=>{const o=+((S.cfg.txcat||{})[hash(n)]);return o>0&&o<=CATS.length?o:0};
 const txCatOf=(n,m)=>txCatMan(n)||((m||txCats())[n]||0);
+
+/* ---- File sorgenti: descrizioni Word, listino e parametri da scaricare (senza costi del personale) ---- */
+const SRC_L=['IT','EN','FR','ES'];
+const XE=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g,'');
+function xlsxCol(i){let s='';i++;while(i>0){const m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26)}return s}
+/* Excel semplice: sheets=[{name,rows:[[...]],widths:[...]}]; la prima riga è l'intestazione in grassetto */
+async function xlsxMake(sheets){
+ const z=new JSZip();
+ z.file('[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'+sheets.map((_,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')+'</Types>');
+ z.file('_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
+ z.file('xl/workbook.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'+sheets.map((sh,i)=>`<sheet name="${XE(String(sh.name).slice(0,31))}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join('')+'</sheets></workbook>');
+ z.file('xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+sheets.map((_,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join('')+`<Relationship Id="rId${sheets.length+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`);
+ z.file('xl/styles.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.00"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE8EEF5"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="4"><xf/><xf fontId="1" fillId="2" applyFont="1" applyFill="1"/><xf numFmtId="164" applyNumberFormat="1"/><xf applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf></cellXfs></styleSheet>');
+ sheets.forEach((sh,si)=>{
+  const rows=sh.rows.map((r,ri)=>`<row r="${ri+1}">`+r.map((v,ci)=>{const ref=xlsxCol(ci)+(ri+1);if(v==null||v==='')return'';
+   if(typeof v==='number'&&isFinite(v))return`<c r="${ref}"${ri?(Number.isInteger(v)?'':' s="2"'):' s="1"'}><v>${v}</v></c>`;
+   return`<c r="${ref}" t="inlineStr"${ri?(String(v).length>60?' s="3"':''):' s="1"'}><is><t xml:space="preserve">${XE(v)}</t></is></c>`}).join('')+'</row>').join('');
+  const cols=sh.widths?'<cols>'+sh.widths.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join('')+'</cols>':'';
+  z.file(`xl/worksheets/sheet${si+1}.xml`,`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>${cols}<sheetData>${rows}</sheetData>${sh.rows.length>1&&sh.rows[0].length?`<autoFilter ref="A1:${xlsxCol(sh.rows[0].length-1)}${sh.rows.length}"/>`:''}</worksheet>`)});
+ return z.generateAsync({type:'uint8array'})}
+const XLSX_MIME='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const srcFn=n=>String(n).replace(/[\\/:*?"<>|]+/g,'-').replace(/\s+/g,' ').trim().slice(0,120);
+const srcDay=()=>{const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
+/* una descrizione Word in una lingua, con le correzioni fatte in «Testi Word» */
+async function srcDescDocx(name,lang){
+ const st=docStatus(name,lang);if(!st.p||st.pl!==lang)return null;
+ const P=await getJSON('desc_'+st.pl+'.json');if(!P[st.p])return null;
+ const [bj,final,head]=await Promise.all([getJSON('base.json'),getText('base/final.xml'),getText('base/head.txt')]);
+ const bin={};for(const p of bj.bin)bin[p]=new Uint8Array(await getBuf('base/'+p.split('/').pop()));
+ return KIT.buildOffer({JSZip,base:{parts:bj.parts,bin,cover:'',tail:'',final,docHead:head},descs:[{name,pack:txApply(P[st.p],st.ov)}],
+  offer:{onlyDescs:true,num:'',rev:0,numLabel:'',date:'',lang,cliente:'',addr:[],lines:[],noPrices:true,includeTail:false,svc:{},extra:0,discount:0},getMedia:async p=>new Uint8Array(await getBuf(p))})}
+const srcLangs=n=>SRC_L.filter(l=>{const st=docStatus(n,l);return st.p&&st.pl===l});
+async function srcZipDescs(lang){
+ const names=Object.keys(S.WM||{}).sort((a,b)=>a.localeCompare(b,'it',{numeric:true})),z=new JSZip();let n=0,i=0;
+ const L=lang?[lang]:SRC_L,tot=names.reduce((a,nm)=>a+srcLangs(nm).filter(l=>L.includes(l)).length,0);
+ for(const nm of names)for(const l of L){if(!srcLangs(nm).includes(l))continue;setStat('Preparo le descrizioni Word… '+(++i)+'/'+tot);
+  try{const out=await srcDescDocx(nm,l);if(out){z.file((lang?'':l+'/')+srcFn(nm)+'.docx',out);n++}}catch(e){console.warn('descrizione',nm,l,e)}}
+ return{data:await z.generateAsync({type:'uint8array'}),n}}
+function srcListinoRows(){
+ const cost=S.isAdmin||can('costi');
+ const H=['Gruppo','Codice','Formato','Categoria','Macchina di appartenenza','Tipo di opzione','Gruppo opzione','Descrizione IT','Descrizione EN','Descrizione FR','Descrizione ES',
+  ...(cost?['Costo meccanico €','Costo commerciale €','Parte elettrica €','Cablaggi €','Trattamenti €','Ore standard','Ore prototipo']:[]),
+  'Prezzo fisso €','Listino standard €','Listino prototipo €','Documento Word','Note interne'];
+ const rows=[H];
+ S.rows.forEach(r=>{const d=r.d||{},n=v=>v===''||v==null||isNaN(+v)?'':+v;
+  rows.push([r.g||'',r.c||'',r.f||'',(CATS[catOf(r)-1]||'')+'',r.fam||'',r.oq||'',r.og||'',d.IT||'',d.EN||'',d.FR||'',d.ES||'',
+   ...(cost?[n(r.cost),n(r.cm),n(r.e),n(r.cb),n(r.tr),n(r.h),n(r.hp)]:[]),
+   n(r.fix),rowPrice(r,'std')??'',rowPrice(r,'proto')??'',r.w||'',r.note||''])});
+ return rows}
+/* parametri delle offerte SENZA costi del personale (costo personale annuo, persone, ore, mesi, ore e pesi per reparto, costo giornaliero dei tecnici) */
+const SRC_PAR=['mk','sc','ag','rnd','vsR','bkR','fissi','ref','kn','ke'];
+function srcParSheets(){
+ const c=S.cfg||{},rows=[['Parametro','Valore']];
+ SRC_PAR.forEach(k=>{if(c[k]==null||c[k]==='')return;const v=c[k];rows.push([CFL[k]||k,PCT.includes(k)?Math.round(+v*10000)/100:(typeof v==='number'?v:String(v))])});
+ rows.push(['Nota','Esclusi i costi del personale (costo personale annuo, persone, ore mensili, mesi produttivi, ore e pesi per reparto, costo giornaliero dei tecnici).']);
+ const ag=[['Agente','Email','Paesi','Da','A','Categoria','Provvigione %']];
+ (c.agenti||[]).forEach(a=>{const R=a.regole&&a.regole.length?a.regole:[{}];R.forEach(r=>ag.push([a.nome||'',a.email||'',a.paesi||'',r.da??'',r.a??'',r.cat?(CATS[r.cat-1]||r.cat):'Tutte',r.pct??'']))});
+ return[{name:'Parametri',rows,widths:[38,60]},{name:'Agenti',rows:ag,widths:[28,30,24,10,10,18,14]}]}
+async function srcAct(a,b){
+ if(!dl){toast('Il download non è disponibile in questa vista');return}
+ if(S.busy)return;S.busy=true;render();
+ try{
+  if(a==='srcdesc'){const nm=b.dataset.n,l=b.dataset.l;const out=await srcDescDocx(nm,l);if(!out)throw new Error('descrizione non disponibile in '+l);
+   await dl.save({filename:srcFn(nm)+' '+l+'.docx',data:new Blob([out],{type:DOCX_MIME})})}
+  else if(a==='srczip'){const l=b.dataset.l||'';const r=await srcZipDescs(l);
+   await dl.save({filename:'Descrizioni Word'+(l?' '+l:'')+' '+srcDay()+'.zip',data:new Blob([r.data],{type:'application/zip'})});toast(r.n+' descrizioni Word scaricate')}
+  else if(a==='srclis'){const out=await xlsxMake([{name:'Listino',rows:srcListinoRows(),widths:[10,22,9,16,22,16,16,42,42,42,42]}]);
+   await dl.save({filename:'Listino BMTEK '+srcDay()+'.xlsx',data:new Blob([out],{type:XLSX_MIME})})}
+  else if(a==='srcpar'){const out=await xlsxMake(srcParSheets());
+   await dl.save({filename:'Parametri offerte BMTEK '+srcDay()+'.xlsx',data:new Blob([out],{type:XLSX_MIME})})}
+ }catch(e){if(!e||e.code!=='declined')toast('Download non riuscito: '+((e&&(e.code||e.message))||e))}
+ S.busy=false;setStat('');render()}
+function srcView(){
+ if(!S.WM)return'<div class="panel"><div class="empty">Caricamento…</div></div>';
+ const names=Object.keys(S.WM).sort((a,b)=>a.localeCompare(b,'it',{numeric:true})),q=(S.srcq||'').trim().toLowerCase(),L=names.filter(n=>!q||n.toLowerCase().includes(q));
+ const cnt=l=>names.filter(n=>srcLangs(n).includes(l)).length,dis=S.busy?'disabled':'';
+ const par=S.isAdmin||can('impost')||can('costi');
+ return `<div class="panel"><h2>File sorgenti</h2><div class="sync" style="line-height:1.6">I file da cui nascono le offerte, sempre aggiornati con le modifiche fatte nel gestionale: descrizioni Word (con le correzioni di «Testi Word»), listino e parametri. I costi del personale non sono inclusi.</div></div>
+ <div class="panel"><h2>Listino</h2><div class="acts"><button class="pri" data-a="srclis" ${dis}>Scarica listino (.xlsx)</button></div><div class="sync" style="margin-top:6px">${S.rows.length} voci con codici, formati, descrizioni nelle 4 lingue, prezzi di listino standard e prototipo${S.isAdmin||can('costi')?', costi dei componenti e ore':''}.</div></div>
+ ${par?`<div class="panel"><h2>Parametri</h2><div class="acts"><button class="pri" data-a="srcpar" ${dis}>Scarica parametri (.xlsx)</button></div><div class="sync" style="margin-top:6px">Mark-up, sconto, agente, arrotondamento, ricarichi, costi fissi, costo base di riferimento, referente e regole degli agenti. Esclusi i costi del personale.</div></div>`:''}
+ <div class="panel"><h2>Descrizioni Word</h2><div class="acts" style="flex-wrap:wrap;gap:6px"><button class="pri" data-a="srczip" data-l="" ${dis}>Scarica tutte (.zip)</button>${SRC_L.map(l=>`<button data-a="srczip" data-l="${l}" ${dis}>Solo ${l} (${cnt(l)})</button>`).join('')}</div>
+ <div class="acts" style="margin:10px 0 6px"><input id="srcq" type="search" placeholder="Cerca una descrizione" value="${esc(S.srcq||'')}" style="min-width:260px"></div>
+ <div class="tblw"><table class="rows"><thead><tr><th>Descrizione</th><th>Scarica il Word</th></tr></thead><tbody>${L.map(n=>`<tr><td>${esc(n)}</td><td>${srcLangs(n).map(l=>`<button data-a="srcdesc" data-n="${esc(n)}" data-l="${l}" ${dis} style="margin-right:4px">${l}</button>`).join('')||'<span class="sync">nessuna lingua</span>'}</td></tr>`).join('')||'<tr><td colspan="2" class="sync">Nessuna descrizione trovata</td></tr>'}</tbody></table></div></div>`}
+document.addEventListener('input',e=>{if(e.target&&e.target.id==='srcq'){S.srcq=e.target.value;const p=e.target.selectionStart;render();const i=document.getElementById('srcq');if(i){i.focus();try{i.setSelectionRange(p,p)}catch(_){}}}});
+
 function txView(ro){
  if(!S.WM)return'<div class="panel"><div class="empty">Caricamento…</div></div>';
  const names=Object.keys(S.WM).sort((a,b)=>a.localeCompare(b,'it',{numeric:true})),q=S.txq.trim().toLowerCase(),L=names.filter(n=>!q||n.toLowerCase().includes(q));
@@ -1356,6 +1441,7 @@ document.addEventListener('click',async e=>{
  if(!b)return;const a=b.dataset.a,o=cur();
  if(a==='tab'){S.tab=b.dataset.v;render();return}
  if(a&&a.indexOf('wz')===0){wzAct(a,b);return}
+ if(a&&a.indexOf('src')===0){srcAct(a,b);return}
  if(a==='new')return newOffer();
  if(a==='azchip'){const d=S.azd||(S.azd={k:'tel',d:todayISO(),n:'',s:''});d.k=b.dataset.k;d.s=+b.dataset.d?addDays(todayISO(),+b.dataset.d):'';render();return}
  if(a==='azadd'&&o){if(!(S.canW&&can('offerte')))return;const d=S.azd||{};if(!(d.n||'').trim()&&!d.s){toast('Scrivi un commento o indica una data «entro»');return}
