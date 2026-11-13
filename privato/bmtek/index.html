@@ -41,6 +41,11 @@ button.ico{padding:4px 7px;line-height:1}
 .it[aria-current="true"]{border-color:var(--acc);background:var(--accbg)}
 .it .cl{color:var(--mut);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.ctxm{position:fixed;z-index:1000;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.18);padding:4px;min-width:200px;display:flex;flex-direction:column}
+.ctxm .h{font-size:11.5px;color:var(--mut);padding:4px 10px 6px}
+.ctxm button{border:0;text-align:left;padding:6px 10px;border-radius:5px;display:flex;align-items:center;gap:8px}
+.ctxm button:hover,.ctxm button:focus{background:var(--accbg);outline:none}
+.ctxm button[aria-checked="true"]{font-weight:600}
 .pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11.5px;font-weight:500;background:var(--line);color:var(--fg)}
 .pill.ok{background:var(--okbg);color:var(--ok)}.pill.warn{background:var(--warnbg);color:var(--warn)}.pill.bad{background:var(--badbg);color:var(--bad)}
 .g{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px 12px}
@@ -886,6 +891,7 @@ function offView(o,ro){
  const a=`<div class="wrap ${o&&S.view==='edit'?'v-edit':'v-list'}"><div class="list panel">${listHtml(ro)}</div>${o?`<div class="ed">${editHtml(o,ro)}</div>`:`<div class="panel empty">${S.loaded.o?'Scegli un’offerta oppure creane una nuova.':'Caricamento delle offerte…'}</div>`}</div>`;return a}
 const STS=[['bozza','Da inviare'],['inviata','Inviata, in attesa'],['vinta','Vinta (ordine ricevuto)'],['persa','Persa']],STP={bozza:'',inviata:'warn',vinta:'ok',persa:'bad'};
 const MOTP=['Prezzo troppo alto','Scelto un concorrente','Tempi di consegna','Progetto sospeso o annullato','Nessuna risposta del cliente','Altro'];
+function applySt(x,v){const old=stLab(x);x.st=v;x.az=x.az||[];x.az.push({id:uid(),t:Date.now(),d:todayISO(),k:'st',n:old+' → '+stLab(x),u:S.me||''});const td=todayISO();if(v!=='bozza'&&!x.dInv)x.dInv=td;if((v==='vinta'||v==='persa')&&!x.dEs)x.dEs=td;if(v!=='persa')x.esMot=''}
 const stOf=o=>STP[o&&o.st]!=null?o.st:'bozza',stLab=o=>(STS.find(x=>x[0]===stOf(o))||STS[0])[1];
 const stPill=o=>`<span class="pill ${STP[stOf(o)]}">${esc(({bozza:'Da inviare',inviata:'Inviata',vinta:'Vinta',persa:'Persa'})[stOf(o)])}</span>`;
 function groupsOf(){const m=new Map();S.offers.forEach(o=>{const k=o.num||'(senza numero)';(m.get(k)||m.set(k,[]).get(k)).push(o)});return[...m.entries()].map(([k,v])=>({num:k,revs:v.sort((x,y)=>(+y.rev||0)-(+x.rev||0))})).sort((x,y)=>{const a=numKey(x.num),b=numKey(y.num);return b[0]-a[0]||b[1]-a[1]||String(y.revs[0].cr||'').localeCompare(String(x.revs[0].cr||''))})}
@@ -1510,7 +1516,7 @@ document.addEventListener('change',async e=>{
  if(t.dataset.o==='ag'){upd(x=>{x.ag=t.value;x.agMan=true});renderKeep();return}
  if(t.dataset.ad==='2'&&!o.agMan){const a=agentFor(t.value);upd(x=>{x.ag=a?a.id:''});renderKeep();return}
  if(t.dataset.o==='lang'||t.dataset.o==='tipo'||t.dataset.o==='cr'){upd(x=>{x[t.dataset.o]=t.value;if(t.dataset.o==='lang')delete x.cond});render();return}
- if(t.dataset.o==='st'){upd(x=>{const old=stLab(x);x.st=t.value;x.az=x.az||[];x.az.push({id:uid(),t:Date.now(),d:todayISO(),k:'st',n:old+' → '+stLab(x),u:S.me||''});const td=todayISO();if(t.value!=='bozza'&&!x.dInv)x.dInv=td;if((t.value==='vinta'||t.value==='persa')&&!x.dEs)x.dEs=td;if(t.value!=='persa')x.esMot=''});renderKeep();return}
+ if(t.dataset.o==='st'){upd(x=>applySt(x,t.value));renderKeep();return}
  if(t.dataset.o==='esMot'){upd(x=>{x.esMot=t.value;if(t.value){x.az=x.az||[];x.az.push({id:uid(),t:Date.now(),d:todayISO(),k:'st',n:'Motivo: '+t.value,u:S.me||''})}});renderKeep();return}
  if(t.dataset.o==='tail'){upd(x=>{x.tail=t.checked});render();return}
  if(t.dataset.o==='optTot'){upd(x=>{x.optTot=t.checked});render();return}
@@ -1724,7 +1730,7 @@ const EN={
 "Nuova offerta":"New offer","Cerca numero o cliente":"Search number or customer","Cerca offerta":"Search offer","Tutti gli stati":"All statuses","Filtra per stato":"Filter by status",
 "Da seguire:":"To follow up:","Da seguire: promemoria scaduti o di oggi":"To follow up: reminders overdue or due today","Da seguire":"To follow up",
 "Nessuna offerta. Crea la prima con “Nuova offerta”.":"No offers. Create the first one with “New offer”.","Scegli un’offerta oppure creane una nuova.":"Choose an offer or create a new one.","Caricamento delle offerte…":"Loading offers…",
-"senza numero":"no number","Da inviare":"To send","Inviata, in attesa":"Sent, awaiting reply","Inviata":"Sent","Vinta (ordine ricevuto)":"Won (order received)","Vinta":"Won","Persa":"Lost","Bozza":"Draft",
+"senza numero":"no number","Cambia stato":"Change status","Da inviare":"To send","Inviata, in attesa":"Sent, awaiting reply","Inviata":"Sent","Vinta (ordine ricevuto)":"Won (order received)","Vinta":"Won","Persa":"Lost","Bozza":"Draft",
 "Prezzo troppo alto":"Price too high","Scelto un concorrente":"Chose a competitor","Tempi di consegna":"Delivery times","Progetto sospeso o annullato":"Project suspended or cancelled","Nessuna risposta del cliente":"No reply from the customer","Altro":"Other",
 /* scheda offerta */
 "Offerta":"Offer","Numero offerta":"Offer number","Revisione":"Revision","Data":"Date","Lingua":"Language","Tipo (ore e costi)":"Type (hours and costs)","Standard":"Standard","Prototipo":"Prototype",
@@ -1851,6 +1857,40 @@ async function init(){
   const ae=document.activeElement,inEd=ae&&ae.closest&&ae.closest('.ed');if(!inEd)render()},e=>{S.loaded.o=true;render();toast('Errore nel caricamento: '+((e&&(e.code||e.message))||''))});
 }
 init();
+// Clic destro su un'offerta dell'elenco: menu per cambiare subito lo stato
+(function(){
+ let M=null;
+ const close=()=>{if(M){M.remove();M=null}};
+ const canSt=()=>!!(db&&S.canW&&can('offerte'));
+ document.addEventListener('contextmenu',e=>{
+  const b=e.target.closest&&e.target.closest('.list button[data-a="open"][data-id]');
+  close();if(!b||!canSt())return;
+  const o=S.offers.find(x=>x.id===b.dataset.id);if(!o)return;
+  e.preventDefault();
+  M=document.createElement('div');M.className='ctxm';M.setAttribute('role','menu');
+  M.innerHTML=`<div class="h">${esc(numLab(o)||o.num||'')} · <span>Cambia stato</span></div>`+STS.map(([k,v])=>`<button role="menuitemradio" aria-checked="${stOf(o)===k}" data-ctxst="${k}"><span class="pill ${STP[k]}" style="min-width:10px">&nbsp;</span>${esc(v)}</button>`).join('');
+  M.dataset.id=o.id;
+  (document.getElementById('app')||document.body).appendChild(M);
+  const r=M.getBoundingClientRect();
+  M.style.left=Math.max(4,Math.min(e.clientX,innerWidth-r.width-4))+'px';
+  M.style.top=Math.max(4,Math.min(e.clientY,innerHeight-r.height-4))+'px';
+  const f=M.querySelector('[aria-checked="true"]')||M.querySelector('button');if(f)f.focus();
+ });
+ document.addEventListener('click',e=>{
+  if(!M)return;const b=e.target.closest&&e.target.closest('[data-ctxst]');
+  if(!b||!M.contains(b)){close();return}
+  e.preventDefault();e.stopPropagation();
+  const o=S.offers.find(x=>x.id===M.dataset.id),v=b.dataset.ctxst;close();
+  if(!o||!canSt()||stOf(o)===v)return;
+  applySt(o,v);saveSoon(o);render();
+ },true);
+ document.addEventListener('keydown',e=>{
+  if(!M)return;
+  if(e.key==='Escape'){e.preventDefault();close();return}
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();const L=[...M.querySelectorAll('button')],i=L.indexOf(document.activeElement);const n=L[(i+(e.key==='ArrowDown'?1:-1)+L.length)%L.length];if(n)n.focus()}
+ },true);
+ addEventListener('scroll',close,true);addEventListener('resize',close);addEventListener('blur',close);
+})();
 })();
 </script>
 
