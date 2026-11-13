@@ -30,3 +30,9 @@
 .nc table.righe input{padding:6px 7px;font-size:14px}
 .nc small.nota{font-size:12px}
 .nc table.righe tbody tr{cursor:auto}.nc table.righe tbody tr:hover{background:none}
+
+.nc .ctx{position:fixed;z-index:50;min-width:210px;background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.18);padding:4px;display:flex;flex-direction:column}
+.nc .ctx-t{font-size:12px;color:var(--muted);padding:6px 8px 4px}
+.nc .ctx button{all:unset;cursor:pointer;padding:6px 8px;border-radius:5px;font-size:13px}
+.nc .ctx button:hover,.nc .ctx button:focus-visible{background:var(--bg)}
+.nc .ctx button.on{font-weight:600}

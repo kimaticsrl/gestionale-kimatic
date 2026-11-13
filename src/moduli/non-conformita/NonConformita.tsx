@@ -55,6 +55,7 @@ type NCR = NC & { r?: Riga };
 export default function NonConformita({ me, nome, gestisce, modifica }: Props) {
   const sb = useMemo(() => supabaseBrowser(), []);
   const [lista, setLista] = useState<NC[]>([]);
+  const [menu, setMenu] = useState<{ x: number; y: number; nc: NC } | null>(null);
   const [nomi, setNomi] = useState<Record<string, string>>({});
   const [carico, setCarico] = useState(true);
   const [filtro, setFiltro] = useState("attive");
@@ -165,6 +166,24 @@ export default function NonConformita({ me, nome, gestisce, modifica }: Props) {
   }
   const setG = (k: keyof Gestione, v: unknown) => ed && setEd({ ...ed, dati: { ...ed.dati, gestione: { ...(ed.dati.gestione || {}), [k]: v } } });
 
+  // menu del tasto destro sull'elenco: cambio rapido dello stato (solo chi gestisce)
+  useEffect(() => {
+    if (!menu) return;
+    const chiudi = () => setMenu(null);
+    const tasto = (e: KeyboardEvent) => { if (e.key === "Escape") setMenu(null); };
+    window.addEventListener("click", chiudi); window.addEventListener("scroll", chiudi, true); window.addEventListener("keydown", tasto);
+    return () => { window.removeEventListener("click", chiudi); window.removeEventListener("scroll", chiudi, true); window.removeEventListener("keydown", tasto); };
+  }, [menu]);
+  async function cambiaStato(x: NC, stato: string) {
+    setMenu(null);
+    if (!gestisce || stato === x.stato) return;
+    const g = { ...(x.dati.gestione || {}) };
+    if (stato === "chiusa" && !g.chiusa_il) { g.chiusa_il = oggi(); g.chiusa_da = me; }
+    if (stato !== "chiusa") { delete g.chiusa_il; delete g.chiusa_da; }
+    const { error } = await sb.from("nc").update({ stato, dati: { ...x.dati, gestione: g } }).eq("id", x.id);
+    setMsg(error ? "Stato non cambiato: " + error.message : `${x.numero}: stato cambiato in «${nomeStato(stato)}».`);
+    if (!error) await carica();
+  }
   async function salva(chiudi = false) {
     if (!ed) return;
     if (!ed.dati.fornitore?.trim()) { setMsg("Indica il fornitore."); return; }
@@ -445,7 +464,8 @@ export default function NonConformita({ me, nome, gestisce, modifica }: Props) {
             <thead><tr><th>Numero</th><th>Data</th><th>Fornitore</th><th className="hide-s">Articolo</th><th className="hide-s">Difetto</th><th>Stato</th><th className="hide-s">Compilata da</th></tr></thead>
             <tbody>
               {visibili.map((x) => (
-                <tr key={x.id} onClick={() => apri(x)} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") apri(x); }}>
+                <tr key={x.id} onClick={() => apri(x)} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") apri(x); }}
+                  onContextMenu={gestisce ? (e) => { e.preventDefault(); setMenu({ x: Math.min(e.clientX, window.innerWidth - 230), y: Math.min(e.clientY, window.innerHeight - 220), nc: x }); } : undefined}>
                   <td><b>{x.numero}</b>{x.dati.gravita === "critica" && <small className="g-critica">critica</small>}</td>
                   <td>{fd(x.dati.data)}</td>
                   <td>{x.dati.fornitore}<small>{[x.dati.ddt && "DDT " + x.dati.ddt, x.dati.commessa && "comm. " + x.dati.commessa].filter(Boolean).join(" · ")}</small></td>
@@ -459,6 +479,17 @@ export default function NonConformita({ me, nome, gestisce, modifica }: Props) {
             </tbody>
           </table>
         )}
+        {menu && (
+          <div className="ctx" role="menu" aria-label={"Stato di " + menu.nc.numero} style={{ left: menu.x, top: menu.y }} onClick={(e) => e.stopPropagation()}>
+            <div className="ctx-t">{menu.nc.numero} · cambia stato</div>
+            {STATI.map(([k, l]) => (
+              <button key={k} role="menuitemradio" aria-checked={menu.nc.stato === k} className={menu.nc.stato === k ? "on" : ""} onClick={() => cambiaStato(menu.nc, k)}>
+                <span className={"st st-" + k}>{l}</span>{menu.nc.stato === k && " ✓"}
+              </button>
+            ))}
+          </div>
+        )}
+        {gestisce && visibili.length > 0 && <p className="nota" style={{ marginTop: 8 }}>Tasto destro su una riga per cambiare subito lo stato.</p>}
         {costoAnno > 0 && <p className="nota" style={{ marginTop: 10 }}>Totale da addebitare ai fornitori (elenco filtrato): <span className="tot">{eur(costoAnno)}</span></p>}
       </div>
     </div>
