@@ -1,5 +1,5 @@
 import Nav from "@/components/Nav";
-import { utenteCorrente } from "@/lib/dati";
+import { utenteCorrente, diDirezione } from "@/lib/dati";
 import { esci } from "./azioni";
 
 export const dynamic = "force-dynamic";
@@ -12,13 +12,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   ]);
   const mods = (moduli ?? []) as { reparto_id: string }[];
   const admin = !!profilo?.is_admin && profilo.attivo;
+  const direzione = await diDirezione(supabase);
 
   const voci = [
     { href: "/", label: "Tutti i moduli", n: mods.length },
     ...(reparti ?? [])
       .filter((r) => mods.some((m) => m.reparto_id === r.id))
       .map((r) => ({ href: `/reparto/${r.id}`, label: r.nome, colore: `var(--${r.id})`, n: mods.filter((m) => m.reparto_id === r.id).length })),
-    ...(admin ? ["sep" as const, { href: "/admin/utenti", label: "Utenti" }, { href: "/admin/permessi", label: "Permessi" }, { href: "/admin/registro", label: "Registro modifiche" }, { href: "/admin/backup", label: "Backup" }] : []),
+    ...(admin ? ["sep" as const, { href: "/admin/utenti", label: "Utenti" }, { href: "/admin/permessi", label: "Permessi" }, { href: "/admin/registro", label: "Registro modifiche" }] : []),
+    ...(direzione ? [...(admin ? [] : ["sep" as const]), { href: "/admin/backup", label: "Backup" }] : []),
   ];
 
   return (

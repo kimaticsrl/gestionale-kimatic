@@ -3,17 +3,13 @@ import { useState } from "react";
 import JSZip from "jszip";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
-// Tabelle da salvare, con la colonna per ordinarle (serve a leggerle a pagine da 1000)
-const TABELLE: [string, string][] = [
-  ["reparti", "id"], ["moduli", "id"], ["ruoli", "id"], ["permessi", "ruolo_id"], ["regole_propri", "modulo_id"],
-  ["profili", "id"], ["profilo_ruoli", "profilo_id"], ["inviti", "email"],
-  ["clienti", "id"], ["rapporti", "id"], ["fatture_rapporti", "rapporto_id"],
-  ["ts_casi", "id"], ["ts_liste", "id"], ["bm_docs", "id"], ["cost_docs", "id"], ["nc", "id"], ["impostazioni", "id"], ["registro_modifiche", "id"],
-];
+// Tutte le tabelle del gestionale (elenco e righe arrivano dal database, solo per la Direzione)
 const ARCHIVI = ["troubleshooting", "non-conformita"];
+const MANUALI = "manuali";
 
 export default function Backup() {
   const [foto, setFoto] = useState(true);
+  const [manuali, setManuali] = useState(false);
   const [stato, setStato] = useState("");
   const [lavoro, setLavoro] = useState(false);
 
@@ -23,20 +19,23 @@ export default function Backup() {
     const riepilogo: Record<string, number> = {};
     setLavoro(true);
     try {
-      for (const [t, ord] of TABELLE) {
+      const { data: tabelle, error: et } = await sb.rpc("backup_tabelle");
+      if (et) throw new Error(et.message);
+      for (const t of (tabelle ?? []) as string[]) {
         setStato(`Copio ${t}…`);
         const righe: unknown[] = [];
         for (let da = 0; ; da += 1000) {
-          const { data, error } = await sb.from(t).select("*").order(ord).range(da, da + 999);
+          const { data, error } = await sb.rpc("backup_tabella", { p_tabella: t, p_da: da });
           if (error) throw new Error(`${t}: ${error.message}`);
-          righe.push(...(data ?? []));
-          if (!data || data.length < 1000) break;
+          const pagina = (data ?? []) as unknown[];
+          righe.push(...pagina);
+          if (pagina.length < 1000) break;
         }
         riepilogo[t] = righe.length;
         zip.file(`dati/${t}.json`, JSON.stringify(righe, null, 1));
       }
       if (foto) {
-        for (const b of ARCHIVI) {
+        for (const b of manuali ? [...ARCHIVI, MANUALI] : ARCHIVI) {
           const nomi: string[] = [];
           const elenca = async (cartella: string) => {
             for (let da = 0; ; da += 1000) {
@@ -92,6 +91,9 @@ export default function Backup() {
       <label className="ck" style={{ margin: "10px 0" }}>
         <input type="checkbox" checked={foto} onChange={(e) => setFoto(e.target.checked)} /> Includi foto e documenti caricati
       </label>
+      {foto && <label className="ck" style={{ margin: "0 0 10px" }}>
+        <input type="checkbox" checked={manuali} onChange={(e) => setManuali(e.target.checked)} /> Includi anche i PDF del Catalogo manuali (file molto grande)
+      </label>}
       <div className="row">
         <button className="btn" onClick={scarica} disabled={lavoro}>{lavoro ? "Backup in corso…" : "Scarica backup"}</button>
         {stato && <span role="status">{stato}</span>}

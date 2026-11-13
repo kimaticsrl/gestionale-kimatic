@@ -14,6 +14,18 @@ export async function utenteCorrente() {
   return { supabase, user, profilo };
 }
 
+/** Ruolo Direzione (attivo): l'unico che vede e scarica il backup. */
+export async function diDirezione(supabase: Awaited<ReturnType<typeof utenteCorrente>>["supabase"]) {
+  const { data } = await supabase.rpc("di_direzione");
+  return data === true;
+}
+
+export async function soloDirezione() {
+  const ctx = await utenteCorrente();
+  if (!(await diDirezione(ctx.supabase))) redirect("/");
+  return ctx;
+}
+
 export async function soloAdmin() {
   const ctx = await utenteCorrente();
   if (!ctx.profilo?.is_admin || !ctx.profilo.attivo) redirect("/");

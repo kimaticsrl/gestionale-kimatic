@@ -1759,7 +1759,8 @@ const BK_KEEP=14,BK_CH=90000,BK_COLS=['commesse','macchine','persone','agenda','
 let BKS=[],bkBusy=false;const bkLoaded={};
 const bkSlot=()=>{const n=new Date(),p=x=>String(x).padStart(2,'0');return ''+n.getFullYear()+p(n.getMonth()+1)+p(n.getDate())+(n.getHours()<13?'a':'p')};
 const bkLabel=id=>id.slice(6,8)+'/'+id.slice(4,6)+'/'+id.slice(0,4)+(id[8]==='a'?' mattina':' pomeriggio');
-async function bkRun(force){
+async function bkRun(force){return;/* Gestionale Kimatic: niente copie interne, c'è un unico backup nel gestionale (solo Direzione) */
+
  if(bkBusy||RO()||!BK_COLS.every(c=>bkLoaded[c])||!S.macchine.length)return;
  const slot=bkSlot();if(!force&&BKS.some(b=>b.id===slot))return;
  bkBusy=true;
@@ -1783,7 +1784,7 @@ async function bkRestore(id){if(!canWrite())return;
   if(!miss.length)return toast('Nessun elemento eliminato rispetto a questo backup');
   if(!cf('rb'+id,'Ripristinare '+miss.length+' elementi eliminati dopo il backup del '+bkLabel(id)+'? Gli elementi esistenti non vengono toccati.'))return;
   for(const [c,x] of miss){const {id:i,...r}=x;await db.doc(c+'/'+i).set(r);n++}toast(n+' elementi ripristinati')}catch(e){toast('Errore: '+(e.code||e.message))}}
-function bkBox(){
+function bkBox(){return'';
  const l=BKS.slice().sort((a,b)=>a.id<b.id?1:-1);
  return `<h2>Backup automatici</h2><p class="tag">Una copia completa dei dati viene salvata in automatico due volte al giorno (mattina e pomeriggio) e conservata 7 giorni. "Ripristina eliminati" ricrea solo le linee, macchine, persone o attività cancellate dopo quel backup, senza toccare ciò che esiste.</p><div class="bar"><button data-act="bknow" ${RO()?'disabled':''}>Salva un backup adesso</button></div>
  <div class="scroll dt"><table><thead><tr><th>Backup</th><th>Salvato</th><th>Linee</th><th>Macchine</th><th></th></tr></thead><tbody>${l.length?l.map(b=>`<tr><td>${bkLabel(b.id)}</td><td>${new Date(b.ts).toLocaleString('it-IT')}</td><td>${b.cnt&&b.cnt.commesse}</td><td>${b.cnt&&b.cnt.macchine}</td><td><button data-act="bkdl" data-id="${b.id}">Scarica</button> <button data-act="bkrest" data-id="${b.id}" ${RO()?'disabled':''}>Ripristina eliminati</button></td></tr>`).join(''):'<tr><td colspan="5" class="mut">Nessun backup ancora: il primo viene creato appena qualcuno apre il piano.</td></tr>'}</tbody></table></div>`}
@@ -2552,7 +2553,7 @@ async function lgStart(u){await lgKeys();
  st.textContent=canW?'sincronizzato · modifiche condivise':'sola lettura';stRole();
  let bkT=null,bkFirst=false;function bkSoon(){if(!bkFirst)return;clearTimeout(bkT);bkT=setTimeout(()=>bkRun(false),4000+Math.random()*4000)}
  ['commesse','macchine','persone','agenda','tempi','tv','ore','link','preliminari','config','accessi'].forEach(c=>db.collection(c).onSnapshot(s=>{S[c]=s.docs.map(d=>({id:d.id,...d.data()}));VER++;reindex();schedule();if(BK_COLS.includes(c)){bkLoaded[c]=1;bkSoon()}},e=>{st.textContent='errore dati: '+e.code}));
- db.collection('backup').onSnapshot(s=>{BKS=s.docs.map(d=>({id:d.id,...d.data()})).filter(b=>/^\d{8}[ap]$/.test(b.id)&&b.chs);bkFirst=true;bkSoon();if(UI.tab==='dati')schedule()},e=>{});
+ if(0)db.collection('backup').onSnapshot(s=>{BKS=s.docs.map(d=>({id:d.id,...d.data()})).filter(b=>/^\d{8}[ap]$/.test(b.id)&&b.chs);bkFirst=true;bkSoon();if(UI.tab==='dati')schedule()},e=>{});
  setInterval(()=>bkSoon(),30*60*1000);
  lgStart(u);
  /* i costi sono ora in un artifact separato: se sei il titolare, elimina eventuali residui da questo database */

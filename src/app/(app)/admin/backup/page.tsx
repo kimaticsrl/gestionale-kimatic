@@ -1,13 +1,13 @@
 import Backup from "@/components/Backup";
-import { soloAdmin } from "@/lib/dati";
+import { soloDirezione } from "@/lib/dati";
 
 export default async function PaginaBackup() {
-  await soloAdmin();
+  await soloDirezione();
   return (
     <>
       <header>
         <h1>Backup</h1>
-        <p className="sub">Copie di sicurezza dei dati del gestionale.</p>
+        <p className="sub">L'unico backup dei dati del gestionale. Lo vede solo chi ha il ruolo Direzione.</p>
       </header>
       <Backup />
       <div className="box">

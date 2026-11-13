@@ -1042,7 +1042,7 @@ async function bkUnpack(enc,s){const u=unb64(s);
  return JSON.parse(new TextDecoder().decode(u))}
 const bkSnap=()=>({v:1,t:Date.now(),groups:S.groups,offers:S.offers,cfg:S.cfg,users:S.users,hist:S.hist});
 const bkSlot=()=>{const d=new Date();return 'a-'+d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'-'+(d.getHours()<12?'am':'pm')};
-async function bkRun(tipo,id,quiet){if(!db||!S.isAdmin||!S.canW||S.bkBusy)return false;S.bkBusy=true;render();let ok=false;
+async function bkRun(tipo,id,quiet){return false;if(!db||!S.isAdmin||!S.canW||S.bkBusy)return false;S.bkBusy=true;render();let ok=false;
  try{const P=await bkPack(bkSnap()),CH=170000,parts=[];for(let i=0;i<P.s.length;i+=CH)parts.push(P.s.slice(i,i+CH));
   id=id||('m-'+Date.now().toString(36));
   for(let i=0;i<parts.length;i++)await db.doc('backup/'+id+'/parti/'+i).set({i,s:parts[i]});
@@ -1052,7 +1052,7 @@ async function bkRun(tipo,id,quiet){if(!db||!S.isAdmin||!S.canW||S.bkBusy)return
  S.bkBusy=false;render();return ok}
 async function bkPrune(){const old=[...S.bk].sort((x,y)=>y.t-x.t).slice(60);
  for(const b of old){try{for(let i=0;i<(b.k||0);i++)await db.doc('backup/'+b.id+'/parti/'+i).delete();await db.doc('backup/'+b.id).delete()}catch(e){break}}}
-function bkAuto(){if(!db||!S.isAdmin||!S.canW||!S.bkReady||S.bkBusy)return;if(!(S.loaded.l&&S.loaded.o&&S.loaded.c)||!S.rows.length)return;
+function bkAuto(){return;if(!db||!S.isAdmin||!S.canW||!S.bkReady||S.bkBusy)return;if(!(S.loaded.l&&S.loaded.o&&S.loaded.c)||!S.rows.length)return;
  const id=bkSlot();if(!S.bk.some(b=>b.id===id))bkRun('auto',id,true).then(()=>bkPrune())}
 async function bkRead(id){const m=S.bk.find(b=>b.id===id);if(!m)throw new Error('backup non trovato');let t='';
  for(let i=0;i<m.k;i++){const d=await db.doc('backup/'+id+'/parti/'+i).get();t+=d.data().s}return bkUnpack(m.enc,t)}
@@ -1070,7 +1070,8 @@ async function bkRestore(id){if(!db||!S.isAdmin||!S.canW)return;S.bkBusy=true;S.
  catch(e){toast('Ripristino non riuscito: '+((e&&(e.code||e.message))||e))}
  S.bkBusy=false;render()}
 const BKT={auto:'Automatico',manuale:'Manuale','prima del ripristino':'Prima di un ripristino'};
-function backupView(){if(!S.isAdmin)return'';const L=[...S.bk].sort((x,y)=>y.t-x.t),last=L[0];
+function backupView(){return'';/* Gestionale Kimatic: niente copie interne, c'è un unico backup nel gestionale (solo Direzione) */
+const L=[...S.bk].sort((x,y)=>y.t-x.t),last=L[0];
  return `<div class="panel"><h2>Backup dei dati</h2><div class="sync" style="margin-bottom:10px">Ogni giorno l’app salva da sola due copie di listino, offerte, impostazioni, utenti e storico: una la prima volta che qualcuno la apre al mattino (prima delle 12) e una nel pomeriggio/sera. Se nessuno la apre in quella fascia, la copia di quella fascia non viene fatta. Si tengono le ultime 60 copie. Il ripristino riscrive listino, offerte e impostazioni con i dati della copia (le offerte nate dopo restano), e prima ne fa una copia di sicurezza.</div>
  <div class="acts"><button class="pri" data-a="bkrun" ${S.bkBusy||!db?'disabled':''}>${S.bkBusy?'Attendi…':'Fai un backup adesso'}</button><button data-a="bkdl" data-v="now" ${S.bkBusy||!db?'disabled':''}>Scarica i dati attuali (file)</button><span class="sp"></span><span class="sync">${last?'Ultimo backup: '+fdt(last.t):(S.bkReady?'Nessun backup ancora':'Carico…')}</span></div>
  ${L.length?`<div class="tblw" style="margin-top:10px"><table class="rows" style="min-width:560px"><thead><tr><th>Quando</th><th>Tipo</th><th>Chi</th><th class="n">Voci</th><th class="n">Offerte</th><th></th></tr></thead><tbody>${L.slice(0,40).map(b=>`<tr><td class="mono" style="white-space:nowrap">${fdt(b.t)}</td><td>${esc(BKT[b.tipo]||b.tipo||'')}</td><td>${esc(b.tipo==='auto'?'—':(S.names[b.u]||'—'))}</td><td class="n mono">${(b.n&&b.n.voci)||''}</td><td class="n mono">${(b.n&&b.n.offerte)||''}</td><td style="white-space:nowrap"><button class="ico" data-a="bkdl" data-v="${esc(b.id)}">Scarica</button> ${S.bkRest===b.id?`<span class="sync">Riscrivere i dati?</span> <button data-a="bkrestok" data-v="${esc(b.id)}">Sì, ripristina</button> <button data-a="bkrestno">Annulla</button>`:`<button class="ico" data-a="bkrest" data-v="${esc(b.id)}" ${S.bkBusy?'disabled':''}>Ripristina</button>`}</td></tr>`).join('')}</tbody></table></div>`:''}</div>`}
