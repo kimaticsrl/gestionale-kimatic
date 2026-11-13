@@ -5,4 +5,6 @@ export function creaClaude(ctx: {
   tabella?: string;
   raccolta?: (percorso: string) => string;
   capacita?: string[];
+  rpcAggiorna?: string | null;
+  tempoReale?: boolean;
 }): unknown;

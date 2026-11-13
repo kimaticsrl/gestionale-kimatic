@@ -30,7 +30,10 @@ const pulisci = (x) => JSON.parse(JSON.stringify(x, (k, v) => (v && typeof v ===
 
 // tabella: dove stanno i documenti; raccolta: trasforma il percorso usato dalla pagina
 // (es. 'data/users/<id>/archivio/componenti') nel nome della raccolta in tabella.
-export function creaClaude({ supabase, utente, livello, tabella = 'bm_docs', raccolta = (c) => c, capacita = null }) {
+// rpcAggiorna: funzione del database che unisce i campi in modo atomico (evita di perdere
+// modifiche fatte nello stesso momento da due persone); tempoReale: aggiorna subito le pagine
+// aperte quando qualcuno modifica i dati.
+export function creaClaude({ supabase, utente, livello, tabella = 'bm_docs', raccolta = (c) => c, capacita = null, rpcAggiorna = null, tempoReale = false }) {
   const gestisce = livello === 'gestisce';
   const modifica = gestisce || livello === 'modifica';
   const [nome, ...resto] = String(utente.nome || '').trim().split(/\s+/);
@@ -56,7 +59,17 @@ export function creaClaude({ supabase, utente, livello, tabella = 'bm_docs', rac
     }
   }
   const avvisa = (coll) => (ascolti.get(coll) || new Set()).forEach((f) => f());
-  setInterval(() => ascolti.forEach((s) => s.forEach((f) => f())), 20000);
+  setInterval(() => ascolti.forEach((s) => s.forEach((f) => f())), tempoReale ? 60000 : 20000);
+  if (tempoReale) {
+    const attese = {};
+    supabase.channel('rt_' + tabella)
+      .on('postgres_changes', { event: '*', schema: 'public', table: tabella }, (ev) => {
+        const coll = (ev.new && ev.new.coll) || (ev.old && ev.old.coll);
+        const quali = coll ? [coll] : [...ascolti.keys()];
+        quali.forEach((c) => { clearTimeout(attese[c]); attese[c] = setTimeout(() => avvisa(c), 300); });
+      })
+      .subscribe();
+  }
 
   const docSnap = (id, dati) => ({ id, exists: dati != null, data: () => copia(dati) });
 
@@ -115,7 +128,15 @@ export function creaClaude({ supabase, utente, livello, tabella = 'bm_docs', rac
       id, path: percorso,
       collection: (sotto) => collezione(percorso + '/' + sotto),
       set: (dati) => scrivi(dati),
-      async update(campi) { await scrivi(unisci(await leggi(), campi)); },
+      async update(campi) {
+        if (rpcAggiorna && !VIRTUALI[coll]) {
+          const { error } = await supabase.rpc(rpcAggiorna, { p_coll: coll, p_id: id, p_campi: campi });
+          if (error) throw Object.assign(new Error(error.message), { code: 'not_granted' });
+          avvisa(coll);
+          return;
+        }
+        await scrivi(unisci(await leggi(), campi));
+      },
       async delete() {
         if (VIRTUALI[coll]) return;
         const { error } = await supabase.from(tabella).delete().eq('coll', coll).eq('id', id);

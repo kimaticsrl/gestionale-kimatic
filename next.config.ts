@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
     "/lettere/[...path]": ["./privato/lettere/**/*"],
     "/costificatore/[...path]": ["./privato/costificatore/**/*"],
     "/manuali/[...path]": ["./privato/manuali/**/*"],
+    "/piano/[...path]": ["./privato/piano/**/*"],
   },
 };
 
