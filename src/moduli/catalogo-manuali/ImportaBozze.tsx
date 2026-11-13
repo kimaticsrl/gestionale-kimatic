@@ -5,17 +5,17 @@ import { abbina, type Macchina, type Lingua } from "./importa";
 
 const nuovoId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
 const NOME = /^(.*?)[-_ ]([A-Za-z]{2})[-_ ]?rev\.?[-_ ]?(\d{1,3})/i;
-const NOTA = "Traduzione da revisionare da un madrelingua";
+const NOTA = "Tradotto con AI";
 type Riga = { file: File; documento: string; lingua: string; rev: string; macchina: string; esito?: string };
 
-// Carica le traduzioni come BOZZE nel catalogo: stato «Bozza», nota «da revisionare».
+// Carica le traduzioni nel catalogo: stato «Tradotto AI» (o «Tradotto» se già approvate).
 // Non sostituisce mai una lingua che ha già un manuale valido (Originale, Tradotto o Da aggiornare con PDF).
 export default function ImportaBozze({ sb, chiudi, fatto }: { sb: SupabaseClient; chiudi: () => void; fatto: () => void }) {
   const [righe, setRighe] = useState<Riga[]>([]);
   const [macchine, setMacchine] = useState<Macchina[]>([]);
   const [stato, setStato] = useState("");
   const [lavoro, setLavoro] = useState(false);
-  const [statoNuovo, setStatoNuovo] = useState<"bozza" | "ok">("bozza");
+  const [statoNuovo, setStatoNuovo] = useState<"ai" | "ok">("ai");
 
   async function scelta(files: FileList | null) {
     if (!files?.length) return;
@@ -53,14 +53,14 @@ export default function ImportaBozze({ sb, chiudi, fatto }: { sb: SupabaseClient
       const lingue: Record<string, Lingua> = { ...(m.lingue || {}) };
       for (const r of lista) {
         const prima = lingue[r.lingua];
-        if (prima?.pdf && prima.stato !== "bozza") { r.esito = `saltato: c'è già il manuale ${prima.stato === "originale" ? "originale" : "valido"} (rev ${prima.rev || "?"})`; continue; }
+        if (prima?.pdf && prima.stato !== "bozza" && prima.stato !== "ai") { r.esito = `saltato: c'è già il manuale ${prima.stato === "originale" ? "originale" : "valido"} (rev ${prima.rev || "?"})`; continue; }
         setStato(`Carico ${r.file.name} (${++fatti})…`);
         const pid = nuovoId();
         const { error } = await sb.storage.from("manuali").upload(`${pid}.pdf`, r.file, { contentType: "application/pdf" });
         if (error) { r.esito = "errore: " + error.message; continue; }
-        lingue[r.lingua] = { ...(prima || {}), rev: r.rev, data: "", stato: statoNuovo, note: statoNuovo === "bozza" ? NOTA : "Traduzione approvata", pdf: { id: pid, nome: r.file.name, size: r.file.size } };
+        lingue[r.lingua] = { ...(prima || {}), rev: r.rev, data: "", stato: statoNuovo, note: statoNuovo === "ai" ? NOTA : "Traduzione approvata", pdf: { id: pid, nome: r.file.name, size: r.file.size } };
         lingueNuove.add(r.lingua);
-        r.esito = statoNuovo === "ok" ? "caricato come tradotto" : prima?.pdf ? "bozza aggiornata" : "caricato come bozza";
+        r.esito = statoNuovo === "ok" ? "caricato come tradotto" : "caricato come tradotto AI";
       }
       const { error } = await sb.from("man_docs").upsert({ coll: "macchine", id, dati: { ...m, lingue, aggiornato: new Date().toISOString() } });
       if (error) lista.forEach((r) => (r.esito = "errore nel salvataggio: " + error.message));
@@ -71,7 +71,7 @@ export default function ImportaBozze({ sb, chiudi, fatto }: { sb: SupabaseClient
       await sb.from("man_docs").upsert({ coll: "config", id: "main", dati: { ...cfg, lingue: [...new Set([...(cfg.lingue || []), ...lingueNuove])] } });
     }
     setRighe(out); setLavoro(false);
-    const ok = out.filter((r) => /^(caricato|bozza)/.test(r.esito || "")).length;
+    const ok = out.filter((r) => /^caricato/.test(r.esito || "")).length;
     setStato(`Fatto: ${ok} PDF caricati, ${out.length - ok} non caricati (vedi la colonna Esito).`);
     fatto();
   }
@@ -83,8 +83,8 @@ export default function ImportaBozze({ sb, chiudi, fatto }: { sb: SupabaseClient
         <button className="btn sec" onClick={chiudi} disabled={lavoro}>Chiudi</button>
       </div>
       <p className="tag" style={{ margin: 0 }}>
-        Scegli i PDF tradotti (es. Smart_XL-FI_rev01.pdf). Ogni PDF entra nel catalogo con stato «Bozza» e la nota «{NOTA}».
-        Una lingua che ha già un manuale valido non viene toccata. Quando il madrelingua approva, cambia lo stato in «Tradotto».
+        Scegli i PDF tradotti (es. Smart_XL-FI_rev01.pdf). Ogni PDF entra nel catalogo con lo stato scelto qui sotto (di norma «Tradotto AI»).
+        Una lingua che ha già un manuale valido non viene toccata. Una traduzione già caricata come «Tradotto AI» o «Bozza» viene sostituita.
       </p>
       {!righe.length && <label className="btn" style={{ alignSelf: "flex-start" }}>Scegli i PDF…
         <input type="file" hidden multiple accept="application/pdf,.pdf" onChange={(e) => scelta(e.target.files)} /></label>}
@@ -110,8 +110,8 @@ export default function ImportaBozze({ sb, chiudi, fatto }: { sb: SupabaseClient
             </table>
           </div>
           {!righe.some((r) => r.esito) && <div className="row">
-            <label>Stato <select value={statoNuovo} onChange={(e) => setStatoNuovo(e.target.value as "bozza" | "ok")} disabled={lavoro}>
-              <option value="bozza">Bozza – da revisionare</option><option value="ok">Tradotto (approvato)</option></select></label>
+            <label>Stato <select value={statoNuovo} onChange={(e) => setStatoNuovo(e.target.value as "ai" | "ok")} disabled={lavoro}>
+              <option value="ai">Tradotto AI</option><option value="ok">Tradotto (approvato)</option></select></label>
             <button className="btn" onClick={carica} disabled={lavoro || !righe.some((r) => r.macchina)}>{lavoro ? "Carico…" : `Carica ${righe.filter((r) => r.macchina).length} PDF`}</button></div>}
         </>
       )}
