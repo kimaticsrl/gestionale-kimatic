@@ -17,6 +17,7 @@ export type DatiNC = {
   righe?: Riga[];
   codice?: string; articolo?: string; q_ricevuta?: string; q_nc?: string; um?: string; // vecchio formato (un solo articolo)
   tipo?: string; gravita?: string; descrizione?: string; foto?: string[]; gestione?: Gestione;
+  compilata_da?: string; // nome di chi compila (proposto l'utente collegato, modificabile)
 };
 export type NC = { id: string; numero: string; anno: number; stato: string; dati: DatiNC; creato_da: string | null; creato_il: string };
 
@@ -51,7 +52,7 @@ async function comprimi(f: File): Promise<Blob> {
 type Props = { me: string; nome: string; gestisce: boolean; modifica: boolean };
 type NCR = NC & { r?: Riga };
 
-export default function NonConformita({ me, gestisce, modifica }: Props) {
+export default function NonConformita({ me, nome, gestisce, modifica }: Props) {
   const sb = useMemo(() => supabaseBrowser(), []);
   const [lista, setLista] = useState<NC[]>([]);
   const [nomi, setNomi] = useState<Record<string, string>>({});
@@ -125,10 +126,17 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
     if (!c.dati.righe.length) c.dati.righe = [rigaVuota()];
     setEd(c); setMsg(""); window.scrollTo(0, 0);
   }
-  function crea() {
-    setEd({ id: "", numero: "", anno: new Date().getFullYear(), stato: "aperta", creato_da: me, creato_il: "", dati: { data: oggi(), fase: FASI[0], gravita: "maggiore", righe: [rigaVuota()], foto: [] } });
-    setMsg(""); window.scrollTo(0, 0);
+  // prossimo numero libero (solo proposta: chi compila può cambiarlo)
+  async function proponiNumero() {
+    const { data } = await sb.rpc("prossimo_numero_nc");
+    return typeof data === "string" ? data : "";
   }
+  function crea() {
+    setEd({ id: "", numero: "", anno: new Date().getFullYear(), stato: "aperta", creato_da: me, creato_il: "", dati: { data: oggi(), fase: FASI[0], gravita: "maggiore", righe: [rigaVuota()], foto: [], compilata_da: nome || nomi[me] || "" } });
+    setMsg(""); window.scrollTo(0, 0);
+    proponiNumero().then((n) => n && setEd((e) => (e && !e.id && !e.numero ? { ...e, numero: n } : e)));
+  }
+  const compilatore = (x: NC) => x.dati.compilata_da || nomi[x.creato_da || ""] || "";
   const setD = (k: keyof DatiNC, v: unknown) => ed && setEd({ ...ed, dati: { ...ed.dati, [k]: v } });
   // aggiornamento «funzionale»: funziona anche quando arriva dopo una ricerca in anagrafica
   const setR = (i: number, v: Partial<Riga>) => setEd((e) => e && { ...e, dati: { ...e.dati, righe: (e.dati.righe || []).map((x, j) => (j === i ? { ...x, ...v } : x)) } });
@@ -170,11 +178,20 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
       if (stato !== "chiusa") { delete g.chiusa_il; delete g.chiusa_da; }
       dati.gestione = g;
     } else { stato = ed.id ? ed.stato : "aperta"; } // la parte di gestione resta com'era
+    const numero = ed.numero.trim().toUpperCase();
+    if (numero && !/^NC-\d{4}-\d{1,5}$/.test(numero)) { setSalvo(false); setMsg("Il numero deve avere il formato NC-AAAA-NNN, per esempio NC-2026-104."); return; }
     const r = ed.id
-      ? await sb.from("nc").update({ dati, stato }).eq("id", ed.id).select().single()
-      : await sb.from("nc").insert({ dati, stato }).select().single();
+      ? await sb.from("nc").update({ dati, stato, ...(gestisce && numero ? { numero } : {}) }).eq("id", ed.id).select().single()
+      : await sb.from("nc").insert({ dati, stato, ...(numero ? { numero } : {}) }).select().single();
     setSalvo(false);
-    if (r.error) { setMsg("Non salvata: " + r.error.message); return; }
+    if (r.error) {
+      if (/già usato|duplicate key/i.test(r.error.message) && !ed.id) {
+        const n = await proponiNumero();
+        setMsg(`Il numero ${numero} è già usato da un'altra non conformità.${n ? ` Ti propongo ${n}: controlla e salva di nuovo.` : ""}`);
+        if (n) setEd((e) => e && { ...e, numero: n });
+      } else setMsg("Non salvata: " + r.error.message);
+      return;
+    }
     const salvata = r.data as NC;
     setMsg(`Non conformità ${salvata.numero} salvata.`);
     await carica();
@@ -213,7 +230,7 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
       const { data } = await sb.storage.from("non-conformita").download(p);
       if (data) immagini.push(await new Promise<string>((ok) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result)); fr.readAsDataURL(data); }));
     }
-    const doc = pdfNC(jsPDF, ed, { logo, immagini, lingua, aperta: nomi[ed.creato_da || ""] || "", fornitore: fornDi(ed.dati) });
+    const doc = pdfNC(jsPDF, ed, { logo, immagini, lingua, aperta: compilatore(ed), fornitore: fornDi(ed.dati) });
     const url = URL.createObjectURL(doc.output("blob")), a = document.createElement("a");
     a.href = url; a.download = `${ed.numero} ${ed.dati.fornitore || ""}.pdf`.replace(/[\\/:*?"<>|]+/g, " "); a.click();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
@@ -227,7 +244,7 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
       ["Codice", 16, (x) => (x as NCR).r?.codice], ["Articolo", 30, (x) => (x as NCR).r?.descrizione], ["UM", 6, (x) => (x as NCR).r?.um], ["Q.tà ricevuta", 10, (x) => n((x as NCR).r?.q_ricevuta) || ""], ["Q.tà NC", 9, (x) => n((x as NCR).r?.q_nc) || ""],
       ["Tipo difetto", 24, (x) => x.dati.tipo], ["Gravità", 10, (x) => x.dati.gravita], ["Descrizione", 40, (x) => x.dati.descrizione],
       ["Trattamento", 26, (x) => x.dati.gestione?.trattamento], ["Costo interno €", 13, (x) => costoTotale(x.dati.gestione) || ""], ["Addebito al fornitore €", 14, (x) => n(x.dati.gestione?.addebito) || ""],
-      ["Nota credito/addebito", 14, (x) => x.dati.gestione?.nota_credito], ["Chiusa il", 11, (x) => fd(x.dati.gestione?.chiusa_il)], ["Aperta da", 18, (x) => nomi[x.creato_da || ""] || ""],
+      ["Nota credito/addebito", 14, (x) => x.dati.gestione?.nota_credito], ["Chiusa il", 11, (x) => fd(x.dati.gestione?.chiusa_il)], ["Compilata da", 18, (x) => compilatore(x)],
     ];
     const h = ws.addRow(cols.map((c) => c[0])); h.font = { bold: true, color: { argb: "FFFFFFFF" } };
     h.eachCell((c) => { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F3A5F" } }; c.alignment = { wrapText: true, vertical: "middle" }; });
@@ -276,6 +293,12 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
         <section className="box sez">
           <h2>Segnalazione</h2>
           <div className="fl">
+            <label className="f">Numero non conformità
+              <input type="text" value={ed.numero} disabled={!!ed.id && !gestisce} placeholder="NC-2026-104" onChange={(e) => setEd({ ...ed, numero: e.target.value.toUpperCase() })} />
+              <small className="nota">{ed.id ? (gestisce ? "solo Magazzino e controllo qualità può cambiarlo" : "") : "proposto il prossimo numero libero: puoi cambiarlo"}</small></label>
+            <label className="f">Compilata da
+              <input type="text" value={d.compilata_da ?? (ed.id ? nomi[ed.creato_da || ""] || "" : "")} disabled={ro} list="nc-persone" onChange={(e) => setD("compilata_da", e.target.value)} />
+              <datalist id="nc-persone">{[...new Set(Object.values(nomi))].sort().map((x) => <option key={x} value={x} />)}</datalist></label>
             {testo("data", "Data rilevazione", { tipo: "date" })}
             {scelta("fase", "Dove è stata rilevata", FASI)}
             <label className="f">Fornitore *
@@ -388,7 +411,7 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
           <span style={{ flex: 1 }} />
           {gestisce && ed.id && <button className="btn danger" onClick={elimina}>Elimina</button>}
         </div>
-        {ed.id && <p className="nota">Aperta da {nomi[ed.creato_da || ""] || "—"} il {new Date(ed.creato_il).toLocaleString("it-IT")}</p>}
+        {ed.id && <p className="nota">Inserita nel gestionale da {nomi[ed.creato_da || ""] || "—"} il {new Date(ed.creato_il).toLocaleString("it-IT")}</p>}
       </div>
     );
   }
@@ -419,7 +442,7 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
       <div className="box mx">
         {carico ? <p className="sub">Caricamento…</p> : !visibili.length ? <div className="empty">{lista.length ? "Nessuna non conformità con questi filtri." : "Nessuna non conformità ancora. Premi «Nuova non conformità» quando trovi materiale non conforme."}</div> : (
           <table>
-            <thead><tr><th>Numero</th><th>Data</th><th>Fornitore</th><th className="hide-s">Articolo</th><th className="hide-s">Difetto</th><th>Stato</th><th className="hide-s">Aperta da</th></tr></thead>
+            <thead><tr><th>Numero</th><th>Data</th><th>Fornitore</th><th className="hide-s">Articolo</th><th className="hide-s">Difetto</th><th>Stato</th><th className="hide-s">Compilata da</th></tr></thead>
             <tbody>
               {visibili.map((x) => (
                 <tr key={x.id} onClick={() => apri(x)} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") apri(x); }}>
@@ -430,7 +453,7 @@ export default function NonConformita({ me, gestisce, modifica }: Props) {
                     <td className="hide-s">{r0?.codice}{rr.length > 1 && <b> +{rr.length - 1}</b>}<small>{r0?.descrizione}</small></td>
                     <td className="hide-s">{x.dati.tipo}<small>{rr.length === 1 && r0.q_nc ? `${r0.q_nc} ${r0.um || ""} su ${r0.q_ricevuta || "?"}` : rr.length > 1 ? `${rr.length} articoli` : ""}</small></td></>; })()}
                   <td><span className={"st st-" + x.stato}>{nomeStato(x.stato)}</span>{x.dati.gestione?.trattamento && <small>{x.dati.gestione.trattamento}</small>}</td>
-                  <td className="hide-s">{nomi[x.creato_da || ""] || ""}{mia(x) && <small>tu</small>}</td>
+                  <td className="hide-s">{compilatore(x)}{mia(x) && <small>tu</small>}</td>
                 </tr>
               ))}
             </tbody>
