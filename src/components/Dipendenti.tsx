@@ -11,6 +11,8 @@ const CONTRATTI = ["Tempo indeterminato", "Tempo determinato", "Apprendistato", 
 const eur = (n?: number | null) => (n == null || isNaN(n) ? "" : n.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €");
 const fd = (s?: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || ""); return m ? `${m[3]}/${m[2]}/${m[1]}` : ""; };
 const num = (s: string) => { const z = s.replace(/[€\s]/g, ""); const v = Number(/,\d{1,2}$/.test(z) ? z.replace(/\./g, "").replace(",", ".") : z.replace(/,/g, "")); return z === "" || isNaN(v) ? null : v; };
+const oggi = () => new Date().toLocaleDateString("sv-SE");
+const inForzaD = (x: Dip) => x.attivo && !(x.dati.scadenza && x.dati.scadenza < oggi());
 const norm = (s?: string) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
 export default function Dipendenti({ modifica }: { modifica: boolean }) {
@@ -37,8 +39,8 @@ export default function Dipendenti({ modifica }: { modifica: boolean }) {
   useEffect(() => { carica(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const nomePiano = (pid?: string) => persone.find((p) => p.id === pid)?.name || "";
-  const vis = lista.filter((x) => (tutti || x.attivo) && (!q || norm([x.dati.nome, x.dati.cc, x.dati.mansione, x.dati.email, nomePiano(x.dati.pid)].join(" ")).includes(norm(q))));
-  const inForza = lista.filter((x) => x.attivo);
+  const vis = lista.filter((x) => (tutti || inForzaD(x)) && (!q || norm([x.dati.nome, x.dati.cc, x.dati.mansione, x.dati.email, nomePiano(x.dati.pid)].join(" ")).includes(norm(q))));
+  const inForza = lista.filter(inForzaD);
   const totRal = inForza.reduce((a, x) => a + (Number(x.dati.ral) || 0), 0);
   const reparti = [...new Set(lista.map((x) => x.dati.cc).filter(Boolean))].sort() as string[];
 
@@ -90,9 +92,9 @@ export default function Dipendenti({ modifica }: { modifica: boolean }) {
   }
 
   function csv() {
-    const H = ["Nome e cognome", "Reparto / centro di costo", "Mansione", "Contratto", "Livello", "RAL", "Assunzione", "Fine contratto", "Data di nascita", "Codice fiscale", "E-mail", "Telefono", "Persona nel Piano", "In forza", "Note"];
+    const H = ["Nome e cognome", "Reparto / centro di costo", "Mansione", "Contratto", "Livello", "RAL", "Assunzione", "Fine rapporto", "Data di nascita", "Codice fiscale", "E-mail", "Telefono", "Persona nel Piano", "In forza", "Note"];
     const c = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const L = vis.map((x) => { const d = x.dati; return [d.nome, d.cc, d.mansione, d.contratto, d.liv, d.ral != null ? String(d.ral).replace(".", ",") : "", fd(d.assunzione), fd(d.scadenza), fd(d.nascita), d.cf, d.email, d.telefono, nomePiano(d.pid), x.attivo ? "sì" : "no", d.note].map(c).join(";"); });
+    const L = vis.map((x) => { const d = x.dati; return [d.nome, d.cc, d.mansione, d.contratto, d.liv, d.ral != null ? String(d.ral).replace(".", ",") : "", fd(d.assunzione), fd(d.scadenza), fd(d.nascita), d.cf, d.email, d.telefono, nomePiano(d.pid), inForzaD(x) ? "sì" : "no", d.note].map(c).join(";"); });
     const url = URL.createObjectURL(new Blob(["﻿" + [H.map(c).join(";"), ...L].join("\r\n")], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a"); a.href = url; a.download = `Anagrafica_dipendenti_${new Date().toLocaleDateString("sv-SE")}.csv`; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 3000);
@@ -132,7 +134,7 @@ export default function Dipendenti({ modifica }: { modifica: boolean }) {
               <input type="text" inputMode="decimal" value={ralTxt} disabled={!modifica} onChange={(e) => setRalTxt(e.target.value)} style={{ padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 6, background: "var(--surface)" }} />
             </label>
             {campo("assunzione", "Data di assunzione", "date")}
-            {campo("scadenza", "Fine contratto (se a termine)", "date")}
+            {campo("scadenza", "Fine rapporto (ultimo giorno)", "date")}
             {campo("nascita", "Data di nascita", "date")}
             {campo("cf", "Codice fiscale")}
             {campo("email", "E-mail", "email")}
@@ -168,8 +170,8 @@ export default function Dipendenti({ modifica }: { modifica: boolean }) {
               <thead><tr><th>Nome e cognome</th><th>Reparto</th><th>Mansione</th><th>Contratto</th><th>Livello</th><th style={{ textAlign: "right" }}>RAL</th><th>Assunzione</th><th>Piano</th></tr></thead>
               <tbody>
                 {vis.map((x) => (
-                  <tr key={x.id} onClick={() => apri(x)} style={{ cursor: "pointer", opacity: x.attivo ? 1 : 0.55, background: ed?.id === x.id ? "var(--accent-soft)" : undefined }}>
-                    <td><b>{x.dati.nome}</b>{!x.attivo && <small>non più in forza</small>}</td>
+                  <tr key={x.id} onClick={() => apri(x)} style={{ cursor: "pointer", opacity: inForzaD(x) ? 1 : 0.55, background: ed?.id === x.id ? "var(--accent-soft)" : undefined }}>
+                    <td><b>{x.dati.nome}</b>{x.dati.scadenza ? <small>{x.dati.scadenza < oggi() ? "terminato il " : "termina il "}{fd(x.dati.scadenza)}</small> : !x.attivo && <small>non più in forza</small>}</td>
                     <td>{x.dati.cc}</td><td>{x.dati.mansione}</td><td>{x.dati.contratto}</td><td>{x.dati.liv}</td>
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{eur(x.dati.ral)}</td><td>{fd(x.dati.assunzione)}</td><td>{nomePiano(x.dati.pid)}</td>
                   </tr>
