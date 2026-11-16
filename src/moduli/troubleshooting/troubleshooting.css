@@ -8,11 +8,6 @@
   --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
   --r:8px;
 }
-@media (prefers-color-scheme:dark){.ts{
-  --bg:#0f1519; --surface:#172027; --sunk:#121a20; --ink:#e3e9ed; --muted:#93a3ae; --line:#2a3640;
-  --accent:#5fb6cf; --accent-soft:#163440; --accent-ink:#0a1a20;
-  --signal:#f0b429; --signal-soft:#3a2e10;
-  --ok:#62c48d; --danger:#f08a80; --danger-soft:#3a1d1a; color-scheme:dark}}
 .ts *{box-sizing:border-box}
 .ts{background:var(--bg);color:var(--ink);font-family:var(--f-sans);font-size:15px;line-height:1.5}
 .ts .wrap{max-width:960px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
