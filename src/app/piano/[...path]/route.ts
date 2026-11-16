@@ -1,6 +1,6 @@
-// Pagina del Piano produzione (anche per il modulo Gantt linee produzione).
+// Pagina del Piano produzione.
 // Sta nella cartella privata del progetto e si scarica solo dopo l'accesso,
-// e solo da chi ha almeno il livello «Legge» su uno dei due moduli.
+// e solo da chi ha almeno il livello «Legge» sul Piano.
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -11,11 +11,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
   const supabase = await supabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return new Response("Accesso richiesto", { status: 401 });
-  const [{ data: a }, { data: b }] = await Promise.all([
-    supabase.rpc("livello_modulo", { p_modulo: "piano-produzione" }),
-    supabase.rpc("livello_modulo", { p_modulo: "gantt-linee" }),
-  ]);
-  if ((!a || a === "nessuno") && (!b || b === "nessuno")) return new Response("Non autorizzato", { status: 403 });
+  const { data: a } = await supabase.rpc("livello_modulo", { p_modulo: "piano-produzione" });
+  if (!a || a === "nessuno") return new Response("Non autorizzato", { status: 403 });
 
   const { path: parti } = await params;
   const file = path.normalize(path.join(BASE, ...parti));

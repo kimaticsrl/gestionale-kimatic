@@ -70,5 +70,5 @@ if (process.argv[2]) {
   const n = (await q(`select coll, count(*)::int n from pp_docs group by coll order by coll`)).rows;
   console.log('importati:', n.map((r) => r.coll + ' ' + r.n).join(', '));
   ok(n.find((r) => r.coll === 'macchine')?.n >= 200, 'import dati del piano');
-  ok((await q(`select count(*)::int n from moduli where migrato and id in ('piano-produzione','gantt-linee')`)).rows[0].n === 2, 'moduli attivati');
+  ok((await q(`select count(*)::int n from moduli where migrato and id = 'piano-produzione'`)).rows[0].n === 1, 'modulo attivato');
 }
