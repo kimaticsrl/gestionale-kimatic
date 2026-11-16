@@ -48,6 +48,11 @@ export default function Piano({ livello, utente, ruoli, soloCliente = false, sch
     let dbWrap: Db | null = null;
     (window as unknown as { KIMATIC_PP: unknown }).KIMATIC_PP = {
       soloCliente,
+      // Anagrafica clienti del gestionale (lettura per tutti gli utenti attivi)
+      clienti: async () => {
+        const { data } = await sb.from("clienti").select("id,nome,dati").order("nome");
+        return data ?? [];
+      },
       schede: schede?.length ? schede : null,
       soloLettura: ro,
       use: async (n: string) => {

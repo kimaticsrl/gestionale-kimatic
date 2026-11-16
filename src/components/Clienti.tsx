@@ -49,6 +49,14 @@ export default function Clienti({ gestisce }: { gestisce: boolean }) {
     setCarico(false);
   }
   useEffect(() => { carica(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Aperto dal Piano produzione: ?c=<id> apre la scheda, ?nuovo=<nome> prepara un nuovo cliente
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const c = p.get("c"), nuovo = p.get("nuovo");
+    if (c) setSel(c);
+    else if (nuovo && gestisce) setEd({ id: "", nome: nuovo, dati: { commesse: [] } });
+    else if (nuovo) setQ(nuovo);
+  }, [gestisce]);
 
   const samDi = useMemo(() => { const m = new Map<string, CommessaSam[]>(); sam.forEach((k) => { if (k.cliente_id) m.set(k.cliente_id, [...(m.get(k.cliente_id) || []), k]); }); return m; }, [sam]);
   const lista = useMemo(() => {
