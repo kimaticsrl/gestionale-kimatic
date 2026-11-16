@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
     "/costificatore/[...path]": ["./privato/costificatore/**/*"],
     "/manuali/[...path]": ["./privato/manuali/**/*"],
     "/piano/[...path]": ["./privato/piano/**/*"],
+    "/ts-import/[...path]": ["./privato/ts-import/**/*"],
   },
 };
 
