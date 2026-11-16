@@ -11,8 +11,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
   const supabase = await supabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return new Response("Accesso richiesto", { status: 401 });
-  const { data: a } = await supabase.rpc("livello_modulo", { p_modulo: "piano-produzione" });
-  if (!a || a === "nessuno") return new Response("Non autorizzato", { status: 403 });
+  const [{ data: a }, { data: b }] = await Promise.all([
+    supabase.rpc("livello_modulo", { p_modulo: "piano-produzione" }),
+    supabase.rpc("livello_modulo", { p_modulo: "commesse-planning" }),
+  ]);
+  if ((!a || a === "nessuno") && (!b || b === "nessuno")) return new Response("Non autorizzato", { status: 403 });
 
   const { path: parti } = await params;
   const file = path.normalize(path.join(BASE, ...parti));

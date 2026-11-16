@@ -3,6 +3,7 @@
 let KPP=null;try{KPP=window.parent&&window.parent.KIMATIC_PP}catch(e){}
 window.claude=KPP||{use:async function(){return null}};
 const PPCLI=!!(KPP&&KPP.soloCliente);
+const PPSC=(KPP&&Array.isArray(KPP.schede)&&KPP.schede.length)?KPP.schede:null;
 </script>
 <title>Piano produzione</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -179,11 +180,11 @@ const S={commesse:[],macchine:[],persone:[],agenda:[],tempi:[],tv:[],costi:[],or
 const IDX={c:{},m:{},p:{},byLine:{}};
 let db=null,canW=true,AN=null,LOAD=null,ALTS=[],CLOSE=[],WC=new Map();
 const UI=Object.assign({teams:[],lview:'fase',tab:'pan',cid:'',mid:'',expand:false,cmode:'fasi',carv:'day',team:'',weeks:2,wk:monday(TODAY),hideEmpty:true,solo:true,win:'auto',q:'',akind:'',acid:'',note:null,openM:{}},(()=>{try{return JSON.parse(localStorage.getItem('pp_ui')||'{}')}catch(e){return{}}})());
-UI.note=null;UI.wk=monday(TODAY);if(PPCLI){UI.tab='cli';UI.opmode=false}
-const saveUI=()=>{try{localStorage.setItem('pp_ui',JSON.stringify({lview:UI.lview,tab:UI.tab,cid:UI.cid,mid:UI.mid,expand:UI.expand,cmode:UI.cmode,team:UI.team,teams:UI.teams,fl:UI.fl,fn:UI.fn,weeks:UI.weeks,hideEmpty:UI.hideEmpty,solo:UI.solo,win:UI.win,opmode:UI.opmode,cm2:1}))}catch(e){}};
+UI.note=null;UI.wk=monday(TODAY);if(PPCLI){UI.tab='cli';UI.opmode=false}if(PPSC){UI.opmode=false;if(!PPSC.includes(UI.tab))UI.tab=PPSC[0]}
+const saveUI=()=>{if(PPCLI||PPSC)return;try{localStorage.setItem('pp_ui',JSON.stringify({lview:UI.lview,tab:UI.tab,cid:UI.cid,mid:UI.mid,expand:UI.expand,cmode:UI.cmode,team:UI.team,teams:UI.teams,fl:UI.fl,fn:UI.fn,weeks:UI.weeks,hideEmpty:UI.hideEmpty,solo:UI.solo,win:UI.win,opmode:UI.opmode,cm2:1}))}catch(e){}};
 if(UI.opmode)UI.tab='op';
 if(!UI.cm2){UI.cmode='fasi';UI.cm2=1}
-const RO=()=>PPCLI||roAt(UI.tab);
+const RO=()=>PPCLI||!!PPSC||roAt(UI.tab);
 
 function reindex(){
  S.commesse.sort(byOrd);
@@ -2349,10 +2350,11 @@ document.addEventListener('change',async e=>{const t=e.target,c=t.dataset&&t.dat
  await accSet('ruoli',{r:R})});
 
 function render(){
- $('#tabs').innerHTML=tabsBar(TABS.filter(([k])=>PPCLI?k==='cli':k!=='cos'&&(k!=='reg'||OWN)&&(k!=='ut'||ADM)&&(!AR().has(k)||lvl(k)>=1)&&(k!=='rul'||!roAt('rul'))&&(k!=='todo'||(OWN&&UID))&&(!UI.opmode||k==='op')),`<label class="tag" style="margin-left:auto;align-self:center;white-space:nowrap"><input type="checkbox" data-sel="solo" ${UI.solo?'checked':''}> Solo commesse attive${S.commesse.some(c=>c.chiusa)?` (${S.commesse.filter(c=>c.chiusa).length} terminate nascoste)`:''}</label>`);
+ if(PPSC&&!PPSC.includes(UI.tab))UI.tab=PPSC[0];
+ $('#tabs').innerHTML=tabsBar(TABS.filter(([k])=>PPCLI?k==='cli':PPSC?PPSC.includes(k):k!=='cos'&&(k!=='reg'||OWN)&&(k!=='ut'||ADM)&&(!AR().has(k)||lvl(k)>=1)&&(k!=='rul'||!roAt('rul'))&&(k!=='todo'||(OWN&&UID))&&(!UI.opmode||k==='op')),`<label class="tag" style="margin-left:auto;align-self:center;white-space:nowrap"><input type="checkbox" data-sel="solo" ${UI.solo?'checked':''}> Solo commesse attive${S.commesse.some(c=>c.chiusa)?` (${S.commesse.filter(c=>c.chiusa).length} terminate nascoste)`:''}</label>`);
  if(!ADM&&!AR().has(UI.tab)&&UI.tab!=='reg'&&UI.tab!=='todo'){}
- else if(!PPCLI&&!ADM&&AR().has(UI.tab)&&lvl(UI.tab)<1){const f=[...AR()].find(k=>lvl(k)>=1);if(f&&f!==UI.tab){UI.tab=f;saveUI();return render()}}
- if(!PPCLI&&!ADM&&![...AR()].some(k=>lvl(k)>=1)){$('#app').innerHTML='<div class="empty">Accesso non abilitato. Chiedi all\'amministratore di assegnarti un ruolo.</div>';stRole();return}
+ else if(!PPCLI&&!PPSC&&!ADM&&AR().has(UI.tab)&&lvl(UI.tab)<1){const f=[...AR()].find(k=>lvl(k)>=1);if(f&&f!==UI.tab){UI.tab=f;saveUI();return render()}}
+ if(!PPCLI&&!PPSC&&!ADM&&![...AR()].some(k=>lvl(k)>=1)){$('#app').innerHTML='<div class="empty">Accesso non abilitato. Chiedi all\'amministratore di assegnarti un ruolo.</div>';stRole();return}
  const V={ut:vUt,todo:(OWN&&UID)?vTodo:vPan,rul:RO()?vPan:vRegole,reg:OWN?vReg:vPan,fat:vFat,pan:vPan,lin:vLin,mac:vMac,fcm:vFcm,cli:vCli,pre:vPre,prl:vPrl,plan:vPlan,car:vCar,acq:vAcq,al:vAl,tem:vTem,pers:vPers,dati:vDati,cos:vCos,op:vOp}[UI.tab]||vPan;
  $('#app').innerHTML=S.commesse.length||UI.tab==='dati'||UI.tab==='pre'||UI.tab==='ut'?V():'<div class="empty">Nessun dato ancora. Le linee e le macchine compariranno qui appena inserite.</div>';
  if(UI.tab==='plan'&&UI.note){const i=$('#notein');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}}

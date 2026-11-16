@@ -22,18 +22,20 @@ function ruoloInterno(ruoli: string[]) {
 
 // La pagina originale del Piano produzione gira in un riquadro: i dati stanno nella tabella pp_docs.
 // soloCliente: modulo «Gantt linee produzione», mostra solo la scheda Cliente e TV, in sola lettura.
-export default function Piano({ livello, utente, ruoli, soloCliente = false }: { livello: string; utente: Utente; ruoli: string[]; soloCliente?: boolean }) {
+// schede: mostra solo queste schede del Piano, in sola lettura (es. pagina per gli operativi).
+export default function Piano({ livello, utente, ruoli, soloCliente = false, schede, titolo }: { livello: string; utente: Utente; ruoli: string[]; soloCliente?: boolean; schede?: string[]; titolo?: string }) {
   const [pronto, setPronto] = useState(false);
   useEffect(() => {
     const sb = supabaseBrowser();
-    const lv = soloCliente ? "legge" : livello;
+    const ro = soloCliente || !!schede?.length;
+    const lv = ro ? "legge" : livello;
     const base = creaClaude({ supabase: sb, utente, livello: lv, tabella: "pp_docs", capacita: ["db", "user", "downloads"], rpcAggiorna: "pp_aggiorna", tempoReale: true }) as Base;
     const gestisce = lv === "gestisce";
     const modifica = gestisce || lv === "modifica";
     const proposto = ruoloInterno(ruoli);
     const user = {
       id: async () => utente.id,
-      can: (k: string) => (k === "data.write" ? (soloCliente ? null : modifica) : null),
+      can: (k: string) => (k === "data.write" ? (ro ? null : modifica) : null),
       canEdit: async () => gestisce,
       isOwner: async () => false, // registro e appunti personali sono gestiti dal gestionale
       profiles: async (ids: string[]) => {
@@ -46,6 +48,8 @@ export default function Piano({ livello, utente, ruoli, soloCliente = false }: {
     let dbWrap: Db | null = null;
     (window as unknown as { KIMATIC_PP: unknown }).KIMATIC_PP = {
       soloCliente,
+      schede: schede?.length ? schede : null,
+      soloLettura: ro,
       use: async (n: string) => {
         if (n === "user") return user;
         if (n !== "db") return base.use(n);
@@ -77,10 +81,10 @@ export default function Piano({ livello, utente, ruoli, soloCliente = false }: {
       },
     };
     setPronto(true);
-  }, [livello, utente, ruoli, soloCliente]);
+  }, [livello, utente, ruoli, soloCliente, schede]);
   if (!pronto) return <div className="empty">Caricamento…</div>;
   return (
-    <iframe src="/piano/index.html" title={soloCliente ? "Gantt linee produzione" : "Piano produzione"}
+    <iframe src="/piano/index.html" title={titolo || (soloCliente ? "Gantt linee produzione" : "Piano produzione")}
       style={{ width: "100%", height: "calc(100vh - 56px)", border: "1px solid var(--line)", borderRadius: 10, background: "#fff" }} />
   );
 }
