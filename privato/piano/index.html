@@ -4069,6 +4069,7 @@ document.addEventListener('change',e=>{const t=e.target,o=t.dataset&&t.dataset.o
 /* ===================== shell ===================== */
 /* ---- File commesse Kimatic (vista tipo foglio planning) ---- */
 const FCM_COL={ok:'#ccff66',c:'#ccecff',d:'#ffff99',late:'#ffc000',np:'#ff99cc'};
+const FCM_NO=`background:${FCM_COL.ok};color:#222`;
 function fcmSt(p,code){if(!hasAny(p))return'';if(isDone(p))return'ok';if(isLate(p,code))return'late';if(p.st==='c')return'c';if(p.st==='d')return'd';if(!p.s&&!p.e)return'np';return''}
 function vFcm(){
  const q=(UI.fq||'').trim().toLowerCase(),yr=UI.fy||'';
@@ -4095,9 +4096,10 @@ function vFcm(){
   const ms=msKids(c).list,fatOk=isDone(cPh(c,'4B')),fxs=fatOk?` style="background:${FCM_COL.ok};color:#222"`:'';
   ms.forEach((m,i)=>{
    const hay=(c.num+' '+(c.cliente||'')+' '+(m.code||'')+' '+(m.desc||'')+' '+(m.alias||'')).toLowerCase();if(q&&!hay.includes(q))return;
-   const kd=!!IDX.kd[m.id],mph=IDX.hid[m.id]?{}:(m.phases||{});if(!kd)n++;
+   const kd=!!IDX.kd[m.id],mph=IDX.hid[m.id]?{}:(m.phases||{}),nof=noOf(IDX.m[m.id]||m);if(!kd)n++;
    const cells=G.map(g=>{
-    if(g.arr){const a=mph['2A-M'],b=mph['2A-E'];return [[a,'2A-M'],[b,'2A-E']].map(([p,cd],j)=>{const st=fcmSt(p,cd),v=p?(p.a?dt(p,'a'):dt(p,'e')):'';return `<td class="n${j===0&&g.rs?' rb':''}" style="${st?'background:'+FCM_COL[st]+';color:#222':''}">${v}</td>`}).join('')}
+    if(g.arr){const a=mph['2A-M'],b=mph['2A-E'];return [[a,'2A-M'],[b,'2A-E']].map(([p,cd],j)=>{if(nof.includes(cd))return `<td class="n${j===0&&g.rs?' rb':''}" style="${FCM_NO}" title="Fase non prevista per questa macchina">-</td>`;const st=fcmSt(p,cd),v=p?(p.a?dt(p,'a'):dt(p,'e')):'';return `<td class="n${j===0&&g.rs?' rb':''}" style="${st?'background:'+FCM_COL[st]+';color:#222':''}">${v}</td>`}).join('')}
+    if(!g.com&&nof.includes(g.c))return g.f.map((f,j)=>{const d=['s','e','a','fat'].includes(f);return `<td class="${(f==='w'?'':'n')+(j===0&&g.rs?' rb':'')}" style="${d?FCM_NO:''}"${d?' title="Fase non prevista per questa macchina"':''}>${d?'-':''}</td>`}).join('');
     const p=g.com?(kd?null:cPh(c,g.c)):mph[g.c],st=fcmSt(p,g.c),bg=st?`background:${FCM_COL[st]};color:#222`:'';
     return g.f.map((f,j)=>{let v='';if(p){if(f==='w')v=esc(cut(W(p),26));else if(f==='h')v=p.h||'';else if(f==='a')v=dt(p,'a');else if(f==='fat')v=p.a?dt(p,'a'):dt(p,'e');else v=dt(p,f)}
      return `<td class="${(f==='w'?'':'n')+(j===0&&g.rs?' rb':'')}" style="${bg}">${v}</td>`}).join('')}).join('');
