@@ -114,3 +114,13 @@
 .ts header.top{position:static;border-radius:10px;border:1px solid var(--line)}
 .ts .tsmain{padding:16px 0 40px;display:block}
 .ts .wrap{max-width:960px;margin:0}
+
+/* Stato di verifica del caso */
+.ts .tag.ver{background:#e6f4ea;border-color:#b7dfc2;color:#1e6b34;font-weight:600}
+.ts .tag.dav{background:#fff4e0;border-color:#f3d6a1;color:#8a5a00;font-weight:600}
+.ts .verif{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px;border-radius:8px;margin:0 0 12px;font-size:13px}
+.ts .verif.si{background:#e6f4ea;color:#1e6b34}
+.ts .verif.no{background:#fff4e0;color:#8a5a00}
+.ts .verif .btn{margin-left:auto}
+.ts .verif-check{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--sunk)}
+.ts .verif-check input{width:auto;margin-top:3px}

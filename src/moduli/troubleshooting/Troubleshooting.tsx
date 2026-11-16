@@ -4,9 +4,9 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { MARKUP } from "./markup";
 import "./troubleshooting.css";
 
-type Props = { me: string; modifica: boolean; gestisce: boolean };
+type Props = { me: string; nome: string; modifica: boolean; gestisce: boolean };
 
-export default function Troubleshooting({ me, modifica, gestisce }: Props) {
+export default function Troubleshooting({ me, nome, modifica, gestisce }: Props) {
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let ferma: (() => void) | undefined;
@@ -15,9 +15,9 @@ export default function Troubleshooting({ me, modifica, gestisce }: Props) {
       const [{ avvia }, { creaDb, creaFile }] = await Promise.all([import("./app.js"), import("./dati.js")]);
       if (annullato || !root.current) return;
       const supabase = supabaseBrowser();
-      ferma = avvia(root.current, { me, modifica, gestisce, db: creaDb(supabase), files: creaFile(supabase) });
+      ferma = avvia(root.current, { me, nome, modifica, gestisce, db: creaDb(supabase), files: creaFile(supabase) });
     })();
     return () => { annullato = true; ferma?.(); };
-  }, [me, modifica, gestisce]);
+  }, [me, nome, modifica, gestisce]);
   return <div className="ts" ref={root} dangerouslySetInnerHTML={{ __html: MARKUP }} />;
 }

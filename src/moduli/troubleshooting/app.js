@@ -4,7 +4,7 @@
 // richiedono Claude e per ora non sono attivi.
 export function avvia(ROOT, CTX) {
 const $ = id => ROOT.querySelector("#"+id);
-const S = { urls:{}, me:CTX.me, gestisce:CTX.gestisce, assets:null, formFoto:[], uploading:0, db:null, sample:null, canWrite:true, casi:[], liste:{macchine:[],argomenti:[]}, open:new Set(), editId:null, queue:[], qi:0, impCtl:null, archMac:"", archArg:"" };
+const S = { urls:{}, me:CTX.me, nome:CTX.nome||"", gestisce:CTX.gestisce, assets:null, formFoto:[], uploading:0, db:null, sample:null, canWrite:true, casi:[], liste:{macchine:[],argomenti:[]}, open:new Set(), editId:null, queue:[], qi:0, impCtl:null, archMac:"", archArg:"" };
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const toast = (msg) => { const t=$("toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast.h); toast.h=setTimeout(()=>t.hidden=true,2600); };
 const today = () => new Date().toISOString().slice(0,10);
@@ -26,6 +26,7 @@ function score(c, qStems, qCompact){
     if (best){ s+=best; matched.push(q); }
   }
   if (c._code && c._code.length>=2 && qCompact.includes(c._code)) { s+=8; matched.unshift(c.codice); }
+  if (s>0 && c.verificato) s+=0.5; // a parità di somiglianza, prima i casi verificati
   const max = Math.max(1, qStems.length*3);
   return { s, pct: Math.min(100, Math.round(s/max*100)), matched };
 }
@@ -59,12 +60,13 @@ function card(c, r){
   return `<article class="case" data-id="${esc(c.id)}">
     <div class="case-h" data-act="toggle" tabindex="0" role="button" aria-expanded="${open}">
       <div class="case-t"><h3>${esc(c.titolo||"(senza titolo)")}</h3>
-        <div class="tags"><span class="tag m">${esc(c.macchina)}</span><span class="tag">${esc(c.argomento)}</span>${c.codice?`<span class="tag code">${esc(c.codice)}</span>`:""}${c.data?`<span class="tag">${fmtDate(c.data)}</span>`:""}${c.esempio?`<span class="tag ex">esempio</span>`:""}</div>
+        <div class="tags"><span class="tag m">${esc(c.macchina)}</span><span class="tag">${esc(c.argomento)}</span>${c.codice?`<span class="tag code">${esc(c.codice)}</span>`:""}${c.data?`<span class="tag">${fmtDate(c.data)}</span>`:""}${c.esempio?`<span class="tag ex">esempio</span>`:""}${c.verificato?`<span class="tag ver">✓ Verificato</span>`:`<span class="tag dav">Da verificare</span>`}</div>
       </div>
       ${r?`<div class="match"><small>${lbl}</small><div class="meter"><i style="width:${r.pct}%"></i></div></div>`:""}
     </div>
     ${open?`<div class="case-b">
       ${r&&r.matched.length?`<div class="found">Corrisponde a: ${r.matched.map(m=>`<b>${esc(m)}</b>`).join(" · ")}</div>`:""}
+      ${verifBox(c)}
       <dl>
         <dt>Sintomi</dt><dd>${esc(c.sintomi)}</dd>
         ${c.causa?`<dt>Causa</dt><dd>${esc(c.causa)}</dd>`:""}
@@ -82,6 +84,11 @@ function card(c, r){
     </div>`:""}
   </article>`;
 }
+function verifBox(c){
+  const v = c.verificato;
+  if (v) return `<div class="verif si"><span>✓ Verificato da <b>${esc(v.nome||"un tecnico")}</b>${v.il?` il ${fmtDate(v.il.slice(0,10))}`:""}: si può usare con i clienti.</span>${S.canWrite?`<button class="btn" data-act="unverify">Togli verifica</button>`:""}</div>`;
+  return `<div class="verif no"><span><b>Da verificare</b>: caso non ancora controllato da un tecnico. Usalo con cautela.</span>${S.canWrite?`<button class="btn primary" data-act="verify">Segna come verificato</button>`:""}</div>`;
+}
 function onCaseClick(e){
   const el = e.target.closest("[data-act]"); if(!el) return;
   const art = el.closest(".case"); const id = art?.dataset.id; const c = S.casi.find(x=>x.id===id); if(!c) return;
@@ -90,6 +97,8 @@ function onCaseClick(e){
   if (act==="copy") copySolution(c, el);
   if (act==="copyEn") copySolutionEn(c, el);
   if (act==="edit") startEdit(c);
+  if (act==="verify") S.db.doc("casi/"+id).update({ verificato:{ da:S.me, nome:S.nome, il:new Date().toISOString() } }).then(()=>toast("Caso segnato come verificato")).catch(dbErr);
+  if (act==="unverify") S.db.doc("casi/"+id).update({ verificato:null }).then(()=>toast("Verifica tolta: il caso torna da verificare")).catch(dbErr);
   if (act==="del"){
     if (!el.classList.contains("armed")){ el.classList.add("armed"); el.textContent="Conferma eliminazione"; setTimeout(()=>{ if(el.isConnected){el.classList.remove("armed"); el.textContent="Elimina";} },4000); return; }
     S.db.doc("casi/"+id).delete().then(async ()=>{ toast("Caso eliminato"); if(S.assets) for(const f of c.foto||[]){ try{ await S.assets.delete(pathOf(f)); }catch{} } }).catch(dbErr);
@@ -206,17 +215,18 @@ ROOT.addEventListener("click", e => {
 function renderArchive(){
   const M = allOf("macchine","macchina"), A = allOf("argomenti","argomento");
   const cnt = (m,a) => S.casi.filter(c=>c.macchina===m && c.argomento===a).length;
-  $("mxInfo").textContent = `${S.casi.length} casi · ${M.length} macchine · ${A.length} argomenti`;
+  const nv = S.casi.filter(c=>c.verificato).length;
+  $("mxInfo").textContent = `${S.casi.length} casi (${nv} verificati, ${S.casi.length-nv} da verificare) · ${M.length} macchine · ${A.length} argomenti`;
   $("matrix").innerHTML = M.length&&A.length ? `<thead><tr><th>Macchina</th>${A.map(a=>`<th>${esc(a)}</th>`).join("")}<th>Totale</th></tr></thead><tbody>` +
     M.map(m => `<tr><td><b>${esc(m)}</b></td>${A.map(a=>{const n=cnt(m,a);return n?`<td><button data-mx-m="${esc(m)}" data-mx-a="${esc(a)}">${n}</button></td>`:`<td class="z">·</td>`}).join("")}<td><button data-mx-m="${esc(m)}" data-mx-a="">${S.casi.filter(c=>c.macchina===m).length}</button></td></tr>`).join("") + `</tbody>`
     : `<tbody><tr><td class="meta" style="padding:16px">Aggiungi macchine e argomenti, oppure registra il primo caso.</td></tr></tbody>`;
-  const m=$("aMac").value, a=$("aArg").value;
-  const list = S.casi.filter(c=>(!m||c.macchina===m)&&(!a||c.argomento===a)).sort((x,y)=>(x.macchina||"").localeCompare(y.macchina||"","it")||(x.argomento||"").localeCompare(y.argomento||"","it")||(y.data||"").localeCompare(x.data||""));
+  const m=$("aMac").value, a=$("aArg").value, st=$("aStato").value;
+  const list = S.casi.filter(c=>(!m||c.macchina===m)&&(!a||c.argomento===a)&&(!st||(st==="si")===!!c.verificato)).sort((x,y)=>(x.macchina||"").localeCompare(y.macchina||"","it")||(x.argomento||"").localeCompare(y.argomento||"","it")||(y.data||"").localeCompare(x.data||""));
   $("archList").innerHTML = list.map(c=>card(c)).join("") || `<div class="empty">${S.db?"Nessun caso con questi filtri.":"Archivio in caricamento…"}</div>`;
   const ex = S.casi.filter(c=>c.esempio).length; $("exNotice").hidden = !ex || !S.gestisce;
 }
 $("matrix").addEventListener("click", e => { const b=e.target.closest("[data-mx-m]"); if(!b) return; $("aMac").value=b.dataset.mxM; $("aArg").value=b.dataset.mxA; renderArchive(); $("archList").scrollIntoView({behavior:"smooth",block:"start"}); });
-$("aMac").onchange = $("aArg").onchange = renderArchive;
+$("aMac").onchange = $("aArg").onchange = $("aStato").onchange = renderArchive;
 $("exDel").onclick = async (e) => {
   const b=e.currentTarget; if(!b.classList.contains("armed")){ b.classList.add("armed"); b.textContent="Conferma: elimina gli esempi"; return; }
   b.disabled=true; for (const c of S.casi.filter(c=>c.esempio)){ try{ await S.db.doc("casi/"+c.id).delete(); }catch(err){ dbErr(err); break; } }
@@ -237,6 +247,7 @@ function fillForm(c){
   $("fSol").value=c.soluzione||""; $("fKey").value=c.parole||""; $("fCli").value=c.cliente||""; $("fTec").value=c.tecnico||"";
   $("fFon").value=c.fonte||"Email"; $("fDat").value=c.data||today();
   S.formFoto = [...(c.foto||[])]; renderFormFoto();
+  S.formVer = c.verificato || null; $("fVer").checked = c.id ? !!c.verificato : true; // nuovo caso registrato da un tecnico: verificato
 }
 function clearForm(){ fillForm({}); S.editId=null; $("formTitle").textContent="Registra un caso risolto"; $("fCancel").hidden=true; $("fSave").textContent="Salva caso"; $("formMsg").textContent=""; }
 function startEdit(c){ go("nuovo"); S.queue=[]; renderQueue(); S.editId=c.id; fillForm(c); $("formTitle").textContent="Modifica caso"; $("fCancel").hidden=false; $("fSave").textContent="Salva modifiche"; window.scrollTo({top:0}); }
@@ -256,6 +267,7 @@ $("form").addEventListener("submit", async e => {
     if (!(L.argomenti||[]).includes(arg)){ L.argomenti=[...(L.argomenti||[]),arg]; changed=true; }
     if (changed) await S.db.doc("config/liste").set(L);
     c.aggiornato = new Date().toISOString();
+    if ($("fVer").checked) c.verificato = S.formVer || { da:S.me, nome:S.nome, il:c.aggiornato };
     if (S.editId) await S.db.doc("casi/"+S.editId).set(c); else await S.db.collection("casi").add(c);
     toast(S.editId ? "Modifiche salvate" : "Caso salvato in archivio");
     const wasEdit = !!S.editId; clearForm();
