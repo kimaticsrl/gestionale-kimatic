@@ -5,7 +5,7 @@ export const RI = (function () {
   const pad = n => String(n).padStart(2, '0');
   const tm = s => { const m = /^(\d{1,2}):(\d{2})$/.exec(s || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; };
   const hm = n => pad(Math.floor(n / 60) % 24) + ':' + pad(n % 60);
-  const hrs = n => { const h = Math.round(n / 6) / 10; return (Number.isInteger(h) ? String(h) : h.toFixed(1).replace('.', ',')); };
+  const hrs = n => { const m = Math.round(+n || 0), h = Math.floor(m / 60), r = m % 60; return r ? (h ? h + 'h ' : '') + r + 'm' : h + 'h'; }; // minuti → «5h 30m»
   const d2n = s => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ''); return m ? Math.round(Date.UTC(+m[1], +m[2] - 1, +m[3]) / 864e5) : null; };
   const n2s = n => new Date(n * 864e5).toISOString().slice(0, 10);
   const fd = s => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : ''; };

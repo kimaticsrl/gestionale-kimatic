@@ -28,7 +28,9 @@ export function nomiTecnici(s) {
   return String(s || '').split(/\s*(?:,|;|\/|\+|&|\be\b|\band\b)\s*/i).map((x) => x.trim()).filter(Boolean);
 }
 
-const ore = (min) => Math.round(min / 6) / 10; // in ore, al decimo
+const ore = (min) => Math.round(min) / 60; // in ore (minuti esatti)
+// ore → «5h 30m» (– se zero)
+export const hm = (n) => (n ? RI.hrs(Math.round(n * 60)) : '–');
 const MESI = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
 export const nomeMese = (m) => MESI[+m.slice(5, 7) - 1] + ' ' + m.slice(0, 4); // 'AAAA-MM'
 
@@ -82,7 +84,7 @@ export function riepilogo(righe) {
     t.viaggio += x.viaggio; t.km += x.km; t.notti += x.notte; if (x.notte) { if (x.estero) t.nottiEst++; else t.nottiIt++; } if (x.festivo) t.festivi += x.lavoro;
     m.set(x.tecnico, t);
   }
-  const r1 = (n) => Math.round(n * 10) / 10;
+  const r1 = (n) => Math.round(n * 60) / 60;
   return [...m.values()].map((t) => ({ ...t, giornate: t.giornate.size, lavoro: r1(t.lavoro), ordinarie: r1(t.ordinarie), straordinario: r1(t.straordinario), viaggio: r1(t.viaggio), festivi: r1(t.festivi) }));
 }
 
@@ -90,9 +92,11 @@ export function riepilogo(righe) {
 export async function creaExcel(ExcelJS, righe, da, a) {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Gestionale Kimatic';
+  // In Excel le ore sono frazioni di giorno con formato «5h 30m»: le somme restano corrette
+  const ORE = '[h]"h" mm"m";;"–"', g = (n) => (n ? n / 24 : 0);
   const intest = (ws, titolo) => {
     ws.addRow([titolo]).font = { bold: true, size: 14 };
-    ws.addRow([`Periodo: dal ${RI.fd(da)} al ${RI.fd(a)} · ore in ore e decimi (7,5 = 7 ore e 30 minuti)`]).font = { italic: true, color: { argb: 'FF555555' } };
+    ws.addRow([`Periodo: dal ${RI.fd(da)} al ${RI.fd(a)} · ore in ore e minuti (7h 30m)`]).font = { italic: true, color: { argb: 'FF555555' } };
     ws.addRow([]);
   };
   const testata = (ws, cols) => {
@@ -109,10 +113,10 @@ export async function creaExcel(ExcelJS, righe, da, a) {
   const w1 = wb.addWorksheet('Riepilogo per tecnico', { views: [{ state: 'frozen', ySplit: 4 }] });
   intest(w1, 'Report ore tecnici – riepilogo');
   testata(w1, [['Mese', 15], ['Tecnico', 26], ['Giornate', 10], ['Ore lavoro', 11], ['di cui ordinarie', 12], ['Straordinario (oltre 8 h/giorno)', 15], ['di cui sab./dom./festivi', 13], ['Ore viaggio', 11], ['Notti fuori Italia (indennità)', 14], ['Notti fuori estero (indennità)', 14]]);
-  R.forEach((t) => w1.addRow([t.mese, t.tecnico, t.giornate, t.lavoro, t.ordinarie, t.straordinario, t.festivi, t.viaggio, t.nottiIt, t.nottiEst]));
+  R.forEach((t) => w1.addRow([t.mese, t.tecnico, t.giornate, g(t.lavoro), g(t.ordinarie), g(t.straordinario), g(t.festivi), g(t.viaggio), t.nottiIt, t.nottiEst]));
   const tot = w1.addRow(['Totale periodo', '', ...['C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'].map((c) => ({ formula: `SUM(${c}5:${c}${4 + R.length})` }))]);
   tot.font = { bold: true };
-  [4, 5, 6, 7, 8].forEach((c) => { w1.getColumn(c).numFmt = '0.0'; });
+  [4, 5, 6, 7, 8].forEach((c) => { w1.getColumn(c).numFmt = ORE; });
 
   // Un foglio per ogni tecnico: le sue giornate, con il totale di ogni mese
   const usati = new Set();
@@ -127,20 +131,20 @@ export async function creaExcel(ExcelJS, righe, da, a) {
     for (const m of [...new Set(mie.map((x) => x.data.slice(0, 7)))].sort()) {
       const rm = mie.filter((x) => x.data.startsWith(m));
       rm.forEach((x) => {
-        const r = w2.addRow([new Date(x.data + 'T00:00:00Z'), x.giorno, x.festivo, x.cliente, x.rapporto, x.stato, x.lavoro, x.ordinarie, x.straordinario, x.viaggio, x.training, x.notte ? (x.estero ? 'sì – estero' : 'sì – Italia') : '', x.garanzia, x.avvisi]);
+        const r = w2.addRow([new Date(x.data + 'T00:00:00Z'), x.giorno, x.festivo, x.cliente, x.rapporto, x.stato, g(x.lavoro), g(x.ordinarie), g(x.straordinario), g(x.viaggio), g(x.training), x.notte ? (x.estero ? 'sì – estero' : 'sì – Italia') : '', x.garanzia, x.avvisi]);
         if (x.festivo) r.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
         if (x.notte) r.getCell(12).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDDEBF7' } };
         if (x.avvisi) r.getCell(14).font = { color: { argb: 'FFB3261E' } };
       });
       const t = riepilogo(rm)[0];
-      const tr = w2.addRow([`Totale ${nomeMese(m)}`, '', '', `${t.giornate} giornate`, '', '', t.lavoro, t.ordinarie, t.straordinario, t.viaggio, '',
+      const tr = w2.addRow([`Totale ${nomeMese(m)}`, '', '', `${t.giornate} giornate`, '', '', g(t.lavoro), g(t.ordinarie), g(t.straordinario), g(t.viaggio), '',
         [t.nottiIt ? `${t.nottiIt} Italia` : '', t.nottiEst ? `${t.nottiEst} estero` : ''].filter(Boolean).join(', ') || '–']);
       tr.font = { bold: true };
       tr.eachCell((c) => { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE1ECF4' } }; });
       w2.addRow([]);
     }
     w2.getColumn(1).numFmt = 'dd/mm/yyyy';
-    [7, 8, 9, 10, 11].forEach((c) => { w2.getColumn(c).numFmt = '0.0'; });
+    [7, 8, 9, 10, 11].forEach((c) => { w2.getColumn(c).numFmt = ORE; });
   }
 
   return new Blob([await wb.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -151,7 +155,7 @@ export function pdfReport(jsPDF, r, logo, paeseDi) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const L = 12, R = 198, W = R - L, FONDO = 282;
   const righe = righeReport([{ dati: r }], '0000-01-01', '9999-12-31', paeseDi ? () => paeseDi(r) : null);
-  const num = (n) => (n ? String(Math.round(n * 10) / 10).replace('.', ',') : '–');
+  const num = hm;
   const t = (s, x, y, o = {}) => { doc.setFont('helvetica', o.b ? 'bold' : 'normal'); doc.setFontSize(o.sz || 8.5); doc.setTextColor(o.c || '#1b1b1b'); doc.text(String(s ?? ''), x, y, { align: o.al || 'left', maxWidth: o.mw }); };
   const taglia = (s, w, sz) => { doc.setFontSize(sz); let x = String(s ?? ''); if (doc.getTextWidth(x) <= w) return x; while (x && doc.getTextWidth(x + '…') > w) x = x.slice(0, -1); return x + '…'; };
   let y = 14;
@@ -242,7 +246,7 @@ export function pdfReport(jsPDF, r, logo, paeseDi) {
       y += 3;
     }
     nuovaPagina(14);
-    t("Ore in ore e decimi (7,5 = 7 ore e 30 minuti). Straordinario: ore oltre le 8 nella stessa giornata. Notte fuori: indicata dal tecnico o, se non indicata, quando il giorno dopo c'è un'altra giornata dello stesso rapporto; Italia o estero secondo il paese del cliente.", L, y, { sz: 7.3, c: '#666666', mw: W });
+    t("Ore in ore e minuti (7h 30m). Straordinario: ore oltre le 8 nella stessa giornata. Notte fuori: indicata dal tecnico o, se non indicata, quando il giorno dopo c'è un'altra giornata dello stesso rapporto; Italia o estero secondo il paese del cliente.", L, y, { sz: 7.3, c: '#666666', mw: W });
   }
 
   const n = doc.getNumberOfPages();

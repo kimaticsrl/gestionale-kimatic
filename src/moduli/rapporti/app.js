@@ -14,7 +14,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const toast=m=>{const t=TOAST;t.textContent=m;t.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(()=>t.hidden=true,3800)};
 const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 const GG=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
-const H=n=>RI.hrs(n)+' h';
+const H=n=>RI.hrs(n);
 const LINGUE=[['IT','Italiano'],['EN','Inglese'],['FR','Francese'],['ES','Spagnolo']];
 /* testi che legge il cliente al momento della firma */
 const FIRMA={
