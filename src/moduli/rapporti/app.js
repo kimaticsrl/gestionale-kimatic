@@ -377,7 +377,7 @@ async function doInvia(r){
   const an=S.clienti[r.cli&&r.cli.id]||{},cliMail=(r.cli&&r.cli.email||an.email||'').trim();
   // destinatari proposti: il cliente e l'ufficio commerciale BMTEK
   const to=[cliMail,SALES].filter(Boolean).join(', ');
-  const T=MAILT[r.lingua]||MAILT.IT,sub=T.s+' '+r.num+' – '+(r.cli.nome||''),body=T.b.replace('{n}',r.num);
+  const T=MAILT[r.lingua]||MAILT.IT,sub=T.s+' '+r.num+' – '+(r.cli.nome||''),body=T.b.replace('{n}',r.num+(r.cli&&r.cli.nome?' – '+r.cli.nome:''));
   let file=null;
   try{const jsPDF=await CTX.jsPDF();const blob=RI.build(jsPDF,conMail(r),LOGO).output('blob');
     const nm=(r.num+' '+(r.cli&&r.cli.nome||'')).replace(/[\\/:*?"<>|]+/g,' ').trim()+'.pdf';
