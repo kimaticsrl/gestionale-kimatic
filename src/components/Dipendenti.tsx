@@ -7,11 +7,14 @@ type Dip = { id: string; dati: Dati; attivo: boolean };
 type Persona = { id: string; name: string };
 type Pers = { n?: string; cc?: string; liv?: string; ral?: number; att?: number; pid?: string };
 
-const CONTRATTI = ["Tempo indeterminato", "Tempo determinato", "Apprendistato", "Somministrato", "Collaborazione", "Stage / tirocinio"];
+const CONTRATTI = ["Socio titolare", "Tempo indeterminato", "Tempo determinato", "Apprendistato", "Somministrato", "Collaborazione", "Stage / tirocinio"];
 const eur = (n?: number | null) => (n == null || isNaN(n) ? "" : n.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €");
 const fd = (s?: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || ""); return m ? `${m[3]}/${m[2]}/${m[1]}` : ""; };
 const num = (s: string) => { const z = s.replace(/[€\s]/g, ""); const v = Number(/,\d{1,2}$/.test(z) ? z.replace(/\./g, "").replace(",", ".") : z.replace(/,/g, "")); return z === "" || isNaN(v) ? null : v; };
 const oggi = () => new Date().toLocaleDateString("sv-SE");
+const socio = (x: Dip) => x.dati.contratto === "Socio titolare";
+const eta = (d?: string) => { if (!d) return null; const n = new Date(d + "T12:00:00"), o = new Date(); let a = o.getFullYear() - n.getFullYear(); if (o < new Date(o.getFullYear(), n.getMonth(), n.getDate())) a--; return a; };
+const anni = (d?: string) => (d ? (Date.now() - new Date(d + "T12:00:00").getTime()) / 31557600000 : null);
 const inForzaD = (x: Dip) => x.attivo && !(x.dati.scadenza && x.dati.scadenza < oggi());
 const norm = (s?: string) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
@@ -25,6 +28,9 @@ export default function Dipendenti({ modifica }: { modifica: boolean }) {
   const [ed, setEd] = useState<Dip | null>(null);
   const [ralTxt, setRalTxt] = useState("");
   const [msg, setMsg] = useState<{ t: string; err?: boolean } | null>(null);
+  const [ord, setOrd] = useState<{ k: string; dir: 1 | -1 }>({ k: "nome", dir: 1 });
+  const [stat, setStat] = useState(false);
+  const [coeff, setCoeff] = useState(1.39);
 
   async function carica() {
     const [d, p] = await Promise.all([
@@ -33,6 +39,9 @@ export default function Dipendenti({ modifica }: { modifica: boolean }) {
     ]);
     if (d.error) setMsg({ t: "Errore nel caricamento: " + d.error.message, err: true });
     setLista(((d.data ?? []) as Dip[]).sort((a, b) => norm(a.dati.nome).localeCompare(norm(b.dati.nome))));
+    const cfg = await sb.from("cg_docs").select("dati").eq("coll", "costi").eq("id", "cfg").maybeSingle();
+    const cf = Number((cfg.data?.dati as { coeff?: number } | undefined)?.coeff);
+    if (cf > 0) setCoeff(cf);
     setPersone(((p.data ?? []) as Persona[]).filter((x) => x.name).sort((a, b) => a.name.localeCompare(b.name)));
     setCarico(false);
   }
@@ -40,8 +49,20 @@ export default function Dipendenti({ modifica }: { modifica: boolean }) {
 
   const nomePiano = (pid?: string) => persone.find((p) => p.id === pid)?.name || "";
   const vis = lista.filter((x) => (tutti || inForzaD(x)) && (!q || norm([x.dati.nome, x.dati.cc, x.dati.mansione, x.dati.email, nomePiano(x.dati.pid)].join(" ")).includes(norm(q))));
+  const VAL: Record<string, (x: Dip) => string | number> = {
+    nome: (x) => norm(x.dati.nome), cc: (x) => norm(x.dati.cc), mansione: (x) => norm(x.dati.mansione), contratto: (x) => norm(x.dati.contratto),
+    liv: (x) => norm(x.dati.liv).padStart(4, "0"), ral: (x) => Number(x.dati.ral) || 0, assunzione: (x) => x.dati.assunzione || "", piano: (x) => norm(nomePiano(x.dati.pid)),
+  };
+  vis.sort((a, b) => { const f = VAL[ord.k], va = f(a), vb = f(b); return (va < vb ? -1 : va > vb ? 1 : 0) * ord.dir || norm(a.dati.nome).localeCompare(norm(b.dati.nome)); });
+  const th = (k: string, l: string, destra = false) => (
+    <th style={{ cursor: "pointer", whiteSpace: "nowrap", textAlign: destra ? "right" : undefined }} title="Clic per ordinare"
+      onClick={() => setOrd((o) => ({ k, dir: o.k === k ? (o.dir === 1 ? -1 : 1) : k === "ral" ? -1 : 1 }))}>
+      {l}{ord.k === k ? (ord.dir === 1 ? " ▲" : " ▼") : ""}
+    </th>
+  );
   const inForza = lista.filter(inForzaD);
-  const totRal = inForza.reduce((a, x) => a + (Number(x.dati.ral) || 0), 0);
+  const dipF = inForza.filter((x) => !socio(x));
+  const totRal = dipF.reduce((a, x) => a + (Number(x.dati.ral) || 0), 0);
   const reparti = [...new Set(lista.map((x) => x.dati.cc).filter(Boolean))].sort() as string[];
 
   function apri(x: Dip | null) {
@@ -170,14 +191,16 @@ export default function Dipendenti({ modifica }: { modifica: boolean }) {
           <div className="row" style={{ marginBottom: 12 }}>
             <input type="text" placeholder="Cerca nome, reparto, mansione…" value={q} onChange={(e) => setQ(e.target.value)} style={{ minWidth: 260 }} />
             <label className="ck"><input type="checkbox" checked={tutti} onChange={(e) => setTutti(e.target.checked)} /> Mostra anche chi non è più in forza</label>
-            <span className="tag" style={{ margin: 0 }}>{inForza.length} in forza · RAL totale {eur(totRal)}</span>
+            <span className="tag" style={{ margin: 0 }}>{dipF.length} dipendenti in forza{inForza.length > dipF.length ? ` + ${inForza.length - dipF.length} soci` : ""} · RAL totale {eur(totRal)}</span>
+            <button className={"btn" + (stat ? "" : " sec")} onClick={() => setStat(!stat)}>Statistiche</button>
             <span style={{ flex: 1 }} />
             <button className="btn sec" onClick={csv}>Esporta CSV (Excel)</button>
             {modifica && <button className="btn" onClick={() => apri(null)}>Nuovo dipendente</button>}
           </div>
+          {stat && <Statistiche dip={dipF} soci={inForza.length - dipF.length} coeff={coeff} />}
           <div className="mx">
             <table>
-              <thead><tr><th>Nome e cognome</th><th>Reparto</th><th>Mansione</th><th>Contratto</th><th>Livello</th><th style={{ textAlign: "right" }}>RAL</th><th>Assunzione</th><th>Piano</th></tr></thead>
+              <thead><tr>{th("nome", "Nome e cognome")}{th("cc", "Reparto")}{th("mansione", "Mansione")}{th("contratto", "Contratto")}{th("liv", "Livello")}{th("ral", "RAL", true)}{th("assunzione", "Assunzione")}{th("piano", "Piano")}</tr></thead>
               <tbody>
                 {vis.map((x) => (
                   <tr key={x.id} onClick={() => apri(x)} style={{ cursor: "pointer", opacity: inForzaD(x) ? 1 : 0.55, background: ed?.id === x.id ? "var(--accent-soft)" : undefined }}>
@@ -193,5 +216,57 @@ export default function Dipendenti({ modifica }: { modifica: boolean }) {
         </div>
       )}
     </>
+  );
+}
+
+// Statistiche sui dipendenti in forza (soci titolari esclusi)
+function Statistiche({ dip, soci, coeff }: { dip: Dip[]; soci: number; coeff: number }) {
+  const n = dip.length || 1;
+  const ral = (l: Dip[]) => l.reduce((a, x) => a + (Number(x.dati.ral) || 0), 0);
+  const gruppi = (f: (x: Dip) => string) => {
+    const m: Record<string, Dip[]> = {};
+    dip.forEach((x) => { const k = f(x) || "non indicato"; (m[k] ??= []).push(x); });
+    return Object.entries(m).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+  };
+  const media = (v: (number | null)[]) => { const ok = v.filter((x): x is number => x != null); return ok.length ? ok.reduce((a, b) => a + b, 0) / ok.length : null; };
+  const etaM = media(dip.map((x) => eta(x.dati.nascita))), anzM = media(dip.map((x) => anni(x.dati.assunzione)));
+  const tot = ral(dip);
+  const tab = (titolo: string, f: (x: Dip) => string, costi = false) => (
+    <div style={{ flex: "1 1 300px" }}>
+      <h3 style={{ margin: "0 0 6px", fontSize: 14 }}>{titolo}</h3>
+      <table>
+        <thead><tr><th></th><th style={{ textAlign: "right" }}>Persone</th><th style={{ textAlign: "right" }}>%</th>{costi && <><th style={{ textAlign: "right" }}>RAL</th><th style={{ textAlign: "right" }}>Costo azienda</th><th style={{ textAlign: "right" }}>RAL media</th></>}</tr></thead>
+        <tbody>
+          {gruppi(f).map(([k, l]) => (
+            <tr key={k}><td>{k}</td><td style={{ textAlign: "right" }}>{l.length}</td><td style={{ textAlign: "right" }}>{Math.round((l.length / n) * 100)}%</td>
+              {costi && <><td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{eur(ral(l))}</td><td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{eur(ral(l) * coeff)}</td><td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{eur(ral(l) / l.length)}</td></>}
+            </tr>
+          ))}
+          {costi && <tr><td><b>Totale</b></td><td style={{ textAlign: "right" }}><b>{dip.length}</b></td><td></td><td style={{ textAlign: "right", whiteSpace: "nowrap" }}><b>{eur(tot)}</b></td><td style={{ textAlign: "right", whiteSpace: "nowrap" }}><b>{eur(tot * coeff)}</b></td><td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{eur(tot / n)}</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  );
+  const sesso = (x: Dip) => (x.dati.sesso === "M" ? "Uomini" : x.dati.sesso === "F" ? "Donne" : "");
+  const fascia = (x: Dip) => { const e = eta(x.dati.nascita); return e == null ? "" : e < 30 ? "fino a 29 anni" : e < 40 ? "30–39 anni" : e < 50 ? "40–49 anni" : e < 60 ? "50–59 anni" : "60 anni e oltre"; };
+  return (
+    <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 14, marginBottom: 14 }}>
+      <div className="row" style={{ gap: 24, marginBottom: 14 }}>
+        <div><small className="tag">Dipendenti in forza</small><div style={{ fontSize: 22, fontWeight: 700 }}>{dip.length}</div></div>
+        <div><small className="tag">RAL totale</small><div style={{ fontSize: 22, fontWeight: 700 }}>{eur(tot)}</div></div>
+        <div><small className="tag">Costo azienda stimato (× {String(coeff).replace(".", ",")})</small><div style={{ fontSize: 22, fontWeight: 700 }}>{eur(tot * coeff)}</div></div>
+        <div><small className="tag">Età media</small><div style={{ fontSize: 22, fontWeight: 700 }}>{etaM != null ? Math.round(etaM) + " anni" : "—"}</div></div>
+        <div><small className="tag">Anzianità media</small><div style={{ fontSize: 22, fontWeight: 700 }}>{anzM != null ? anzM.toFixed(1).replace(".", ",") + " anni" : "—"}</div></div>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 24 }}>
+        {tab("Per reparto", (x) => x.dati.cc || "", true)}
+        {tab("Per inquadramento", (x) => x.dati.inq || "", true)}
+        {tab("Per contratto", (x) => x.dati.contratto || "")}
+        {tab("Per sesso", sesso)}
+        {tab("Per età", fascia)}
+        {tab("Per livello", (x) => (x.dati.liv ? "Livello " + x.dati.liv : ""), true)}
+      </div>
+      <p className="tag" style={{ marginBottom: 0 }}>Solo dipendenti in forza{soci ? `; esclusi i ${soci} soci titolari` : ""}. Il costo azienda è la RAL moltiplicata per il coefficiente del Controllo di gestione ({String(coeff).replace(".", ",")}): è una stima, non comprende straordinari, trasferte e premi.</p>
+    </div>
   );
 }
