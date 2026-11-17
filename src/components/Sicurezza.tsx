@@ -5,7 +5,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 // Le persone arrivano dall'Anagrafica dipendenti (funzione sic_dipendenti): qui non si inseriscono.
 type Dip = { id: string; nome: string; mansione: string | null; reparto: string | null; contratto: string | null; attivo: boolean; assunzione: string | null; fine: string | null; finecontr?: string | null };
 type Persona = { rischio?: string; gen?: string; dpi?: string; addestr?: string; preass?: string; period?: string; ultvis?: string; scadvis?: string; note?: string };
-type Corso = { dip: string; tipo: string; data?: string; scadenza?: string; ore?: string; note?: string };
+type Corso = { dip: string; tipo: string; data?: string; scadenza?: string; ore?: string; note?: string; chiuso?: boolean };
 type Azienda = { nome: string; mesi?: number; ultimo?: string; prossima?: string; note?: string };
 type Sanitari = { idoneo?: string; prescr?: string };
 type Incarico = { ruolo: string; dip?: string; esterno?: string; dal?: string; note?: string };
@@ -126,7 +126,7 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
     const p = pers[d.id] || {};
     if (d.finecontr) righe.push({ quando: d.finecontr, cosa: "Scadenza contratto" + (d.contratto ? ` (${d.contratto.toLowerCase()})` : ""), chi: d.nome, dip: d.id });
     if (p.scadvis) righe.push({ quando: p.scadvis, cosa: "Visita medica" + (p.period ? ` (${p.period.toLowerCase()})` : ""), chi: d.nome, dip: d.id });
-    Object.values(ultimo[d.id] || {}).forEach((c) => { if (c.scadenza) righe.push({ quando: c.scadenza, cosa: nomeTipo(c.tipo), chi: d.nome, dip: d.id }); });
+    Object.values(ultimo[d.id] || {}).forEach((c) => { if (c.scadenza && !c.chiuso) righe.push({ quando: c.scadenza, cosa: nomeTipo(c.tipo), chi: d.nome, dip: d.id }); });
   });
   inc.forEach((x) => {
     const r = RUOLI.find((y) => y.k === x.dati.ruolo), d = x.dati.dip ? byId[x.dati.dip] : null;
@@ -223,7 +223,7 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
             <tbody>
               {corsi.filter((c) => c.dati.dip === ds.id).sort((a, b) => (b.dati.data || "").localeCompare(a.dati.data || "")).map((c) => (
                 <tr key={c.id} style={{ cursor: modifica ? "pointer" : undefined }} onClick={() => modifica && setEdC(JSON.parse(JSON.stringify(c)))}>
-                  <td>{nomeTipo(c.dati.tipo)}</td><td>{fd(c.dati.data)}</td>{cella(ultimo[ds.id]?.[c.dati.tipo] === c.dati ? c.dati.scadenza : null, fd(c.dati.scadenza))}<td>{c.dati.ore}</td><td>{c.dati.note}</td>
+                  <td>{nomeTipo(c.dati.tipo)}</td><td>{fd(c.dati.data)}</td>{cella(ultimo[ds.id]?.[c.dati.tipo] === c.dati && !c.dati.chiuso ? c.dati.scadenza : null, c.dati.chiuso ? "non rinnovato" : fd(c.dati.scadenza))}<td>{c.dati.ore}</td><td>{c.dati.note}</td>
                 </tr>
               ))}
             </tbody>
@@ -253,7 +253,7 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
                     {cella(d.finecontr)}
                     <td>{p.rischio ? p.rischio[0] + p.rischio.slice(1).toLowerCase() : ""}</td>
                     {cella(p.scadvis)}
-                    {COL.map((k) => { const c = u[k]; return c ? cella(c.scadenza, c.scadenza ? fd(c.scadenza) : c.data ? "fatto " + fd(c.data) : c.note || "", k) : <td key={k}></td>; })}
+                    {COL.map((k) => { const c = u[k]; return c?.chiuso ? <td key={k}><small title={c.note}>non rinnovato</small></td> : c ? cella(c.scadenza, c.scadenza ? fd(c.scadenza) : c.data ? "fatto " + fd(c.data) : c.note || "", k) : <td key={k}></td>; })}
                     <td><small style={{ color: "inherit" }}>{p.dpi}</small></td>
                   </tr>
                 );
@@ -279,7 +279,7 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
                 .map((c) => (
                   <tr key={c.id} style={{ cursor: modifica ? "pointer" : undefined }} onClick={() => modifica && setEdC(JSON.parse(JSON.stringify(c)))}>
                     <td>{byId[c.dati.dip]?.nome}</td><td>{nomeTipo(c.dati.tipo)}</td><td>{fd(c.dati.data)}</td>
-                    {cella(ultimo[c.dati.dip]?.[c.dati.tipo] === c.dati ? c.dati.scadenza : null, fd(c.dati.scadenza))}<td>{c.dati.note}</td>
+                    {cella(ultimo[c.dati.dip]?.[c.dati.tipo] === c.dati && !c.dati.chiuso ? c.dati.scadenza : null, c.dati.chiuso ? "non rinnovato" : fd(c.dati.scadenza))}<td>{c.dati.note}</td>
                   </tr>
                 ))}
             </tbody>
@@ -422,6 +422,7 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
           <label style={lab}>Ore<input style={inp} value={edC.dati.ore || ""} onChange={(e) => setC("ore", e.target.value)} /></label>
         </div>
         <label style={lab}>Note (ente, attestato, «da fare»…)<input style={inp} value={edC.dati.note || ""} onChange={(e) => setC("note", e.target.value)} /></label>
+        <label className="ck"><input type="checkbox" checked={!!edC.dati.chiuso} onChange={(e) => setEdC({ ...edC, dati: { ...edC.dati, chiuso: e.target.checked || undefined } })} /> Non da rinnovare (la persona non svolge più questa attività): esce dalle scadenze</label>
         <div className="row">
           <span className="tag" style={{ margin: 0 }}>La scadenza si calcola dalla data: {TIPI.find((t) => t.k === edC.dati.tipo)?.anni || "nessuna"}{TIPI.find((t) => t.k === edC.dati.tipo)?.anni ? " anni" : ""}. Si può cambiare.</span>
           <span style={{ flex: 1 }} />
