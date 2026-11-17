@@ -1,5 +1,5 @@
-// File dei moduli Rateizzazioni fiscali, Piano di rientro fornitori, Tesserino trasferta
-// e Organigramma della sicurezza. Sono nella cartella privata del progetto e si scaricano
+// File dei moduli Rateizzazioni fiscali, Piano di rientro fornitori e Tesserino trasferta.
+// Sono nella cartella privata del progetto e si scaricano
 // solo dopo l'accesso, e solo da chi ha almeno il livello «Legge» sul modulo.
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -10,7 +10,6 @@ const CARTELLE: Record<string, string> = {
   "rateizzazioni": "rateizzazioni",
   "rientro-fornitori": "rientro",
   "tesserino-trasferta": "tesserino",
-  "organigramma-sicurezza": "organigramma",
 };
 const TIPI: Record<string, string> = {
   ".html": "text/html; charset=utf-8", ".json": "application/json",

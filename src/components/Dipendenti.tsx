@@ -158,6 +158,7 @@ export default function Dipendenti({ modifica }: { modifica: boolean }) {
       {ed && (
         <div className="box" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <h2>{ed.id ? ed.dati.nome : "Nuovo dipendente"}</h2>
+          <FotoDipendente id={ed.id} modifica={modifica} />
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 12 }}>
             {campo("nome", "Nome e cognome")}
             {campo("cc", "Reparto / centro di costo", "text", <datalist id="dl-cc">{reparti.map((r) => <option key={r} value={r} />)}</datalist>)}
@@ -286,6 +287,52 @@ function Statistiche({ dip, soci, coeff }: { dip: Dip[]; soci: number; coeff: nu
         {tab("Per livello", (x) => (x.dati.liv ? "Livello " + x.dati.liv : ""), true, (k) => ordLiv(k.replace("Livello ", "")))}
       </div>
       <p className="tag" style={{ marginBottom: 0 }}>Solo dipendenti in forza{soci ? `; esclusi i ${soci} soci titolari` : ""}. Il costo azienda è la RAL moltiplicata per il coefficiente del Controllo di gestione ({String(coeff).replace(".", ",")}): è una stima, non comprende straordinari, trasferte e premi.</p>
+    </div>
+  );
+}
+
+// Foto del dipendente (per il Tesserino trasferta). Sta nella tabella «tesserini», con lo stesso id
+// del dipendente, così l'elenco dell'anagrafica resta leggero; si salva subito, senza «Salva».
+function FotoDipendente({ id, modifica }: { id: string; modifica: boolean }) {
+  const sb = useMemo(() => supabaseBrowser(), []);
+  const [foto, setFoto] = useState<string | null>(null);
+  const [stato, setStato] = useState("");
+  useEffect(() => {
+    setFoto(null); setStato("");
+    if (!id) return;
+    sb.from("tesserini").select("dati").eq("id", id).maybeSingle().then(({ data }) => setFoto((data?.dati as { photo?: string } | undefined)?.photo || ""));
+  }, [id, sb]);
+  async function salva(nuova: string) {
+    const { error } = nuova ? await sb.from("tesserini").upsert({ id, dati: { photo: nuova } }) : await sb.from("tesserini").delete().eq("id", id);
+    if (error) { setStato("Foto non salvata: " + error.message); return; }
+    setFoto(nuova); setStato(nuova ? "Foto salvata." : "Foto tolta.");
+  }
+  function carica(f?: File) {
+    if (!f) return;
+    const im = new Image();
+    im.onload = () => {
+      const k = Math.min(1, 600 / Math.max(im.width, im.height)), c = document.createElement("canvas");
+      c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+      c.getContext("2d")!.drawImage(im, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(im.src); salva(c.toDataURL("image/jpeg", 0.88));
+    };
+    im.onerror = () => setStato("Il file non è un'immagine leggibile.");
+    im.src = URL.createObjectURL(f);
+  }
+  if (!id) return <p className="tag" style={{ margin: 0 }}>La foto si aggiunge dopo aver salvato il dipendente.</p>;
+  return (
+    <div className="row" style={{ gap: 14, alignItems: "center" }}>
+      <div style={{ width: 84, height: 104, borderRadius: 8, border: "1px solid var(--line)", background: "var(--bg)", overflow: "hidden", display: "grid", placeItems: "center", color: "var(--muted)", fontSize: 12 }}>
+        {foto === null ? "…" : foto ? <img src={foto} alt="Foto del dipendente" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "nessuna foto"}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <span style={{ fontSize: 13 }}>Foto per il tesserino di trasferta</span>
+        {modifica && <div className="row" style={{ gap: 8 }}>
+          <label className="btn sec" style={{ cursor: "pointer" }}>{foto ? "Cambia foto" : "Carica foto"}<input type="file" accept="image/*" hidden onChange={(e) => { carica(e.target.files?.[0]); e.target.value = ""; }} /></label>
+          {foto && <button className="btn link" onClick={() => salva("")}>Togli</button>}
+        </div>}
+        {stato && <small style={{ color: "var(--muted)" }}>{stato}</small>}
+      </div>
     </div>
   );
 }

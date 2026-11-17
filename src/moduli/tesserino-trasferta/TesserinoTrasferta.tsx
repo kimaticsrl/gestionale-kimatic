@@ -5,10 +5,15 @@ import { Riquadro } from "@/moduli/riquadro";
 
 type Riga = { id: string; nome: string | null; reparto: string | null; luogo: string | null; nascita: string | null; cf: string | null; assunzione: string | null };
 
-// «Mario Rossi» → nome «Mario», cognome «Rossi» (l'ultima parola è il cognome; si corregge sul tesserino)
+// In anagrafica il nome è «COGNOME NOME»: «DI BENEDETTO SILVIA» → cognome «Di Benedetto», nome «Silvia».
+// Un cognome doppio senza particella (es. «Conti Verzì») va corretto a mano sul tesserino.
+const titolo = (s: string) => s.toLowerCase().replace(/(^|[\s'’-])(\p{L})/gu, (_, a, b) => a + b.toUpperCase());
+const PARTICELLE = new Set(["de", "di", "del", "della", "dal", "dalla", "da", "la", "lo", "le", "van", "von", "d'", "dell'"]);
 function dividi(completo: string) {
-  const p = completo.trim().split(/\s+/);
-  return p.length < 2 ? { nome: completo.trim(), cognome: "" } : { nome: p.slice(0, -1).join(" "), cognome: p[p.length - 1] };
+  const p = titolo(completo.trim()).split(/\s+/).filter(Boolean);
+  let n = 1;
+  while (n < p.length - 1 && PARTICELLE.has(p[n - 1].toLowerCase())) n++;
+  return p.length < 2 ? { cognome: p.join(" "), nome: "" } : { cognome: p.slice(0, n).join(" "), nome: p.slice(n).join(" ") };
 }
 
 // La pagina originale gira in un riquadro. I dipendenti arrivano dall'Anagrafica dipendenti
@@ -24,7 +29,7 @@ export default function TesserinoTrasferta({ livello }: { livello: string }) {
       if (dip.error) setErrore("Non riesco a leggere l'anagrafica dei dipendenti: " + dip.error.message);
       const foti = new Map((foto.data || []).map((r: { id: string; dati: { photo?: string } }) => [r.id, r.dati?.photo || ""]));
       const personale = ((dip.data || []) as Riga[]).map((r) => ({
-        id: r.id, etichetta: r.nome || "Senza nome", reparto: r.reparto || "", ...dividi(r.nome || ""),
+        id: r.id, etichetta: r.nome ? titolo(r.nome) : "Senza nome", reparto: r.reparto || "", ...dividi(r.nome || ""),
         luogo: r.luogo || "", nascita: r.nascita || "", cf: (r.cf || "").toUpperCase(), assunzione: r.assunzione || "",
         photo: foti.get(r.id) || "",
       }));
