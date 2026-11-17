@@ -151,6 +151,25 @@ export default function Sicurezza({ modifica, gestisce = false }: { modifica: bo
     } finally { setSalvo(false); }
   }
 
+  // PDF di una o più verifiche di una scadenza aziendale (firma e foto incluse)
+  async function scaricaVerifiche(a: Doc<Azienda>, lista: Doc<Verifica>[]) {
+    setMsg({ t: "Preparo il PDF…" });
+    try {
+      const comeUrl = (b: Blob) => new Promise<string>((ok) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.readAsDataURL(b); });
+      const scarica = async (path?: string) => { if (!path) return undefined; const { data } = await sb.storage.from("sicurezza").download(path); return data ? comeUrl(data) : undefined; };
+      const [{ jsPDF }, { pdfVerifiche }, logo] = await Promise.all([import("jspdf"), import("./sicurezzaPdf"), fetch("/logo-kimatic.png").then((r) => r.blob()).then(comeUrl).catch(() => undefined)]);
+      const righe = await Promise.all(lista.slice().sort((x, y) => x.dati.data.localeCompare(y.dati.data)).map(async ({ dati: v }) => ({
+        data: v.data, chi: byId[v.chi || ""]?.nome || "", esito: v.esito, note: v.note, controlli: v.controlli,
+        firma: await scarica(v.firma), foto: (await Promise.all((v.foto || []).map((f) => scarica(f.path)))).filter((x): x is string => !!x),
+      })));
+      const freq = a.dati.mesi ? (a.dati.mesi === 1 ? "ogni mese" : `ogni ${a.dati.mesi} mesi`) : "";
+      const doc = pdfVerifiche(jsPDF, { nome: a.dati.nome, frequenza: freq }, righe, logo);
+      const nome = a.dati.nome.replace(/[^\p{L}\p{N}]+/gu, "_").replace(/^_|_$/g, "");
+      doc.save(lista.length === 1 ? `Verifica_${nome}_${lista[0].dati.data}.pdf` : `Registro_verifiche_${nome}.pdf`);
+      setMsg(null);
+    } catch (e) { setMsg({ t: "PDF non creato: " + (e as Error).message, err: true }); }
+  }
+
   async function scrivi(coll: string, id: string, dati: unknown, ok: string) {
     const pulito = Object.fromEntries(Object.entries(dati as Record<string, unknown>).filter(([, v]) => v !== "" && v != null));
     const { error } = await sb.from("sic_docs").upsert({ coll, id, dati: pulito });
@@ -477,6 +496,7 @@ export default function Sicurezza({ modifica, gestisce = false }: { modifica: bo
                   <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
                     <b>Registro delle verifiche</b>
                     <span className="row" style={{ gap: 6 }}>
+                      {ver.some((v) => v.dati.az === edA.id) && <button className="btn sec" onClick={() => scaricaVerifiche(edA, ver.filter((v) => v.dati.az === edA.id))}>Scarica registro (PDF)</button>}
                       {!edV && <button className="btn" onClick={() => { setEdV({ az: edA.id, data: oggi(), chi: edA.dati.incaricato, esito: "Conforme", ...(edA.dati.controlli?.filter(Boolean).length ? { controlli: edA.dati.controlli.filter(Boolean).map((voce) => ({ voce, ok: false })) } : {}) }); setFirmato(false); setFotoNuove([]); }}>Registra verifica</button>}
                     </span>
                   </div>
@@ -520,7 +540,7 @@ export default function Sicurezza({ modifica, gestisce = false }: { modifica: bo
                     </div>
                   )}
                   <div className="mx"><table>
-                    <thead><tr><th>Data</th><th>Chi</th><th>Esito</th><th>Note</th><th>Firma</th><th>Foto</th></tr></thead>
+                    <thead><tr><th>Data</th><th>Chi</th><th>Esito</th><th>Note</th><th>Firma</th><th>Foto</th><th></th></tr></thead>
                     <tbody>
                       {ver.filter((v) => v.dati.az === edA.id).map((v) => (
                         <tr key={v.id}>
@@ -528,9 +548,10 @@ export default function Sicurezza({ modifica, gestisce = false }: { modifica: bo
                           <td style={{ color: v.dati.esito === "Non conforme" ? "var(--danger)" : undefined }}>{v.dati.esito}</td><td>{v.dati.controlli && <small style={{ color: "inherit" }} title={v.dati.controlli.filter((c) => !c.ok).map((c) => c.voce + (c.nota ? ": " + c.nota : "")).join("\n")}>{v.dati.controlli.filter((c) => c.ok).length}/{v.dati.controlli.length} controlli OK{v.dati.controlli.some((c) => !c.ok) ? " · da sistemare: " + v.dati.controlli.filter((c) => !c.ok).map((c) => c.voce + (c.nota ? " (" + c.nota + ")" : "")).join("; ") : ""}</small>}{v.dati.note}</td>
                           <td>{v.dati.firma && url[v.dati.firma] ? <img src={url[v.dati.firma]} alt="firma" style={{ height: 34, background: "#fff", borderRadius: 4 }} /> : v.dati.firma ? "…" : ""}</td>
                           <td>{(v.dati.foto || []).map((f, i) => url[f.path] ? <a key={i} href={url[f.path]} target="_blank" rel="noreferrer"><img src={url[f.path]} alt={f.nome || "foto"} style={{ height: 34, width: 34, objectFit: "cover", borderRadius: 4, marginRight: 4 }} /></a> : null)}</td>
+                          <td><button className="btn sec" onClick={() => scaricaVerifiche(edA, [v])}>PDF</button></td>
                         </tr>
                       ))}
-                      {!ver.some((v) => v.dati.az === edA.id) && <tr><td colSpan={6} style={{ color: "var(--muted)" }}>Nessuna verifica registrata.</td></tr>}
+                      {!ver.some((v) => v.dati.az === edA.id) && <tr><td colSpan={7} style={{ color: "var(--muted)" }}>Nessuna verifica registrata.</td></tr>}
                     </tbody>
                   </table></div>
                 </div>
