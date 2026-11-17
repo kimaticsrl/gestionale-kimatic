@@ -6,7 +6,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 type Dip = { id: string; nome: string; mansione: string | null; reparto: string | null; contratto: string | null; attivo: boolean; assunzione: string | null; fine: string | null; finecontr?: string | null };
 type Persona = { rischio?: string; gen?: string; dpi?: string; addestr?: string; preass?: string; period?: string; ultvis?: string; scadvis?: string; note?: string };
 type Corso = { dip: string; tipo: string; data?: string; scadenza?: string; ore?: string; note?: string; chiuso?: boolean };
-type Azienda = { nome: string; mesi?: number; ultimo?: string; prossima?: string; note?: string; incaricato?: string; procedura?: string; controlli?: string[]; fisso?: boolean };
+type Azienda = { nome: string; mesi?: number; ultimo?: string; prossima?: string; note?: string; incaricato?: string; procedura?: string; controlli?: string[] };
 type Voce = { voce: string; ok: boolean; nota?: string };
 type Foto = { path: string; nome?: string };
 type Verifica = { az: string; data: string; chi?: string; esito?: string; note?: string; firma?: string; foto?: Foto[]; controlli?: Voce[] };
@@ -537,7 +537,7 @@ export default function Sicurezza({ modifica, gestisce = false }: { modifica: bo
               <div className="row">
                 {modifica && edA.dati.mesi && !edA.dati.procedura && <button className="btn sec" onClick={() => setEdA({ ...edA, dati: { ...edA.dati, ultimo: oggi(), prossima: piuMesi(oggi(), edA.dati.mesi || 0) } })}>Fatto oggi</button>}
                 <span style={{ flex: 1 }} />
-                {gestisce && edA.id && !edA.dati.fisso && <button className="btn danger" onClick={() => { if (confirm("Eliminare questa scadenza?")) { togli("azienda", edA.id, "Scadenza eliminata."); setEdA(null); } }}>Elimina</button>}
+                {gestisce && edA.id && <button className="btn danger" onClick={() => { if (confirm("Eliminare questa scadenza?")) { togli("azienda", edA.id, "Scadenza eliminata."); setEdA(null); } }}>Elimina</button>}
                 <button className="btn sec" onClick={() => setEdA(null)}>{modifica ? "Annulla" : "Chiudi"}</button>
                 {modifica && <button className="btn" onClick={async () => { if (!edA.dati.nome?.trim()) { setMsg({ t: "Scrivi cosa va controllato.", err: true }); return; } if (await scrivi("azienda", edA.id || uid(), edA.dati, "Scadenza salvata.")) setEdA(null); }}>Salva</button>}
               </div>
@@ -548,7 +548,7 @@ export default function Sicurezza({ modifica, gestisce = false }: { modifica: bo
             <tbody>
               {az.map((a) => (
                 <tr key={a.id} style={{ cursor: "pointer" }} onClick={() => setEdA(JSON.parse(JSON.stringify(a)))}>
-                  <td><b>{a.dati.nome}</b>{a.dati.fisso && <small title="Scadenza fissa: non si può eliminare"> 🔒</small>}</td><td>{a.dati.mesi ? (a.dati.mesi === 1 ? "ogni mese" : `ogni ${a.dati.mesi} mesi`) : ""}</td><td>{a.dati.incaricato ? byId[a.dati.incaricato]?.nome : <small>da nominare</small>}</td><td>{fd(a.dati.ultimo)}</td>{cella(a.dati.prossima)}<td><small style={{ color: "inherit" }}>{a.dati.note}</small></td>
+                  <td><b>{a.dati.nome}</b></td><td>{a.dati.mesi ? (a.dati.mesi === 1 ? "ogni mese" : `ogni ${a.dati.mesi} mesi`) : ""}</td><td>{a.dati.incaricato ? byId[a.dati.incaricato]?.nome : <small>da nominare</small>}</td><td>{fd(a.dati.ultimo)}</td>{cella(a.dati.prossima)}<td><small style={{ color: "inherit" }}>{a.dati.note}</small></td>
                 </tr>
               ))}
             </tbody>
