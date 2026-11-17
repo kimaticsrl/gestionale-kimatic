@@ -79,6 +79,7 @@ from (values
   ('288c1919-15e5-429c-a08f-1b3834624524', 'Produzione — tornitura e fresatura'), -- Facchini Massimo
   ('7389c092-0d08-4c5c-8145-0fff8b67db06', 'Produzione — tornitura e fresatura'), -- Palacios Huaman Bikri Josue'
   ('0e0a0df7-702a-462d-bfce-f781b497bf7f', 'Produzione — tornitura e fresatura'), -- Lelli Andrea
+  ('9c51646d-d74e-4313-9df6-1bae8782992a', 'Produzione — tornitura e fresatura'), -- Morotti Massimo (somministrato, officina)
   ('53930604-ebd5-4f6d-898c-05cfca7db318', 'Montaggio e cablaggio'),  -- Ghelli Tommaso
   ('9b8ff64c-0413-4391-9c29-d654878286c0', 'Montaggio e cablaggio'),  -- Halungescu Gheorghe
   ('42291cb8-0b37-4a70-abca-3e0e824fb7a0', 'Montaggio e cablaggio'),  -- Pingaro Vittorio
