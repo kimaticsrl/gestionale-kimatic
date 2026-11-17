@@ -6,15 +6,18 @@
 -- può registrare una verifica: data, esito, note, firma e foto. Correggere o cancellare
 -- le verifiche resta a chi ha Modifica.
 
--- Archivio privato per firme e foto delle verifiche
+-- Archivio privato per firme e foto delle verifiche (si può rieseguire senza errori)
 insert into storage.buckets (id, name, public, file_size_limit)
 values ('sicurezza', 'sicurezza', false, 15728640)
 on conflict (id) do nothing;
 
+drop policy if exists "sic lettura" on storage.objects;
 create policy "sic lettura" on storage.objects for select to authenticated
   using (bucket_id = 'sicurezza' and public.puo('sicurezza', 'legge'));
+drop policy if exists "sic caricamento" on storage.objects;
 create policy "sic caricamento" on storage.objects for insert to authenticated
   with check (bucket_id = 'sicurezza' and public.puo('sicurezza', 'legge') and (storage.foldername(name))[1] = 'verifiche');
+drop policy if exists "sic cancellazione" on storage.objects;
 create policy "sic cancellazione" on storage.objects for delete to authenticated
   using (bucket_id = 'sicurezza' and public.puo('sicurezza', 'modifica'));
 
