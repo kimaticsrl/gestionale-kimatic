@@ -35,6 +35,11 @@ export default function Rapporti({ me, nome, modifica, gestisce, clienti }: Prop
           const { data } = await sb.from("articoli").select("codice,descrizione").or(`codice.ilike.${p},descrizione.ilike.${p}`).order("codice").limit(20);
           return data ?? [];
         },
+        // chi può compilare i rapporti: per dire chi vedrà il rapporto dal campo «Tecnici BMTEK»
+        async tecnici() {
+          const { data } = await sb.rpc("tecnici_rapporti");
+          return ((data ?? []) as { nome: string }[]).map((x) => x.nome);
+        },
         // numero definitivo progressivo, assegnato dal database alla firma (stesso numero se il rapporto si rifirma)
         async numeroRapporto(id: string) {
           const { data, error } = await sb.rpc("numero_rapporto", { p_id: id });

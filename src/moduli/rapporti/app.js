@@ -15,6 +15,17 @@ const toast=m=>{const t=TOAST;t.textContent=m;t.hidden=false;clearTimeout(toast.
 const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 const GG=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
 const H=n=>RI.hrs(n);
+/* tecnici: chi è scritto nel campo «Tecnici BMTEK» vede il rapporto anche se non l'ha creato
+   (stesso confronto del database: maiuscole, accenti e ordine nome/cognome non contano) */
+const nomeNorm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/['’.]/g,' ').split(/\s+/).filter(Boolean).sort().join(' ');
+const nomiTec=s=>String(s||'').split(/\s*(?:,|;|\/|\+|&|\be\b|\band\b)\s*/i).map(x=>x.trim()).filter(Boolean);
+let UTENTI=null;
+if(CTX.tecnici)CTX.tecnici().then(L=>{UTENTI=L;const h=ROOT.querySelector('#tec-hint'),i=ROOT.querySelector('#f-tec');if(h&&i)h.innerHTML=tecHint(i.value)}).catch(()=>{});
+function tecHint(s){
+  if(!UTENTI)return'';const M=new Map(UTENTI.map(n=>[nomeNorm(n),n]));
+  const N=nomiTec(s),si=[],no=[];N.forEach(n=>{const u=M.get(nomeNorm(n));if(u)si.push(u);else no.push(n)});
+  return (si.length?`Lo vedono anche: ${esc(si.join(', '))}. `:'')+(no.length?`<span style="color:var(--warn,#b45309)">${esc(no.map(n=>'«'+n+'»').join(', '))} non ${no.length>1?'corrispondono':'corrisponde'} a un utente del gestionale: scrivi nome e cognome come nell'elenco utenti.</span>`:'');
+}
 const SALES='sales@bmtek.it'; // proposto insieme al cliente quando si invia il rapporto
 // per il PDF: e-mail scritta sul rapporto o, se manca, quella dell'anagrafica
 const conMail=r=>{const m=r.cli&&(r.cli.email||(S.clienti[r.cli.id]||{}).email);return m?{...r,cli:{...r.cli,email:m}}:r};
@@ -114,9 +125,9 @@ function render(){
 function vList(){
   const q=UI.q.trim().toLowerCase();
   let L=Object.values(S.rapporti).sort((a,b)=>String(b.agg||b.cr).localeCompare(String(a.agg||a.cr)));
-  if(UI.filt==='aperti')L=L.filter(r=>stato(r)==='bozza');else if(UI.filt==='firmati')L=L.filter(r=>stato(r)!=='bozza');else if(UI.filt==='miei')L=L.filter(r=>r.by===ME);
+  if(UI.filt==='aperti')L=L.filter(r=>stato(r)==='bozza');else if(UI.filt==='firmati')L=L.filter(r=>stato(r)!=='bozza');else if(UI.filt==='miei'){const io=nomeNorm(CTX.nome);L=L.filter(r=>r.by===ME||(io&&nomiTec(r.tecnici).some(n=>nomeNorm(n)===io)))}
   if(q)L=L.filter(r=>[r.num,r.cli&&r.cli.nome,r.matr,r.tecnici,r.macDesc].join(' ').toLowerCase().includes(q));
-  const F=[['aperti','In corso'],['firmati','Firmati'],['miei','Creati da me'],['tutti','Tutti']];
+  const F=[['aperti','In corso'],['firmati','Firmati'],['miei','Miei'],['tutti','Tutti']];
   return `<div class="top"><h2>Interventi</h2><span class="sp"></span>${CAN_EDIT?'<button type="button" class="pri" data-act="nuovo">Nuovo intervento</button>':''}</div>
   <div class="filters">${F.map(([k,l])=>`<button type="button" class="sm" data-filt="${k}" aria-pressed="${UI.filt===k}">${l}</button>`).join('')}<input id="q" type="search" placeholder="Cerca cliente, matricola, tecnico…" value="${esc(UI.q)}" aria-label="Cerca"></div>
   ${L.length?`<div class="list">${L.map(r=>{const t=RI.totals(r);return `<button type="button" class="card" data-openr="${esc(r.id)}"><div class="t"><span class="mono" style="font-size:12.5px;color:var(--mut)">${esc(r.num)}</span>${pill(r)}</div><h3>${esc(r.cli&&r.cli.nome||'Cliente da indicare')}</h3><div class="m"><span>${r.tipo==='inst'?'Installazione':'Manutenzione'}</span><span>${esc(range(r))}</span>${r.matr?`<span class="mono">matr. ${esc(r.matr)}</span>`:''}</div><div class="m"><span>${t.giorni} gg</span><span>${H(t.ordU+t.extU)} uomo</span>${t.km?`<span>${t.km} km</span>`:''}${r.tecnici?`<span>${esc(r.tecnici)}</span>`:''}</div></button>`}).join('')}</div>`
@@ -139,7 +150,7 @@ function vEdit(){
     <label class="w2">Indirizzo<input id="f-ind" data-k="cli.indirizzo" value="${esc(r.cli.indirizzo)}"${dis}></label>
     <label>Persona di riferimento cliente<input id="f-con" data-k="cli.contatto" value="${esc(r.cli.contatto)}"${dis}></label>
     <label>E-mail cliente<input id="f-mail" type="email" data-k="cli.email" value="${esc(r.cli.email||(S.clienti[r.cli.id]||{}).email||'')}" placeholder="per l'invio del rapporto firmato"${dis} autocomplete="off"></label>
-    <label>Tecnici BMTEK<input id="f-tec" data-k="tecnici" value="${esc(r.tecnici)}" placeholder="Nome Cognome, Nome Cognome"${dis}></label>
+    <label>Tecnici BMTEK<input id="f-tec" data-k="tecnici" value="${esc(r.tecnici)}" placeholder="Nome Cognome, Nome Cognome"${dis}><span class="note" id="tec-hint">${tecHint(r.tecnici)}</span></label>
     <label>Mezzo utilizzato<select id="f-mez" data-k="mezzo"${dis}><option value="">— da indicare —</option>${MEZZI.map(m=>`<option value="${m.targa}"${r.mezzo===m.targa?' selected':''}>${esc(m.nome)} · ${m.targa}</option>`).join('')}<option value="altro"${r.mezzo==='altro'?' selected':''}>Altro (noleggio, mezzo del cliente, aereo…)</option></select></label>
     ${r.mezzo==='altro'?`<label>Quale mezzo<input id="f-mza" data-k="mezzoAltro" value="${esc(r.mezzoAltro||'')}" placeholder="es. auto a noleggio, targa"${dis}></label>`:''}
     <label>Matricola macchina<input id="f-mat" list="dl-mac" data-k="matr" value="${esc(r.matr)}"${dis} autocomplete="off"></label>
@@ -217,6 +228,7 @@ function calcTxt(g){const s=RI.split(g),nt=Math.max(1,+g.nt||1);if(!s.tot)return
 /* ---------- binding dei campi ---------- */
 function setK(o,k,v){const p=k.split('.');let x=o;for(let i=0;i<p.length-1;i++){const q=p[i];if(x[q]==null)x[q]=/^\d+$/.test(p[i+1])?[]:{};x=x[q]}x[p[p.length-1]]=v}
 ROOT.addEventListener('input',e=>{if(e.target.id==='s-tn'||e.target.id==='s-cn')salvaBozzaFirme()});
+ROOT.addEventListener('input',e=>{if(e.target.id==='f-tec'){const h=ROOT.querySelector('#tec-hint');if(h)h.innerHTML=tecHint(e.target.value)}});
 ROOT.addEventListener('input',onField);ROOT.addEventListener('change',onField);
 function onField(e){
   const el=e.target;
