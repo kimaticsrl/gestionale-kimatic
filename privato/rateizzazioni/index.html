@@ -1,0 +1,480 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Rateizzazioni fiscali</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: barra con la data di calcolo; sotto i totali da registrare, poi la tabella dei piani; un piano si apre a tutta larghezza con il piano di ammortamento e la quota maturata di ogni rata */
+:root{
+  --bg:#f0f2f1;--panel:#ffffff;--fg:#17211d;--mut:#5d6b65;--line:#d5dcd8;--inp:#fbfcfb;--band:#f5f7f6;
+  --acc:#2f6b4f;--accfg:#ffffff;--accbg:#e1efe7;--ink:#1d4f8a;--warn:#8a5a00;--warnbg:#fbefc9;--bad:#b3261e;--badbg:#fadad7;
+  --f-d:"Archivo","Helvetica Neue",Arial,sans-serif;--f-b:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;--f-m:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101513;--panel:#18201c;--fg:#e4ebe7;--mut:#97a59e;--line:#2b3631;--inp:#121815;--band:#1d2622;--acc:#6dbb94;--accfg:#0b1a12;--accbg:#183226;--ink:#8ab4ea;--warn:#e7bc55;--warnbg:#3a2f12;--bad:#f08a82;--badbg:#3d1c19;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#101513;--panel:#18201c;--fg:#e4ebe7;--mut:#97a59e;--line:#2b3631;--inp:#121815;--band:#1d2622;--acc:#6dbb94;--accfg:#0b1a12;--accbg:#183226;--ink:#8ab4ea;--warn:#e7bc55;--warnbg:#3a2f12;--bad:#f08a82;--badbg:#3d1c19;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.45 var(--f-b);margin:0;padding-block:0 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--panel)}
+h1,h2,h3{font-family:var(--f-d);margin:0;text-wrap:balance}
+button,input,select,textarea{font:inherit;color:inherit}
+input,select,textarea{background:var(--inp);border:1px solid var(--line);border-radius:6px;padding:6px 8px;min-width:0}
+textarea{width:100%;min-height:110px;font-family:var(--f-m);font-size:13px}
+:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+button{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 12px;cursor:pointer;white-space:nowrap}
+button:hover:not(:disabled){border-color:var(--acc)}button:disabled{opacity:.5;cursor:default}
+button.pri{background:var(--acc);border-color:var(--acc);color:var(--accfg);font-weight:600}
+button.dng{color:var(--bad)}button.sm{padding:3px 9px;font-size:13px}
+.num,.mono{font-family:var(--f-m);font-variant-numeric:tabular-nums}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--panel);border-bottom:1px solid var(--line);margin-left:calc(-1*max(16px,env(safe-area-inset-left,0px)));margin-right:calc(-1*max(16px,env(safe-area-inset-right,0px)));padding:10px max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));display:flex;gap:10px 18px;align-items:center;flex-wrap:wrap}
+.bar h1{font-size:20px;font-weight:800;letter-spacing:-.01em}
+.dates{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.dates label{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--mut)}
+.dates input{font-family:var(--f-m)}
+.quick{display:flex;gap:4px;flex-wrap:wrap}
+.sp{flex:1}
+main{max-width:1280px;margin:0 auto;padding-top:16px;display:flex;flex-direction:column;gap:16px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.kpi span{font-size:12.5px;color:var(--mut)}
+.kpi b{font-family:var(--f-m);font-size:24px;font-weight:500;letter-spacing:-.02em}
+.kpi small{font-size:12.5px;color:var(--mut)}
+.kpi.main{border-color:var(--acc);background:var(--accbg)}
+.entry{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--ink);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.entry h2{font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut)}
+.entry .ln{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:4px 16px;font-size:14px;align-items:baseline}
+.entry .ln .num{text-align:right}
+.note{font-size:13px;color:var(--mut)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-width:0}
+.panel>h2{font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);margin-bottom:10px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle;white-space:nowrap}
+th{font-size:11.5px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;background:var(--band);position:sticky;top:0}
+td.n,th.n{text-align:right}
+tbody tr.pl{cursor:pointer}tbody tr.pl:hover td{background:var(--band)}
+tr.tot td{font-weight:600;border-top:2px solid var(--fg);background:var(--band)}
+td.nm{white-space:normal;min-width:180px}
+td.nm small{display:block;color:var(--mut);font-size:12px}
+.pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11.5px;font-weight:600;background:var(--line);color:var(--fg)}
+.pill.acc{background:var(--accbg);color:var(--acc)}.pill.warn{background:var(--warnbg);color:var(--warn)}
+tr.past td{color:var(--mut)}
+
+tr.cut td{border-top:2px dashed var(--ink)}
+.bar2{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.top{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.top h2{font-size:24px;font-weight:700}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px 12px}
+.g label{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--mut);min-width:0}
+.g .w2{grid-column:span 2}@media (max-width:520px){.g .w2{grid-column:1/-1}}
+.info{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px 16px}
+.info div{display:flex;flex-direction:column;font-size:12.5px;color:var(--mut)}.info div b{font-weight:500;color:var(--fg);font-size:14.5px}
+table.ed input{width:100%;min-width:90px;font-family:var(--f-m);text-align:right}
+table.ed input[type=date]{text-align:left;min-width:140px}
+.banner{border-radius:8px;padding:9px 12px;background:var(--warnbg);color:var(--warn);font-size:14px}
+.empty{color:var(--mut);text-align:center;padding:28px 12px;border:1px dashed var(--line);border-radius:10px;background:var(--panel)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:8px;z-index:20;max-width:calc(100% - 32px)}
+details summary{cursor:pointer;color:var(--mut);font-size:13.5px}
+.method{font-size:13px;color:var(--mut);max-width:80ch}
+.chk{display:flex;gap:7px;align-items:center;font-size:13px;color:var(--fg);cursor:pointer}.chk input{width:17px;height:17px;accent-color:var(--acc)}
+.bd{display:block;font-size:12px;color:var(--mut)}
+th.grp{text-align:center;border-bottom:0}
+/* colonne degli importi già maturati e pagati dopo la data di calcolo */
+.hl{background:var(--accbg)!important;color:var(--fg)}
+th.hl{color:var(--acc)}th.grp.hl{border-bottom:0;font-weight:700}
+td.hl.e{border-left:2px solid var(--acc)}td.hl.z{border-right:2px solid var(--acc)}th.hl.e{border-left:2px solid var(--acc)}th.hl.z{border-right:2px solid var(--acc)}
+tr.pl:hover td.hl{filter:brightness(.97)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="bar">
+  <h1>Rateizzazioni fiscali</h1>
+  <div class="dates">
+    <label for="d-to"><b style="color:var(--fg)">Data di calcolo</b><input id="d-to" type="date"></label>
+    <div class="quick" id="quick"></div>
+    <label for="d-from">Competenza dal<input id="d-from" type="date"></label>
+    <button type="button" class="sm" id="from-reset" title="Usa la data della prima rata della rateizzazione più vecchia">Dall'inizio</button>
+  </div>
+  <span class="sp"></span>
+  <label class="chk" for="prop"><input id="prop" type="checkbox"> Imputazione proporzionale di sanzioni e interessi dell'avviso</label>
+  <button type="button" id="xls" title="Un foglio per ogni piano, come il file di origine, più il riepilogo">Scarica Excel</button>
+  <button type="button" id="bk" title="Scarica tutti i piani in un file, da conservare o da caricare nel gestionale">Backup</button><button type="button" id="rs" hidden title="Sostituisce tutti i piani con quelli di un file di backup">Ripristina backup</button><input type="file" id="rsf" accept=".json,application/json" hidden>
+</div>
+<main id="app"><div class="empty">Caricamento dei piani di rateizzazione…</div></main>
+<div class="toast" id="toast" hidden></div>
+
+<script>/* Gestionale Kimatic: dati, utente e download arrivano dalla pagina del gestionale che contiene il modulo */ let KG=null;try{KG=window.parent&&window.parent.KIMATIC_RT}catch(e){} window.claude=KG||{use:async function(){return null}};</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script>
+'use strict';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const toast=m=>{const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(()=>t.hidden=true,3800)};
+const eurT=n=>eur(n)+' €';
+const eur=n=>(Math.round((+n||0)*100)/100).toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2});
+const d2n=s=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s||'');return m?Math.round(Date.UTC(+m[1],+m[2]-1,+m[3])/864e5):null};
+const n2s=n=>new Date(n*864e5).toISOString().slice(0,10);
+const fd=s=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s||'');return m?m[3]+'/'+m[2]+'/'+m[1]:''};
+const addMonths=(s,k)=>{const[y,m,d]=s.split('-').map(Number);const t=new Date(Date.UTC(y,m-1+k,1));const last=new Date(Date.UTC(t.getUTCFullYear(),t.getUTCMonth()+1,0)).getUTCDate();return n2s(Math.round(Date.UTC(t.getUTCFullYear(),t.getUTCMonth(),Math.min(d,last))/864e5))};
+const todayS=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+const METODI={inizio:'Dalla prima rata',periodo:'Dalla rata precedente'};
+
+/* ---------- calcolo ----------
+   Le quote di ogni rata maturano giorno per giorno, in modo lineare:
+   - "Dalla prima rata" (default): dalla scadenza della prima rata del piano (o dalla data di inizio indicata) alla scadenza della rata;
+   - "Dalla rata precedente": dalla scadenza precedente alla scadenza della rata.
+   Maturato a fine giornata t = importo × giorni trascorsi / giorni del periodo (al massimo l'intero importo).
+   Gli interessi di dilazione maturano così. Sanzioni e interessi dell'avviso sono già maturati per intero prima del piano:
+   con l'imputazione proporzionale attiva, la quota compresa in ogni rata non ancora pagata è tutta maturata. */
+const COMP={dil:'Interessi di dilazione',san:'Sanzioni avviso',int:'Interessi avviso'};
+const CONTO_DEF={dil:'88.020.0046',san:'84.010.0036',int:'88.020.0048'};
+const CONTO_KEY={dil:'dilazione',san:'sanzioni',int:'interessi'};
+const effD=r=>d2n(r.pag)??d2n(r.d);
+function accr(p,i,t,k){
+  const r=p.rate[i],d=effD(r),v=+r[k]||0;if(!v||d==null)return 0;
+  // sanzioni e interessi dell'avviso sono già maturati per intero prima di qualsiasi data di calcolo
+  if(k!=='dil')return v;
+  const a=p.metodo==='periodo'?(i?effD(p.rate[i-1]):(d2n(p.inizio)??d)):(d2n(p.inizio)??d2n(p.rate[0].d));
+  if(t>=d)return v;if(a==null||t<=a)return 0;return v*(t-a)/(d-a);
+}
+const zero=()=>({rat:0,ratIni:0,comp:0,pag:0,res:0});
+function calc(p,A,X){
+  // A = primo giorno del periodo, X = ultimo giorno (compreso). Il rateo iniziale è quello alla fine del giorno prima di A.
+  const A0=A-1,X12=d2n(addMonths(n2s(X),12));
+  const o={K:{dil:zero(),san:zero(),int:zero()},capPag:0,res:0,entro:0,oltre:0,nPag:0,n:p.rate.length,righe:[]};
+  p.rate.forEach((r,i)=>{
+    const d=effD(r),riga={i,d,m:{},stato:d<=X?(d>=A?'periodo':'prima'):'futura'};
+    for(const k in o.K){const K=o.K[k],m0=accr(p,i,A0,k),m1=accr(p,i,X,k);K.comp+=m1-m0;riga.m[k]=m1;
+      if(d>A0&&d<=X)K.pag+=+r[k]||0;if(d>A0)K.ratIni+=m0;if(d>X){K.rat+=m1;K.res+=+r[k]||0}}
+    if(d>A0&&d<=X)o.capPag+=+r.cap||0;
+    if(d>X){o.res+=+r.cap||0;if(d<=X12)o.entro+=+r.cap||0;else o.oltre+=+r.cap||0}else o.nPag++;
+    o.righe.push(riga);
+  });
+  return o;
+}
+const comps=()=>UI.prop?['dil','san','int']:['dil'];
+const sum=(c,f)=>comps().reduce((s,k)=>s+c.K[k][f],0);
+const sumM=m=>comps().reduce((s,k)=>s+(m[k]||0),0);
+
+/* ---------- stato ---------- */
+let db=null,EDIT=false,LOADED=false;
+const P={};
+const UI={from:'',fromSet:false,to:'',prop:true,open:null,edit:null,paste:''};
+try{Object.assign(UI,JSON.parse(localStorage.getItem('rt_ui2')||'{}'));UI.edit=null;UI.paste=''}catch(e){}
+const saveUI=()=>{try{localStorage.setItem('rt_ui2',JSON.stringify({from:UI.from,fromSet:UI.fromSet,to:UI.to,prop:UI.prop,open:UI.open}))}catch(e){}};
+if(!d2n(UI.to)){UI.to=todayS()}
+// inizio del periodo: di default la prima rata della rateizzazione più vecchia
+const primaRata=()=>list().reduce((m,p)=>{const d=p.rate[0]&&p.rate[0].d;return d&&(!m||d<m)?d:m},'');
+function fixFrom(){if(!UI.fromSet||!d2n(UI.from)){UI.from=primaRata()||UI.to;UI.fromSet=false}if(d2n(UI.from)>d2n(UI.to)){UI.from=UI.to}}
+const list=()=>Object.entries(P).map(([id,p])=>Object.assign({id},p)).filter(p=>Array.isArray(p.rate)).sort((a,b)=>(a.ordine??999)-(b.ordine??999)||String(a.nome).localeCompare(String(b.nome)));
+
+/* ---------- barra date ---------- */
+function bar(){
+  $('#rs').hidden=!(EDIT&&db);
+  $('#d-from').value=UI.from;$('#d-to').value=UI.to;$('#prop').checked=!!UI.prop;
+  const y=+UI.to.slice(0,4),Q=[['Oggi',null],['31/03',y+'-03-31'],['30/06',y+'-06-30'],['30/09',y+'-09-30'],['31/12',y+'-12-31']];
+  $('#quick').innerHTML=Q.map(([l,v])=>`<button type="button" class="sm" data-q="${v||todayS()}">${l}</button>`).join('')+`<button type="button" class="sm" data-y="-1" aria-label="Anno precedente">${y-1}</button><button type="button" class="sm" data-y="1" aria-label="Anno successivo">${y+1}</button>`;
+}
+$('#d-to').addEventListener('change',e=>{if(!d2n(e.target.value))return;UI.to=e.target.value;saveUI();render()});
+$('#d-from').addEventListener('change',e=>{if(!d2n(e.target.value))return;UI.from=e.target.value;UI.fromSet=true;saveUI();render()});
+$('#prop').addEventListener('change',e=>{UI.prop=e.target.checked;saveUI();render()});
+$('#from-reset').addEventListener('click',()=>{UI.fromSet=false;saveUI();render()});
+$('#quick').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.q)UI.to=b.dataset.q;
+  else{const k=+b.dataset.y,y=+UI.to.slice(0,4)+k,md=UI.to.slice(4);UI.to=y+(md==='-02-29'?'-02-28':md)}
+  saveUI();render()});
+
+/* ---------- viste ---------- */
+function render(){
+  fixFrom();bar();
+  const a=$('#app');
+  if(!LOADED){a.innerHTML='<div class="empty">Caricamento dei piani di rateizzazione…</div>';return}
+  if(!db){a.innerHTML='<div class="empty">I dati delle rateizzazioni non sono disponibili: ricarica la pagina dal gestionale.</div>';return}
+  const L=list();
+  if(!L.length&&!UI.edit){a.innerHTML=`<div class="empty">Nessun piano di rateizzazione.${EDIT?' <button type="button" class="pri" data-act="nuovo">Aggiungi un piano</button>':''}</div>`;return}
+  if(UI.edit&&UI.open==='__nuovo'){a.innerHTML='<div class="top"><button type="button" data-act="annulla">← Tutti i piani</button><h2>Nuovo piano</h2></div>'+vEdit(UI.edit);return}
+  const p=UI.open&&P[UI.open]?Object.assign({id:UI.open},P[UI.open]):null;
+  a.innerHTML=p?vPiano(p):vRiepilogo(L);
+}
+function totali(L,A,X){
+  const T={K:{dil:zero(),san:zero(),int:zero()},capPag:0,res:0,entro:0,oltre:0};
+  const R=L.map(p=>{const c=calc(p,A,X);for(const k in T.K)for(const f in T.K[k])T.K[k][f]+=c.K[k][f];['capPag','res','entro','oltre'].forEach(f=>T[f]+=c[f]);return[p,c]});
+  return{T,R};
+}
+const brk=(c,f)=>UI.prop?`<span class="bd">dilazione ${eur(c.K.dil[f])} · sanzioni ${eur(c.K.san[f])} · interessi avviso ${eur(c.K.int[f])}</span>`:'';
+const LAB=()=>UI.prop?'Interessi e sanzioni':'Interessi di dilazione';
+function vRiepilogo(L){
+  const A=d2n(UI.from),X=d2n(UI.to),{T,R}=totali(L,A,X),dA=fd(n2s(A-1));
+  const att=R.filter(([p,c])=>c.res>0||sum(c,'comp')>0.004||sum(c,'pag')>0.004||sum(c,'res')>0.004);
+  const chiusi=R.length-att.length,rat=sum(T,'rat'),res=sum(T,'res'),ini=sum(T,'ratIni');
+  // ratei raggruppati per conto
+  const G=new Map();
+  R.forEach(([p,c])=>comps().forEach(k=>{const code=(p.conti||{})[CONTO_KEY[k]]||CONTO_DEF[k],key=code+'|'+k;let g=G.get(key);if(!g)G.set(key,g={code,k,...zero()});for(const f in zero())g[f]+=c.K[k][f]}));
+  const GG=[...G.values()].filter(g=>Math.abs(g.rat)+Math.abs(g.comp)+Math.abs(g.ratIni)>0.004).sort((a,b)=>a.code.localeCompare(b.code)||a.k.localeCompare(b.k));
+  const P3=UI.prop;
+  return `
+  <div class="kpis">
+    <div class="kpi main"><span>${LAB()} da pagare dopo il ${fd(UI.to)} già maturati a quella data</span><b>${eurT(rat)}</b>${brk(T,'rat')}<small>da rilevare come rateo passivo a conto economico</small></div>
+    <div class="kpi"><span>${LAB()} da pagare dopo il ${fd(UI.to)}</span><b>${eurT(res)}</b><small>di cui non ancora maturati ${eur(res-rat)}</small></div>
+    <div class="kpi"><span>Competenza dal ${fd(UI.from)} al ${fd(UI.to)}</span><b>${eurT(sum(T,'comp'))}</b>${brk(T,'comp')}<small>pagati nel periodo ${eur(sum(T,'pag'))}</small></div>
+    <div class="kpi"><span>Debito residuo (capitale) al ${fd(UI.to)}</span><b>${eurT(T.res)}</b><small>entro 12 mesi ${eur(T.entro)} · oltre ${eur(T.oltre)}</small></div>
+  </div>
+  <section class="panel" aria-label="Scritture per conto">
+    <h2>Rilevazione al ${fd(UI.to)} per conto <small class="note" style="text-transform:none;letter-spacing:0">contropartita: Ratei passivi</small></h2>
+    <div class="tw"><table>
+      <thead><tr><th>Conto</th><th>Voce</th>${ini>0.004?`<th class="n">Rateo al ${dA}</th>`:''}<th class="n">Pagati nel periodo</th><th class="n hl e z">Rateo al ${fd(UI.to)}</th><th class="n">Competenza periodo</th></tr></thead>
+      <tbody>${GG.map(g=>`<tr><td class="num">${esc(g.code)}</td><td>${COMP[g.k]}</td>${ini>0.004?`<td class="n num">${eur(g.ratIni)}</td>`:''}<td class="n num">${eur(g.pag)}</td><td class="n num hl e z"><b>${eur(g.rat)}</b></td><td class="n num">${eur(g.comp)}</td></tr>`).join('')}</tbody>
+      <tfoot><tr class="tot"><td>Totale</td><td></td>${ini>0.004?`<td class="n num">${eurT(ini)}</td>`:''}<td class="n num">${eurT(sum(T,'pag'))}</td><td class="n num hl e z">${eurT(rat)}</td><td class="n num">${eurT(sum(T,'comp'))}</td></tr></tfoot>
+    </table></div>
+    <p class="note" style="margin:8px 0 0">Per ogni conto: <b>conto di costo</b> a <b>Ratei passivi</b> per il rateo al ${fd(UI.to)}${ini>0.004?`, stornando il rateo al ${dA}`:''}. Competenza del periodo = pagati nel periodo + rateo finale − rateo iniziale.${P3?'':' Sanzioni e interessi dell\'avviso sono esclusi: attiva l\'imputazione proporzionale per includerli.'}</p>
+  </section>
+  <section class="panel">
+    <h2>Piani di rateizzazione <small class="note" style="text-transform:none;letter-spacing:0">${att.length} con movimenti o debito residuo${chiusi?` · ${chiusi} chiusi prima del periodo`:''} · tocca un piano per il dettaglio</small><span class="sp"></span>${EDIT?'<button type="button" class="sm" data-act="nuovo">Nuovo piano</button>':''}</h2>
+    <div class="tw"><table>
+      <thead>${P3?`<tr><th></th><th></th><th></th><th class="grp hl e z" colspan="4">Da pagare dopo il ${fd(UI.to)}, già maturati</th><th colspan="5"></th></tr>`:''}<tr><th>Piano</th><th class="n">Rate scadute</th><th class="n">Da pagare dopo il ${fd(UI.to)}</th>${P3?'<th class="n hl e">Dilazione</th><th class="n hl">Sanzioni</th><th class="n hl">Interessi avviso</th><th class="n hl z">Totale</th>':'<th class="n hl e z">Già maturati</th>'}<th class="n">Non ancora maturati</th><th class="n">Competenza periodo</th><th class="n">Capitale residuo</th><th class="n">Entro 12 mesi</th><th class="n">Oltre 12 mesi</th></tr></thead>
+      <tbody>${R.map(([p,c])=>{const r1=sum(c,'rat'),rs=sum(c,'res');return `<tr class="pl${att.some(x=>x[0]===p)?'':' past'}" data-open="${esc(p.id)}" tabindex="0"><td class="nm"><b>${esc(p.nome)}</b><small>${esc(p.ente||'')}${p.atto?' · atto '+esc(p.atto):''} · ${fd(p.rate[0]&&p.rate[0].d)} → ${fd(p.rate[p.rate.length-1]&&p.rate[p.rate.length-1].d)}</small></td><td class="n num">${c.nPag}/${c.n}</td><td class="n num">${eur(rs)}</td>${P3?`<td class="n num hl e">${eur(c.K.dil.rat)}</td><td class="n num hl">${eur(c.K.san.rat)}</td><td class="n num hl">${eur(c.K.int.rat)}</td>`:''}<td class="n num hl z${P3?'':' e'}"><b>${eur(r1)}</b></td><td class="n num">${eur(rs-r1)}</td><td class="n num">${eur(sum(c,'comp'))}</td><td class="n num">${eur(c.res)}</td><td class="n num">${eur(c.entro)}</td><td class="n num">${eur(c.oltre)}</td></tr>`}).join('')}</tbody>
+      <tfoot><tr class="tot"><td>Totale</td><td></td><td class="n num">${eurT(res)}</td>${P3?`<td class="n num hl e">${eurT(T.K.dil.rat)}</td><td class="n num hl">${eurT(T.K.san.rat)}</td><td class="n num hl">${eurT(T.K.int.rat)}</td>`:''}<td class="n num hl z${P3?'':' e'}">${eurT(rat)}</td><td class="n num">${eurT(res-rat)}</td><td class="n num">${eurT(sum(T,'comp'))}</td><td class="n num">${eurT(T.res)}</td><td class="n num">${eurT(T.entro)}</td><td class="n num">${eurT(T.oltre)}</td></tr></tfoot>
+    </table></div>
+  </section>
+  <details class="panel"><summary>Come vengono calcolati gli importi maturati</summary>
+    <div class="method" style="margin-top:8px">
+      <p>Ogni rata contiene una quota di <b>interessi di dilazione</b>, che matura giorno per giorno finché la rata scade. Per ogni rata non ancora scaduta alla data scelta, la parte maturata è: importo della rata × giorni trascorsi ÷ giorni totali di maturazione.</p>
+      <p>Con l'<b>imputazione proporzionale</b> attiva si aggiungono le quote di <b>sanzioni</b> e di <b>interessi dell'avviso</b> comprese in ogni rata. Sono già maturate per intero prima della data di calcolo, quindi la quota contenuta nelle rate ancora da pagare è considerata tutta maturata. Disattivandola restano solo gli interessi di dilazione.</p>
+      <p>La maturazione parte dalla scadenza della prima rata di ogni piano, oppure dalla data indicata nel campo "Inizio maturazione" del piano. Le rate scadute si considerano pagate alla scadenza; se una rata è stata pagata in un'altra data (campo "Pagata il"), conta quella data, sia per lo stato della rata sia per la fine della maturazione.</p>
+    </div>
+  </details>`;
+}
+function vPiano(p){
+  const A=d2n(UI.from),X=d2n(UI.to),c=calc(p,A,X),E=UI.edit,P3=UI.prop;
+  const head=`<div class="top"><button type="button" data-act="back">← Tutti i piani</button><h2>${esc(p.nome)}</h2><span class="pill ${p.metodo==='periodo'?'warn':'acc'}">${METODI[p.metodo]}</span><span class="sp"></span>${EDIT&&!E?'<button type="button" data-act="modifica">Modifica</button>':''}</div>`;
+  if(E)return head+vEdit(E);
+  const r1=sum(c,'rat'),rs=sum(c,'res');
+  const k=`<div class="kpis">
+    <div class="kpi main"><span>Da pagare dopo il ${fd(UI.to)}, già maturati</span><b>${eurT(r1)}</b>${brk(c,'rat')}<small>su ${eur(rs)} ancora da pagare</small></div>
+    <div class="kpi"><span>Non ancora maturati</span><b>${eurT(rs-r1)}</b><small>${c.n-c.nPag} rate da pagare su ${c.n}</small></div>
+    <div class="kpi"><span>Competenza dal ${fd(UI.from)} al ${fd(UI.to)}</span><b>${eurT(sum(c,'comp'))}</b>${brk(c,'comp')}<small>pagati nel periodo ${eur(sum(c,'pag'))}</small></div>
+    <div class="kpi"><span>Capitale residuo</span><b>${eurT(c.res)}</b><small>entro 12 mesi ${eur(c.entro)} · oltre ${eur(c.oltre)}</small></div>
+  </div>`;
+  const C=p.conti||{};
+  const info=`<section class="panel"><div class="info">
+    <div>Ente<b>${esc(p.ente||'—')}</b></div><div>Atto<b>${esc(p.atto||'—')}</b></div>
+    <div>Conto capitale<b class="mono">${esc(C.capitale||'—')}</b></div><div>Conto sanzioni<b class="mono">${esc(C.sanzioni||CONTO_DEF.san)}</b></div><div>Conto interessi avviso<b class="mono">${esc(C.interessi||CONTO_DEF.int)}</b></div><div>Conto interessi di dilazione<b class="mono">${esc(C.dilazione||CONTO_DEF.dil)}</b></div>
+    <div>Inizio maturazione<b>${p.metodo==='periodo'?'dalla rata precedente':fd(p.inizio||(p.rate[0]&&p.rate[0].d))}</b></div><div>Foglio di origine<b>${esc(p.foglio||'—')}</b></div>
+  </div>${p.note?`<p class="note" style="margin:10px 0 0">${esc(p.note)}</p>`:''}</section>`;
+  let cutDone=false;
+  const tot={cap:0,san:0,int:0,dil:0,mdil:0,msan:0,mint:0,f:0};
+  const rows=p.rate.map((r,i)=>{const R=c.righe[i];const a=p.metodo==='periodo'?(i?d2n(p.rate[i-1].d):(d2n(p.inizio)??R.d)):(d2n(p.inizio)??d2n(p.rate[0].d));
+    const gg=Math.max(0,R.d-a),ggm=Math.max(0,Math.min(X,R.d)-a),fut=R.d>X;
+    ['cap','san','int','dil'].forEach(k=>tot[k]+=+r[k]||0);
+    const mt=sumM(R.m),dv=comps().reduce((s,k)=>s+(+r[k]||0),0);
+    if(fut){tot.mdil+=R.m.dil;tot.msan+=R.m.san;tot.mint+=R.m.int;tot.f+=dv-mt}
+    const cut=!cutDone&&fut;if(cut)cutDone=true;
+    return `<tr class="${R.stato==='prima'?'past':R.stato==='periodo'?'cur':''}${cut?' cut':''}"><td class="num">${i+1}</td><td class="num">${fd(r.d)}</td><td class="n num">${eur(r.cap)}</td><td class="n num">${eur(r.san)}</td><td class="n num">${eur(r.int)}</td><td class="n num">${eur(r.dil)}</td><td class="n num">${eur((+r.cap||0)+(+r.san||0)+(+r.int||0)+(+r.dil||0)+(+r.dir||0))}</td><td class="n num">${fut&&dv?ggm+' / '+gg:''}</td><td class="n num hl e${P3?'':' z'}">${fut?eur(R.m.dil):''}</td>${P3?`<td class="n num hl">${fut?eur(R.m.san):''}</td><td class="n num hl z">${fut?eur(R.m.int):''}</td>`:''}<td class="n num">${fut?eur(dv-mt):''}</td><td>${r.pag?(R.stato==='futura'?'da pagare il '+fd(r.pag):'<span class="pill acc">pagata il '+fd(r.pag)+'</span>'):R.stato==='futura'?'da pagare':R.stato==='periodo'?'<span class="pill acc">scaduta nel periodo</span>':'scaduta'}</td></tr>`}).join('');
+  const tab=`<section class="panel"><h2>Piano delle rate <small class="note" style="text-transform:none;letter-spacing:0">la linea tratteggiata separa le rate scadute al ${fd(UI.to)} da quelle future</small></h2><div class="tw"><table>
+    <thead><tr><th colspan="8"></th><th class="grp hl e z" colspan="${P3?3:1}">Da pagare dopo il ${fd(UI.to)}, già maturati</th><th colspan="2"></th></tr><tr><th>N.</th><th>Scadenza</th><th class="n">Capitale</th><th class="n">Sanzioni</th><th class="n">Interessi avviso</th><th class="n">Interessi dilazione</th><th class="n">Totale rata</th><th class="n">Giorni maturati</th><th class="n hl e${P3?'':' z'}">Dilazione</th>${P3?'<th class="n hl">Sanzioni</th><th class="n hl z">Interessi avviso</th>':''}<th class="n">Da maturare</th><th>Stato</th></tr></thead>
+    <tbody>${rows}</tbody><tfoot><tr class="tot"><td></td><td>Totale</td><td class="n num">${eurT(tot.cap)}</td><td class="n num">${eurT(tot.san)}</td><td class="n num">${eurT(tot.int)}</td><td class="n num">${eurT(tot.dil)}</td><td></td><td></td><td class="n num hl e${P3?'':' z'}">${eurT(tot.mdil)}</td>${P3?`<td class="n num hl">${eurT(tot.msan)}</td><td class="n num hl z">${eurT(tot.mint)}</td>`:''}<td class="n num">${eurT(tot.f)}</td><td></td></tr></tfoot></table></div></section>`;
+  return head+k+info+tab;
+}
+function vEdit(E){
+  const f=(k,l,cls,type)=>`<label class="${cls||''}">${l}<input id="e-${k}" data-e="${k}" ${type?`type="${type}"`:''} value="${esc(E[k]??'')}"></label>`;
+  const fc=(k,l)=>`<label>${l}<input id="e-c-${k}" data-ec="${k}" class="mono" value="${esc((E.conti||{})[k]??'')}"></label>`;
+  return `<section class="panel"><h2>Dati del piano</h2><div class="g">${f('nome','Nome','w2')}${f('ente','Ente')}${f('atto','Numero atto')}
+    <label>Calcolo degli interessi<select id="e-metodo" data-e="metodo">${Object.entries(METODI).map(([k,l])=>`<option value="${k}"${E.metodo===k?' selected':''}>${l}</option>`).join('')}</select></label>
+    ${f('inizio','Inizio maturazione (vuoto = prima rata)','','date')}${fc('capitale','Conto capitale')}${fc('sanzioni','Conto sanzioni')}${fc('interessi','Conto interessi avviso')}${fc('dilazione','Conto interessi di dilazione')}
+    <label class="w2" style="grid-column:1/-1">Note<input id="e-note" data-e="note" value="${esc(E.note??'')}"></label></div></section>
+  <section class="panel"><h2>Rate</h2><div class="tw"><table class="ed"><thead><tr><th>N.</th><th>Scadenza</th><th class="n">Capitale</th><th class="n">Sanzioni</th><th class="n">Interessi avviso</th><th class="n">Interessi dilazione</th><th class="n">Diritti</th><th>Pagata il <span class="note">(se diversa dalla scadenza)</span></th><th></th></tr></thead><tbody>
+    ${E.rate.map((r,i)=>`<tr><td class="num">${i+1}</td><td><input id="r${i}d" type="date" data-r="${i}.d" value="${esc(r.d)}" aria-label="Scadenza rata ${i+1}"></td>${['cap','san','int','dil','dir'].map(k=>`<td><input id="r${i}${k}" inputmode="decimal" data-r="${i}.${k}" value="${r[k]?String(Math.round(r[k]*10000)/10000).replace('.',','):''}" aria-label="${k} rata ${i+1}"></td>`).join('')}<td><input id="r${i}pag" type="date" data-r="${i}.pag" value="${esc(r.pag||'')}" aria-label="Data di pagamento rata ${i+1}"></td><td><button type="button" class="sm dng" data-delr="${i}" aria-label="Elimina rata ${i+1}">✕</button></td></tr>`).join('')}
+  </tbody></table></div><div class="bar2" style="margin-top:10px"><button type="button" data-act="addr">+ Aggiungi rata</button></div>
+  <details style="margin-top:12px"><summary>Incolla le rate da Excel</summary><p class="note">Copia dal foglio le colonne nell'ordine: scadenza, capitale, sanzioni, interessi avviso, interessi di dilazione. Le righe incollate sostituiscono le rate attuali.</p><textarea id="paste" placeholder="10/10/2026&#9;100,41&#9;137,19&#9;1,31&#9;0,50"></textarea><div class="bar2" style="margin-top:8px"><button type="button" data-act="paste">Sostituisci le rate</button></div></details></section>
+  <div class="bar2"><button type="button" class="pri" data-act="salva">Salva</button><button type="button" data-act="annulla">Annulla</button><span class="sp"></span>${E.id?'<button type="button" class="dng" data-act="elimina">Elimina piano</button>':''}</div>`;
+}
+
+/* ---------- interazioni ---------- */
+const pnum=s=>{s=String(s??'').trim().replace(/\s|€/g,'');if(!s)return 0;if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');const n=parseFloat(s);return isNaN(n)?0:n};
+const pdate=s=>{s=String(s||'').trim();let m=/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/.exec(s);if(m){const y=m[3].length===2?'20'+m[3]:m[3];return y+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0')}m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s);return m?m[0]:''};
+document.addEventListener('input',e=>{const el=e.target,E=UI.edit;if(!E)return;
+  if(el.dataset.e)E[el.dataset.e]=el.value;
+  else if(el.dataset.ec){E.conti=E.conti||{};E.conti[el.dataset.ec]=el.value}
+  else if(el.dataset.r){const[i,k]=el.dataset.r.split('.');E.rate[+i][k]=k==='d'||k==='pag'?el.value:pnum(el.value)}});
+document.addEventListener('change',e=>{if(e.target.dataset.e==='metodo'&&UI.edit){UI.edit.metodo=e.target.value}});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('tr.pl')){e.preventDefault();e.target.click()}});
+document.addEventListener('click',async e=>{
+  const tr=e.target.closest('tr[data-open]');if(tr&&!e.target.closest('button')){UI.open=tr.dataset.open;UI.edit=null;saveUI();render();scrollTo(0,0);return}
+  const b=e.target.closest('button');if(!b)return;const d=b.dataset,E=UI.edit;
+  if(d.delr){E.rate.splice(+d.delr,1);render();return}
+  switch(d.act){
+    case'back':UI.open=null;UI.edit=null;saveUI();render();break;
+    case'modifica':UI.edit=JSON.parse(JSON.stringify(Object.assign({id:UI.open},P[UI.open])));render();break;
+    case'annulla':UI.edit=null;if(!P[UI.open])UI.open=null;render();break;
+    case'nuovo':UI.open='__nuovo';UI.edit={id:'',nome:'',ente:'Agenzia Entrate',atto:'',metodo:'inizio',inizio:'',conti:{capitale:'',sanzioni:'84.010.0036',interessi:'88.020.0048',dilazione:'88.020.0046'},note:'',rate:[{d:todayS(),cap:0,san:0,int:0,dil:0}]};render();scrollTo(0,0);break;
+    case'addr':{const l=E.rate[E.rate.length-1];E.rate.push({d:l&&l.d?addMonths(l.d,3):todayS(),cap:l?l.cap:0,san:l?l.san:0,int:l?l.int:0,dil:0});render();break}
+    case'paste':{const rows=$('#paste').value.split(/\r?\n/).map(l=>l.split('\t')).filter(c=>pdate(c[0]));if(!rows.length){toast('Nessuna riga riconosciuta: la prima colonna deve essere una data');return}E.rate=rows.map(c=>({d:pdate(c[0]),cap:pnum(c[1]),san:pnum(c[2]),int:pnum(c[3]),dil:pnum(c[4])}));render();toast(rows.length+' rate incollate: controlla e salva');break}
+    case'salva':await salva(b);break;
+    case'elimina':if(!(b.dataset.armed&&Date.now()-b.dataset.armed<5000)){b.dataset.armed=Date.now();toast('Tocca di nuovo per eliminare il piano');return}
+      try{await db.doc('piani/'+E.id).delete();UI.edit=null;UI.open=null;saveUI();toast('Piano eliminato')}catch(err){toast('Eliminazione non riuscita')}render();break;
+  }
+});
+async function salva(b){
+  const E=UI.edit;if(!E.nome.trim()){toast('Serve un nome per il piano');return}
+  const rate=E.rate.filter(r=>d2n(r.d)).sort((a,c)=>a.d.localeCompare(c.d)).map(r=>{const o={d:r.d,cap:+r.cap||0,san:+r.san||0,int:+r.int||0,dil:+r.dil||0};if(+r.dir)o.dir=+r.dir;if(d2n(r.pag)&&r.pag!==r.d)o.pag=r.pag;return o});
+  if(!rate.length){toast('Serve almeno una rata con la data');return}
+  const id=E.id||('p'+Date.now().toString(36));
+  const doc={nome:E.nome.trim(),ente:(E.ente||'').trim(),atto:(E.atto||'').trim(),metodo:E.metodo==='periodo'?'periodo':'inizio',inizio:d2n(E.inizio)?E.inizio:'',conti:E.conti||{},note:(E.note||'').trim(),rate,foglio:E.foglio||'',ordine:E.ordine??(Object.keys(P).length+1)};
+  b.disabled=true;
+  try{await db.doc('piani/'+id).set(doc);P[id]=doc;UI.edit=null;UI.open=id;saveUI();toast('Piano salvato')}catch(err){b.disabled=false;toast('Non salvato: serve il permesso di modifica')}
+  render();
+}
+
+/* ---------- Excel nello stesso formato del file di origine (un foglio per piano + riepilogo) ----------
+   Usa ExcelJS. Le celle calcolate hanno la formula e il risultato già pronto, così il file si legge anche senza ricalcolo. */
+function xlsxBuild(ExcelJS,L,A,X,prop){
+  const wb=new ExcelJS.Workbook();wb.creator='Rateizzazioni fiscali';wb.created=new Date();
+  const EUR='_-* #,##0.00\\ "€"_-;\\-* #,##0.00\\ "€"_-;_-* "-"??\\ "€"_-;_-@_-',DATE='dd/mm/yyyy';
+  const GREEN={type:'pattern',pattern:'solid',fgColor:{argb:'FFE1EFE7'}},YEL={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFFF00'}},GREY={type:'pattern',pattern:'solid',fgColor:{argb:'FFF2F2F2'}};
+  const dt=n=>new Date(n*864e5);
+  const col=n=>{let s='';n++;while(n){const m=(n-1)%26;s=String.fromCharCode(65+m)+s;n=Math.floor((n-1)/26)}return s};
+  const r2=v=>Math.round(v*100)/100;
+  const used=new Set(['Riepilogo']);
+  const sheetName=s=>{let b=String(s||'Piano').replace(/[\\\/\?\*\[\]:]/g,' ').trim().slice(0,31)||'Piano',n=b,i=2;while(used.has(n.toLowerCase())){n=b.slice(0,28)+' '+i++}used.add(n.toLowerCase());return n};
+  const q=n=>"'"+n.replace(/'/g,"''")+"'";
+  const sum=(c,k,f)=>(prop?['dil','san','int']:['dil']).reduce((s,x)=>s+c.K[x][f],0);
+  const rs=wb.addWorksheet('Riepilogo');
+  const out=[];// per il riepilogo: riferimenti alle celle dei totali di ogni foglio
+  L.forEach(p=>{
+    const c=calc(p,A,X),ws=wb.addWorksheet(sheetName(p.foglio||p.nome)),C=p.conti||{},n=p.rate.length;
+    const hasDir=p.rate.some(r=>+r.dir),hasPag=p.rate.some(r=>r.pag);
+    // colonne del piano
+    const K=['rata','d','cap','san','int','tot','dil'].concat(hasDir?['dir']:[]).concat(['totr','pag','eff','gg','ggt','mdil']).concat(prop?['msan','mint']:[]).concat(['mtot','dam']);
+    const L_={};K.forEach((k,i)=>L_[k]=col(i));
+    const H={rata:'Rata',d:'Data scadenza',cap:'Importo capitale',san:'Importo sanzioni',int:'Importo interessi',tot:'TOTALE  C+D+E',dil:'Importo interessi di dilazione',dir:'Diritti di notifica',totr:'Totale rata',pag:'Pagata il',eff:'Data pagamento',gg:'giorni dalla dilazione al '+fd(n2s(X)),ggt:'giorni totali',mdil:'interessi di dilazione maturati al '+fd(n2s(X)),msan:'sanzioni da pagare (già maturate)',mint:'interessi avviso da pagare (già maturati)',mtot:'totale maturato al '+fd(n2s(X)),dam:'da maturare'};
+    const HR=9,R0=10,R1=R0+n-1,TR=R1+1;
+    const rng=k=>`${L_[k]}${R0}:${L_[k]}${R1}`;
+    // intestazione
+    ws.getCell('A1').value=p.nome;ws.getCell('A1').font={bold:true,size:18};
+    if(p.ente||p.atto){ws.getCell('C1').value=[p.ente,p.atto?'atto '+p.atto:''].filter(Boolean).join(' · ');ws.getCell('C1').font={italic:true}}
+    const totCap=p.rate.reduce((s,r)=>s+(+r.cap||0),0),totSan=p.rate.reduce((s,r)=>s+(+r.san||0),0),totInt=p.rate.reduce((s,r)=>s+(+r.int||0),0);
+    ws.getCell('B2').value='Totale';ws.getCell('C2').value={formula:'C3+C4+C5',result:r2(totCap+totSan+totInt)};
+    [['capitale','CAPITALE',`SUM(${rng('cap')})`,totCap],['interessi','INTERESSI ',`SUM(${rng('int')})`,totInt],['sanzioni','SANZIONI',`SUM(${rng('san')})`,totSan]].forEach(([k,l,f,v],i)=>{const r=3+i;ws.getCell('A'+r).value=C[k]||'';ws.getCell('B'+r).value=l;ws.getCell('C'+r).value={formula:f,result:r2(v)};ws.getCell('D'+r).value={formula:`C${r}/$C$6`,result:n?v/n:0};});
+    ws.getCell('B6').value='RATE ';ws.getCell('C6').value=n;
+    ['C2','C3','C4','C5','D3','D4','D5'].forEach(a=>ws.getCell(a).numFmt=EUR);
+    ws.getCell('F2').value='Data di calcolo';ws.getCell('F2').font={bold:true};ws.getCell('G2').value=dt(X);ws.getCell('G2').numFmt=DATE;ws.getCell('G2').fill=GREEN;
+    const ini=d2n(p.inizio)??d2n(p.rate[0]&&p.rate[0].d);
+    ws.getCell('F3').value='Inizio maturazione';ws.getCell('G3').value=p.metodo==='periodo'?'dalla rata precedente':dt(ini);ws.getCell('G3').numFmt=DATE;
+    ws.getCell('F4').value='Imputazione proporzionale sanzioni e interessi avviso';ws.getCell('G4').value=prop?'sì':'no';
+    // codici conto sopra le colonne
+    ws.getCell(L_.cap+'8').value=C.capitale||'';ws.getCell(L_.san+'8').value=C.sanzioni||CONTO_DEF.san;ws.getCell(L_.int+'8').value=C.interessi||CONTO_DEF.int;ws.getCell(L_.dil+'8').value=C.dilazione||CONTO_DEF.dil;
+    ws.getCell(L_.mdil+'8').value=C.dilazione||CONTO_DEF.dil;if(prop){ws.getCell(L_.msan+'8').value=C.sanzioni||CONTO_DEF.san;ws.getCell(L_.mint+'8').value=C.interessi||CONTO_DEF.int}
+    K.forEach(k=>{const cl=ws.getCell(L_[k]+HR);cl.value=H[k];cl.font={bold:true};cl.alignment={wrapText:true,vertical:'bottom'};if(['mdil','msan','mint','mtot'].includes(k))cl.fill=GREEN});
+    ws.getRow(HR).height=45;
+    const G0=`$G$2`,START=`$G$3`;
+    p.rate.forEach((r,i)=>{
+      const R=R0+i,rg=c.righe[i],fut=rg.d>X,a=p.metodo==='periodo'?(i?d2n(p.rate[i-1].pag||p.rate[i-1].d):rg.d):ini;
+      const s=p.metodo==='periodo'?(i?`${L_.eff}${R-1}`:`${L_.eff}${R}`):START;
+      const set=(k,v,fmt)=>{const cl=ws.getCell(L_[k]+R);cl.value=v;if(fmt)cl.numFmt=fmt;return cl};
+      set('rata',i+1);set('d',dt(d2n(r.d)),DATE);
+      ['cap','san','int','dil'].forEach(k=>set(k,+r[k]||0,EUR));if(hasDir)set('dir',+r.dir||0,EUR);
+      set('tot',{formula:`${L_.cap}${R}+${L_.san}${R}+${L_.int}${R}`,result:(+r.cap||0)+(+r.san||0)+(+r.int||0)},EUR);
+      set('totr',{formula:`${L_.tot}${R}+${L_.dil}${R}${hasDir?'+'+L_.dir+R:''}`,result:(+r.cap||0)+(+r.san||0)+(+r.int||0)+(+r.dil||0)+(+r.dir||0)},EUR);
+      if(r.pag)set('pag',dt(d2n(r.pag)),DATE);
+      set('eff',{formula:`IF(${L_.pag}${R}="",${L_.d}${R},${L_.pag}${R})`,result:dt(rg.d)},DATE);
+      const ggt=Math.max(0,rg.d-a),gg=fut?Math.max(0,X-a):'';
+      set('ggt',{formula:`MAX(0,${L_.eff}${R}-${s})`,result:ggt});
+      set('gg',{formula:`IF(${L_.eff}${R}>${G0},MAX(0,${G0}-${s}),"")`,result:gg});
+      // dilazione: pro rata temporis; sanzioni e interessi avviso: già maturati per intero
+      const mf=k=>k==='dil'?`IF(${L_.eff}${R}>${G0},IF(${L_.ggt}${R}=0,0,${L_[k]}${R}*MIN(1,${L_.gg}${R}/${L_.ggt}${R})),"")`:`IF(${L_.eff}${R}>${G0},${L_[k]}${R},"")`;
+      set('mdil',{formula:mf('dil'),result:fut?rg.m.dil:''},EUR).fill=GREEN;
+      if(prop){set('msan',{formula:mf('san'),result:fut?rg.m.san:''},EUR).fill=GREEN;set('mint',{formula:mf('int'),result:fut?rg.m.int:''},EUR).fill=GREEN}
+      const mk=prop?['mdil','msan','mint']:['mdil'],dk=prop?['dil','san','int']:['dil'];
+      const mt=fut?mk.reduce((s,k)=>s+rg.m[k.slice(1)],0):'';
+      set('mtot',{formula:`IF(${L_.eff}${R}>${G0},${mk.map(k=>L_[k]+R).join('+')},"")`,result:mt},EUR).fill=GREEN;
+      set('dam',{formula:`IF(${L_.eff}${R}>${G0},${dk.map(k=>L_[k]+R).join('+')}-${L_.mtot}${R},"")`,result:fut?dk.reduce((s,k)=>s+(+r[k]||0),0)-mt:''},EUR);
+      if(!fut)['rata','d','cap','san','int','tot','dil','totr'].forEach(k=>ws.getCell(L_[k]+R).font={color:{argb:'FF7F7F7F'}});
+    });
+    // totali
+    ['cap','san','int','tot','dil','totr','mdil','mtot','dam'].concat(hasDir?['dir']:[]).concat(prop?['msan','mint']:[]).forEach(k=>{const cl=ws.getCell(L_[k]+TR);
+      const res={cap:totCap,san:totSan,int:totInt,tot:totCap+totSan+totInt,dil:p.rate.reduce((s,r)=>s+(+r.dil||0),0),dir:p.rate.reduce((s,r)=>s+(+r.dir||0),0),mdil:c.K.dil.rat,msan:c.K.san.rat,mint:c.K.int.rat,mtot:sum(c,0,'rat'),dam:sum(c,0,'res')-sum(c,0,'rat')}[k]??null;
+      cl.value={formula:`SUM(${rng(k)})`,result:res==null?undefined:r2(res)};cl.numFmt=EUR;cl.font={bold:true};cl.border={top:{style:'thin'}};if(['mdil','msan','mint','mtot'].includes(k))cl.fill=GREEN});
+    ws.getCell(L_.d+TR).value='Totale';ws.getCell(L_.d+TR).font={bold:true};
+    // debito residuo come nel file di origine
+    const eff=rng('eff'),cap=rng('cap'),B=TR+2,cR=L_.mdil,cR2=L_.mtot;
+    ws.getCell(cR+B).value='DEBITO RESIDUO AL '+fd(n2s(X));ws.getCell(cR+B).font={bold:true};
+    ws.getCell(cR+(B+1)).value={formula:`SUMIF(${eff},">"&${G0},${cap})`,result:r2(c.res)};ws.getCell(cR+(B+1)).numFmt=EUR;ws.getCell(cR+(B+1)).fill=YEL;
+    ws.getCell(cR+(B+2)).value='ENTRO 12';ws.getCell(cR2+(B+2)).value='OLTRE 12';
+    ws.getCell(cR+(B+3)).value={formula:`SUMIFS(${cap},${eff},">"&${G0},${eff},"<="&EDATE(${G0},12))`,result:r2(c.entro)};
+    ws.getCell(cR2+(B+3)).value={formula:`${cR}${B+1}-${cR}${B+3}`,result:r2(c.oltre)};
+    [cR+(B+3),cR2+(B+3)].forEach(a=>{ws.getCell(a).numFmt=EUR;ws.getCell(a).fill=YEL});
+    const B2=B+5;
+    ws.getCell(cR+B2).value='Già maturati al '+fd(n2s(X))+' da pagare dopo';ws.getCell(cR+B2).font={bold:true};
+    ws.getCell(cR+(B2+1)).value={formula:`${L_.mtot}${TR}`,result:r2(sum(c,0,'rat'))};ws.getCell(cR+(B2+1)).numFmt=EUR;ws.getCell(cR+(B2+1)).fill=GREEN;
+    // larghezze
+    K.forEach((k,i)=>ws.getColumn(i+1).width={rata:6,d:12.5,eff:12.5,pag:12.5,gg:11,ggt:9}[k]||15);
+    ws.views=[{state:'frozen',ySplit:HR,xSplit:2}];
+    out.push({p,c,ws:ws.name,L_,TR,B});
+  });
+  // riepilogo (equivalente a "Suddivisione finale", con i riferimenti ai fogli)
+  rs.getCell('A1').value='Rateizzazioni – riepilogo al '+fd(n2s(X));rs.getCell('A1').font={bold:true,size:18};
+  rs.getCell('A2').value='Imputazione proporzionale di sanzioni e interessi dell\'avviso: '+(prop?'sì':'no');
+  const HD=['Piano','Ente','Atto','Foglio','Rate scadute','Totale debiti rateizzati (capitale residuo)',"Quota entro l'anno",'Quota oltre 12 mesi','Interessi di dilazione maturati'].concat(prop?['Sanzioni maturate','Interessi avviso maturati']:[]).concat(['Totale maturato da pagare dopo','Da maturare']);
+  HD.forEach((h,i)=>{const cl=rs.getCell(4,i+1);cl.value=h;cl.font={bold:true};cl.alignment={wrapText:true,vertical:'bottom'};if(i>=8&&i<HD.length-1)cl.fill=GREEN});rs.getRow(4).height=48;
+  out.forEach((o,j)=>{const R=5+j,s=q(o.ws),c=o.c,set=(i,v,fmt)=>{const cl=rs.getCell(R,i);cl.value=v;if(fmt)cl.numFmt=fmt;return cl};
+    set(1,o.p.nome);set(2,o.p.ente||'');set(3,o.p.atto||'');set(4,{text:o.ws,hyperlink:`#${s}!A1`});rs.getCell(R,4).font={color:{argb:'FF1D4F8A'},underline:true};set(5,c.nPag+'/'+c.n);
+    set(6,{formula:`${s}!${o.L_.mdil}${o.B+1}`,result:r2(c.res)},EUR);set(7,{formula:`${s}!${o.L_.mdil}${o.B+3}`,result:r2(c.entro)},EUR);set(8,{formula:`${s}!${o.L_.mtot}${o.B+3}`,result:r2(c.oltre)},EUR);
+    let i=9;set(i++,{formula:`${s}!${o.L_.mdil}${o.TR}`,result:r2(c.K.dil.rat)},EUR).fill=GREEN;
+    if(prop){set(i++,{formula:`${s}!${o.L_.msan}${o.TR}`,result:r2(c.K.san.rat)},EUR).fill=GREEN;set(i++,{formula:`${s}!${o.L_.mint}${o.TR}`,result:r2(c.K.int.rat)},EUR).fill=GREEN}
+    set(i++,{formula:`${s}!${o.L_.mtot}${o.TR}`,result:r2(sum(c,0,'rat'))},EUR).fill=GREEN;
+    set(i++,{formula:`${s}!${o.L_.dam}${o.TR}`,result:r2(sum(c,0,'res')-sum(c,0,'rat'))},EUR);
+  });
+  const TRr=5+out.length;rs.getCell(TRr,1).value='Totale';rs.getCell(TRr,1).font={bold:true};
+  for(let i=6;i<=HD.length;i++){const L=col(i-1),cl=rs.getCell(TRr,i);const res=out.reduce((s,o)=>{const v=rs.getCell(5+out.indexOf(o),i).value;return s+((v&&v.result)||0)},0);cl.value={formula:`SUM(${L}5:${L}${TRr-1})`,result:r2(res)};cl.numFmt=EUR;cl.font={bold:true};cl.border={top:{style:'thin'}};if(i>=9&&i<HD.length)cl.fill=GREEN}
+  rs.getColumn(1).width=30;rs.getColumn(2).width=22;rs.getColumn(3).width=14;rs.getColumn(4).width=22;rs.getColumn(5).width=9;for(let i=6;i<=HD.length;i++)rs.getColumn(i).width=16;
+  rs.views=[{state:'frozen',ySplit:4,xSplit:1}];
+  return wb;
+}
+
+$('#xls').addEventListener('click',async e=>{
+  if(!window.ExcelJS){toast('La libreria Excel non si è caricata: ricarica la pagina');return}
+  const dl=await claude.use('downloads');if(!dl){toast('Il download non è disponibile in questa vista');return}
+  const b=e.currentTarget;b.disabled=true;
+  try{const wb=xlsxBuild(window.ExcelJS,list(),d2n(UI.from),d2n(UI.to),!!UI.prop);const buf=await wb.xlsx.writeBuffer();
+    await dl.save({filename:'Rateizzazioni al '+UI.to.split('-').reverse().join('.')+'.xlsx',data:new Blob([buf])})}
+  catch(err){if(!err||err.code!=='declined')toast('Download non riuscito: '+(err&&err.message||'errore'))}
+  b.disabled=false;
+});
+
+/* ---------- backup e ripristino ---------- */
+async function scarica(nome,blob){
+  let dl=null;try{dl=await claude.use('downloads')}catch(e){}
+  if(dl){await dl.save({filename:nome,data:blob});return}
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=nome;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+}
+$('#bk').addEventListener('click',async()=>{
+  const piani={};Object.entries(P).forEach(([id,p])=>{piani[id]=JSON.parse(JSON.stringify(p))});
+  const txt=JSON.stringify({tipo:'rateizzazioni-fiscali',versione:1,creato:new Date().toISOString(),piani},null,1);
+  try{await scarica('Backup rateizzazioni '+todayS()+'.json',new Blob([txt],{type:'application/json'}));toast('Backup scaricato: '+Object.keys(piani).length+' piani')}
+  catch(err){if(!err||err.code!=='declined')toast('Backup non riuscito')}
+});
+$('#rs').addEventListener('click',()=>$('#rsf').click());
+$('#rsf').addEventListener('change',async e=>{
+  const f=e.target.files[0];e.target.value='';if(!f||!db)return;
+  let d;try{d=JSON.parse(await f.text())}catch(err){toast('Il file non è un backup valido');return}
+  if(!d||d.tipo!=='rateizzazioni-fiscali'||!d.piani||typeof d.piani!=='object'){toast('Questo file non è un backup delle rateizzazioni');return}
+  const n=Object.keys(d.piani).length;
+  if(!confirm('Il backup contiene '+n+' piani e sostituisce tutti i piani attuali ('+Object.keys(P).length+'). Continuare?'))return;
+  try{
+    for(const id of Object.keys(P))if(!d.piani[id])await db.doc('piani/'+id).delete();
+    for(const[id,p]of Object.entries(d.piani))await db.doc('piani/'+id).set(p);
+    UI.open=null;UI.edit=null;saveUI();toast('Backup ripristinato: '+n+' piani');
+  }catch(err){toast('Ripristino non riuscito: serve il permesso di modifica')}
+  render();
+});
+
+/* ---------- avvio ---------- */
+render();
+(async()=>{
+  try{
+    const[d,u]=await Promise.all([claude.use('db'),claude.use('user')]);
+    db=d;EDIT=!!(u&&await u.canEdit());LOADED=true;
+    if(!db){render();return}
+    db.collection('piani').onSnapshot(qs=>{Object.keys(P).forEach(k=>delete P[k]);qs.docs.forEach(x=>{P[x.id]=x.data()});if(UI.open&&UI.open!=='__nuovo'&&!P[UI.open])UI.open=null;if(!UI.edit)render()},()=>{toast('Non riesco a leggere i piani');render()});
+  }catch(e){LOADED=true;render()}
+})();
+</script>
+
+</body></html>
