@@ -59,7 +59,7 @@ export const RI = (function () {
     hTec:    ['Nome Tecnico/i Bmtek', 'Name of technician/s Bmtek', 'Nom du/des technicien(s) Bmtek', 'Nombre técnico/s Bmtek'],
     hCli:    ['Ragione sociale', 'Company name', 'Raison sociale', 'Razón social'],
     hInd:    ['Indirizzo', 'Address', 'Adresse', 'Dirección'],
-    hCon:    ['Persona di riferimento cliente', 'Customer contact person', 'Contact chez le client', 'Persona de contacto del cliente'],
+    hCon:    ['Persona di riferimento cliente / e-mail', 'Customer contact person / e-mail', 'Contact chez le client / e-mail', 'Persona de contacto del cliente / e-mail'],
     hMat:    ['NUMERO DI SERIE MACCHINA', 'SERIAL NUMBER OF THE MACHINE', 'NUMÉRO DE SÉRIE DE LA MACHINE', 'NÚMERO DE SERIE DE LA MÁQUINA'],
     hOre:    ['Ore lavoro macchina', 'Working hours machine', 'Heures de travail machine', 'Horas de trabajo máquina'],
     hSac:    ['Conteggio sacchi', 'Bags counter', 'Compteur de sacs', 'Contador de bolsas'],
@@ -160,7 +160,7 @@ export const RI = (function () {
       txt('Nr. ' + (r.num || ''), 217, 27, { sz: 8.5, b: 1 });
       if (weeks.length > 1) txt(X.F('week', wi + 1, weeks.length), 217, 31.5, { sz: 7 });
       // righe anagrafiche
-      const H = [[X.P('hDate'), dataInt], [X.P('hTec'), r.tecnici], [X.P('hCli'), r.cli && r.cli.nome], [X.P('hInd'), r.cli && r.cli.indirizzo], [X.P('hCon'), r.cli && r.cli.contatto], [X.P('hMat'), [r.matr, r.macDesc].filter(Boolean).join('  –  ')], [X.P('hOre'), r.oreMac], [X.P('hSac'), r.sacchi]];
+      const H = [[X.P('hDate'), dataInt], [X.P('hTec'), r.tecnici], [X.P('hCli'), r.cli && r.cli.nome], [X.P('hInd'), r.cli && r.cli.indirizzo], [X.P('hCon'), r.cli && [r.cli.contatto, r.cli.email].filter(Boolean).join('  ·  ')], [X.P('hMat'), [r.matr, r.macDesc].filter(Boolean).join('  –  ')], [X.P('hOre'), r.oreMac], [X.P('hSac'), r.sacchi]];
       let y = 34; H.forEach(([k, v]) => { box(L, y, CW, 4.6); txt(fit(k, 106, 7.5), L + 1.5, y + 3.4, { sz: 7.5 }); txt(fit(v, CW - 112, 8.5), L + 110, y + 3.4, { sz: 8.5, b: 1 }); y += 4.6; });
       // viaggio + training
       y += 0.6; const half = CW / 2;

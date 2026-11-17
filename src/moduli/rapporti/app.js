@@ -15,6 +15,9 @@ const toast=m=>{const t=TOAST;t.textContent=m;t.hidden=false;clearTimeout(toast.
 const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 const GG=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
 const H=n=>RI.hrs(n);
+const SALES='sales@bmtek.it'; // proposto insieme al cliente quando si invia il rapporto
+// per il PDF: e-mail scritta sul rapporto o, se manca, quella dell'anagrafica
+const conMail=r=>{const m=r.cli&&(r.cli.email||(S.clienti[r.cli.id]||{}).email);return m?{...r,cli:{...r.cli,email:m}}:r};
 const LINGUE=[['IT','Italiano'],['EN','Inglese'],['FR','Francese'],['ES','Spagnolo']];
 /* testi che legge il cliente al momento della firma */
 const FIRMA={
@@ -320,7 +323,7 @@ async function doSign(b){
 async function doPdf(r){
   if(!r)return;
   if(!DL){toast('Il download dei file non è disponibile in questa vista');return}
-  try{const jsPDF=await CTX.jsPDF();const doc=RI.build(jsPDF,r,LOGO);const blob=doc.output('blob');
+  try{const jsPDF=await CTX.jsPDF();const doc=RI.build(jsPDF,conMail(r),LOGO);const blob=doc.output('blob');
     const nm=(r.num+' '+(r.cli&&r.cli.nome||'')+(r.firma?'':' BOZZA')).replace(/[\\/:*?"<>|]+/g,' ').trim()+'.pdf';
     await DL.save({filename:nm,data:blob})}
   catch(e){if(e&&e.code==='declined')return;toast('Non riesco a creare il PDF: '+(e&&e.message||'errore'))}
@@ -334,24 +337,26 @@ const MAILT={
   ES:{s:'Informe de intervención',b:'Estimado cliente:\nadjuntamos el informe de intervención {n} firmado.\n\nAtentamente\nKimatic'}};
 async function doInvia(r){
   if(!r||!r.firma||!r.firma.ts){toast('Si può inviare solo un rapporto firmato');return}
-  const an=S.clienti[r.cli&&r.cli.id]||{},to=(r.cli&&r.cli.email||an.email||'').trim();
+  const an=S.clienti[r.cli&&r.cli.id]||{},cliMail=(r.cli&&r.cli.email||an.email||'').trim();
+  // destinatari proposti: il cliente e l'ufficio commerciale BMTEK
+  const to=[cliMail,SALES].filter(Boolean).join(', ');
   const T=MAILT[r.lingua]||MAILT.IT,sub=T.s+' '+r.num+' – '+(r.cli.nome||''),body=T.b.replace('{n}',r.num);
   let file=null;
-  try{const jsPDF=await CTX.jsPDF();const blob=RI.build(jsPDF,r,LOGO).output('blob');
+  try{const jsPDF=await CTX.jsPDF();const blob=RI.build(jsPDF,conMail(r),LOGO).output('blob');
     const nm=(r.num+' '+(r.cli&&r.cli.nome||'')).replace(/[\\/:*?"<>|]+/g,' ').trim()+'.pdf';
     file=new File([blob],nm,{type:'application/pdf'})}
   catch(e){toast('Non riesco a creare il PDF: '+(e&&e.message||'errore'));return}
   /* telefono/tablet: il foglio di condivisione apre la posta con il PDF già allegato */
   if(navigator.canShare&&navigator.canShare({files:[file]})){
-    if(to){try{await navigator.clipboard.writeText(to)}catch(e){}}
+    try{await navigator.clipboard.writeText(to)}catch(e){}
     try{await navigator.share({files:[file],title:sub,text:body});
-      toast(to?'Scegli l\'app di posta; l\'indirizzo '+to+' è già copiato: incollalo nel destinatario':'Scegli l\'app di posta. Nell\'anagrafica del cliente manca l\'e-mail')}
+      toast('Scegli l\'app di posta; gli indirizzi '+to+' sono già copiati: incollali nel destinatario'+(cliMail?'':' (manca l\'e-mail del cliente)'))}
     catch(e){if(e&&e.name==='AbortError')return;toast('Condivisione non riuscita: '+(e&&e.message||'errore'))}
     return}
   /* computer: salva il PDF e apre la mail già compilata, l'allegato va aggiunto a mano */
   if(DL){try{await DL.save({filename:file.name,data:file})}catch(e){if(e&&e.code==='declined')return}}
-  location.href='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(sub)+'&body='+encodeURIComponent(body);
-  toast('PDF scaricato: allegalo alla mail che si è aperta'+(to?'':' (manca l\'e-mail del cliente)'));
+  location.href='mailto:'+[cliMail,SALES].filter(Boolean).map(encodeURIComponent).join(',')+'?subject='+encodeURIComponent(sub)+'&body='+encodeURIComponent(body);
+  toast('PDF scaricato: allegalo alla mail che si è aperta'+(cliMail?'':' (manca l\'e-mail del cliente)'));
 }
 
 /* report ore del singolo rapporto, per l'ufficio amministrativo */
