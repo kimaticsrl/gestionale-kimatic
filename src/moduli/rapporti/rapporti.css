@@ -119,3 +119,8 @@
 .ri .ora input{flex:1;min-width:0}
 .ri .ora .ora-b{flex:none;padding:4px 8px;font-size:12px}
 .ri .fascia{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr) auto;max-width:520px}
+
+/* anteprima del PDF quando il browser non apre una nuova scheda */
+.pdfov{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.55);display:flex;flex-direction:column;padding:12px;gap:8px}
+.pdfov .pdfbar{display:flex;gap:8px;align-items:center;background:var(--panel,#fff);border-radius:8px;padding:8px 12px}
+.pdfov iframe{flex:1;width:100%;border:0;border-radius:8px;background:#fff}

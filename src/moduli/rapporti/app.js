@@ -159,14 +159,14 @@ function vEdit(){
   let fir;
   if(lk){fir=`<section class="panel"><h2>Firme</h2>${sum}<div class="sigw" style="margin-top:12px"><div class="sig"><span class="lab">Firma del tecnico · ${esc(r.firma.tecNome)}</span><img src="${r.firma.tec}" alt="Firma del tecnico"></div><div class="sig"><span class="lab">Firma del cliente · ${esc(r.firma.cliNome)}</span><img src="${r.firma.cli}" alt="Firma del cliente"></div></div><p class="note">Impronta del rapporto: <span class="mono">${esc(r.firma.hash.slice(0,16))}…</span> ${INTEG[r.id]===true?'· contenuto integro':INTEG[r.id]===false?'· <b style="color:var(--bad)">contenuto modificato dopo la firma</b>':''}</p></section>`}
   else if(!CAN_EDIT){fir=`<section class="panel"><h2>Riepilogo</h2>${sum}<p class="note">Rapporto non ancora firmato dal cliente. Hai accesso in sola lettura.</p></section>`}
-  else if(!UI.sign){fir=`<section class="panel"><h2>Chiusura intervento</h2>${sum}<div class="row" style="margin-top:12px"><button type="button" class="pri" data-act="firma">Chiudi l'intervento e fai firmare il cliente</button><button type="button" data-act="pdf">Anteprima PDF</button></div><p class="note">Dopo la firma il rapporto non si può più modificare e passa in fatturazione.</p></section>`}
+  else if(!UI.sign){fir=`<section class="panel"><h2>Chiusura intervento</h2>${sum}<div class="row" style="margin-top:12px"><button type="button" class="pri" data-act="firma">Chiudi l'intervento e fai firmare il cliente</button><button type="button" data-act="anteprima">Anteprima PDF</button></div><p class="note">Dopo la firma il rapporto non si può più modificare e passa in fatturazione.</p></section>`}
   else{const miss=[];if(!r.cli.nome)miss.push('la ragione sociale');if(!(r.giorni||[]).length)miss.push('almeno una giornata');if(!r.tecnici)miss.push('il nome dei tecnici');
    fir=`<section class="panel confirm"><h2 style="color:var(--fg);margin:0">Firma del rapporto</h2>${sum}
     ${miss.length?`<div class="banner warn">Prima della firma manca ${miss.join(', ')}.</div>`:''}
     <p style="margin:0">${FIRMA[r.lingua||'IT'].testo}</p>
     <div class="sigw"><div class="sig"><label class="lab">${FIRMA[r.lingua||'IT'].tec}<input id="s-tn" value="${esc((r.tecnici||'').split(',')[0].trim())}"></label><canvas id="pad-tec" width="900" height="300" aria-label="Firma del tecnico"></canvas><div class="row"><button type="button" class="sm" data-clr="pad-tec">${FIRMA[r.lingua||'IT'].canc}</button></div></div>
     <div class="sig"><label class="lab">${FIRMA[r.lingua||'IT'].cli}<input id="s-cn" value="${esc(r.cli.contatto)}"></label><canvas id="pad-cli" width="900" height="300" aria-label="Firma del cliente"></canvas><div class="row"><button type="button" class="sm" data-clr="pad-cli">${FIRMA[r.lingua||'IT'].canc}</button></div></div></div>
-    <div class="row"><button type="button" class="pri" data-act="conferma"${miss.length?' disabled':''}>Conferma le firme</button><button type="button" data-act="pdf">Anteprima PDF</button><button type="button" data-act="nofirma">Annulla</button></div></section>`}
+    <div class="row"><button type="button" class="pri" data-act="conferma"${miss.length?' disabled':''}>Conferma le firme</button><button type="button" data-act="anteprima">Anteprima PDF</button><button type="button" data-act="nofirma">Annulla</button></div></section>`}
   return head+ban+dati+giorn+ric+note+fir+(ro?'':`<div class="row"><span class="sp"></span>${!r.firma&&(r.by===ME||ADMIN)?'<button type="button" class="sm dng" data-act="elimina">Elimina rapporto</button>':''}</div>`);
 }
 function vDay(g,i,dis){
@@ -269,6 +269,7 @@ ROOT.addEventListener('click',async e=>{
     case'nofirma':UI.sign=false;render();break;
     case'conferma':await doSign(b);break;
     case'pdf':await doPdf(CUR);break;
+    case'anteprima':anteprima(CUR);break;
     case'invia':await doInvia(CUR);break;
     case'elimina':if(!confirmTwice(b,'Tocca di nuovo per eliminare il rapporto'))return;try{await db.doc('rapporti/'+CUR.id).delete();delete S.rapporti[CUR.id];DIRTY=false;CUR=null;UI.open=null;saveUI();render();toast('Rapporto eliminato')}catch(err){toast('Non riesco a eliminarlo: riprova')}break;
     case'riapri':if(!confirmTwice(b,'Tocca di nuovo: la firma del cliente verrà cancellata'))return;delete CUR.firma;CUR.riaperto=new Date().toISOString();DIRTY=true;await flush();render();toast('Rapporto riaperto: andrà firmato di nuovo');break;
@@ -327,6 +328,21 @@ async function doPdf(r){
     const nm=(r.num+' '+(r.cli&&r.cli.nome||'')+(r.firma?'':' BOZZA')).replace(/[\\/:*?"<>|]+/g,' ').trim()+'.pdf';
     await DL.save({filename:nm,data:blob})}
   catch(e){if(e&&e.code==='declined')return;toast('Non riesco a creare il PDF: '+(e&&e.message||'errore'))}
+}
+
+/* anteprima: apre il PDF in una nuova scheda (dove si può anche stampare o scaricare), senza salvarlo;
+   se il browser blocca la scheda, lo mostra in un riquadro sopra la pagina */
+async function anteprima(r){
+  if(!r)return;
+  const w=window.open('','_blank'); // aperta subito, mentre il clic è ancora «fresco», sennò viene bloccata
+  try{const jsPDF=await CTX.jsPDF();const blob=RI.build(jsPDF,conMail(r),LOGO).output('blob');
+    const url=URL.createObjectURL(new Blob([blob],{type:'application/pdf'}));setTimeout(()=>URL.revokeObjectURL(url),10*60000);
+    if(w&&!w.closed){w.location.href=url;return}
+    const ov=document.createElement('div');ov.className='pdfov';
+    ov.innerHTML=`<div class="pdfbar"><b>Anteprima PDF</b><span style="flex:1"></span><button type="button" class="sm" data-x="dl">Scarica</button><button type="button" class="sm" data-x="chiudi">Chiudi</button></div><iframe title="Anteprima PDF" src="${url}"></iframe>`;
+    ov.addEventListener('click',async e=>{const x=e.target.closest('[data-x]');if(!x)return;e.stopPropagation();if(x.dataset.x==='chiudi')ov.remove();else await doPdf(r)});
+    ROOT.appendChild(ov)}
+  catch(e){if(w)w.close();toast('Non riesco a creare il PDF: '+(e&&e.message||'errore'))}
 }
 
 /* ---------- invio al cliente dal dispositivo del tecnico ---------- */
