@@ -67,7 +67,11 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
     const P: Record<string, Persona> = {}, S: Record<string, Sanitari> = {}, C: Doc<Corso>[] = [], A: Doc<Azienda>[] = [], I: Doc<Infortunio>[] = [];
     ((s.data ?? []) as { coll: string; id: string; dati: never }[]).forEach((x) => {
       if (x.coll === "persona") P[x.id] = x.dati; else if (x.coll === "sanitari") S[x.id] = x.dati;
-      else if (x.coll === "corso") C.push(x); else if (x.coll === "azienda") A.push(x); else if (x.coll === "infortunio") I.push(x);
+      else if (x.coll === "corso") {
+        // corso senza scadenza scritta: la si calcola dalla data con la validità del tipo
+        const c = x.dati as Corso, anni = TIPI.find((t) => t.k === c.tipo)?.anni || 0;
+        C.push(!c.scadenza && c.data && anni ? { ...x, dati: { ...c, scadenza: piuMesi(c.data, 12 * anni) } } : x);
+      } else if (x.coll === "azienda") A.push(x); else if (x.coll === "infortunio") I.push(x);
     });
     setPers(P); setSan(S); setCorsi(C); setInf(I.sort((a, b) => (b.dati.data || "").localeCompare(a.dati.data || "")));
     setAz(A.sort((a, b) => (a.dati.prossima || "9").localeCompare(b.dati.prossima || "9")));
