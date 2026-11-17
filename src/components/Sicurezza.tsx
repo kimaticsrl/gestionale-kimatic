@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 // Le persone arrivano dall'Anagrafica dipendenti (funzione sic_dipendenti): qui non si inseriscono.
@@ -7,7 +7,8 @@ type Dip = { id: string; nome: string; mansione: string | null; reparto: string 
 type Persona = { rischio?: string; gen?: string; dpi?: string; addestr?: string; preass?: string; period?: string; ultvis?: string; scadvis?: string; note?: string };
 type Corso = { dip: string; tipo: string; data?: string; scadenza?: string; ore?: string; note?: string; chiuso?: boolean };
 type Azienda = { nome: string; mesi?: number; ultimo?: string; prossima?: string; note?: string; incaricato?: string; procedura?: string };
-type Verifica = { az: string; data: string; chi?: string; esito?: string; note?: string };
+type Foto = { path: string; nome?: string };
+type Verifica = { az: string; data: string; chi?: string; esito?: string; note?: string; firma?: string; foto?: Foto[] };
 type Sanitari = { idoneo?: string; prescr?: string };
 type Incarico = { ruolo: string; dip?: string; esterno?: string; dal?: string; note?: string };
 type Infortunio = { data?: string; dip?: string; nome?: string; luogo?: string; desc?: string; prog1?: string; prog2?: string; giorni?: number };
@@ -78,6 +79,11 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
   const [edA, setEdA] = useState<Doc<Azienda> | null>(null);
   const [ver, setVer] = useState<Doc<Verifica>[]>([]);
   const [edV, setEdV] = useState<Verifica | null>(null);
+  const [fotoNuove, setFotoNuove] = useState<File[]>([]);
+  const [firmato, setFirmato] = useState(false);
+  const [salvo, setSalvo] = useState(false);
+  const firmaRef = useRef<HTMLCanvasElement | null>(null);
+  const [url, setUrl] = useState<Record<string, string>>({});
   const [edI, setEdI] = useState<Doc<Infortunio> | null>(null);
   const [ftipo, setFtipo] = useState("");
 
@@ -95,10 +101,50 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
       } else if (x.coll === "azienda") A.push(x); else if (x.coll === "infortunio") I.push(x); else if (x.coll === "incarico") N.push(x); else if (x.coll === "verifica") V.push(x);
     });
     setVer(V.sort((a, b) => b.dati.data.localeCompare(a.dati.data))); setInc(N); setPers(P); setSan(S); setCorsi(C); setInf(I.sort((a, b) => (b.dati.data || "").localeCompare(a.dati.data || "")));
+    setEdA((e) => (e?.id ? A.find((x) => x.id === e.id) ?? e : e));
     setAz(A.sort((a, b) => (a.dati.prossima || "9").localeCompare(b.dati.prossima || "9")));
     setCarico(false);
   }
   useEffect(() => { carica(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!edA?.id) return;
+    const paths = ver.filter((v) => v.dati.az === edA.id).flatMap((v) => [v.dati.firma, ...(v.dati.foto || []).map((f) => f.path)]).filter((x): x is string => !!x && !url[x]);
+    if (!paths.length) return;
+    sb.storage.from("sicurezza").createSignedUrls(paths, 3600).then(({ data }) => {
+      const m: Record<string, string> = {};
+      (data || []).forEach((x) => { if (x.signedUrl && x.path) m[x.path] = x.signedUrl; });
+      setUrl((u) => ({ ...u, ...m }));
+    });
+  }, [edA?.id, ver]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function salvaVerifica(a: Doc<Azienda>) {
+    if (!edV) return;
+    if (!edV.chi) { setMsg({ t: "Indica chi ha fatto la verifica.", err: true }); return; }
+    if (!firmato || !firmaRef.current) { setMsg({ t: "Manca la firma di chi ha verificato.", err: true }); return; }
+    setSalvo(true);
+    try {
+      const id = uid(), base = `verifiche/${id}`;
+      const png = await new Promise<Blob>((ok, ko) => firmaRef.current!.toBlob((b) => (b ? ok(b) : ko(new Error("firma"))), "image/png"));
+      const up = await sb.storage.from("sicurezza").upload(`${base}/firma.png`, png, { contentType: "image/png" });
+      if (up.error) throw up.error;
+      const foto: Foto[] = [];
+      for (let i = 0; i < fotoNuove.length; i++) {
+        const f = fotoNuove[i], jpg = await rimpicciolisci(f), path = `${base}/foto-${i + 1}.jpg`;
+        const u = await sb.storage.from("sicurezza").upload(path, jpg, { contentType: "image/jpeg" });
+        if (u.error) throw u.error;
+        foto.push({ path, nome: f.name });
+      }
+      const dati = Object.fromEntries(Object.entries({ ...edV, firma: `${base}/firma.png`, foto: foto.length ? foto : undefined }).filter(([, v]) => v !== "" && v != null));
+      const { error } = await sb.rpc("sic_registra_verifica", { p_id: id, p_az: a.id, p_dati: dati });
+      if (error) throw error;
+      setMsg({ t: "Verifica registrata e firmata." });
+      setEdV(null); setFotoNuove([]); setFirmato(false);
+      await carica();
+      setEdA((x) => x);
+    } catch (e) {
+      setMsg({ t: "Verifica non registrata: " + (e as Error).message, err: true });
+    } finally { setSalvo(false); }
+  }
 
   async function scrivi(coll: string, id: string, dati: unknown, ok: string) {
     const pulito = Object.fromEntries(Object.entries(dati as Record<string, unknown>).filter(([, v]) => v !== "" && v != null));
@@ -358,35 +404,45 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
                     <b>Registro delle verifiche</b>
                     <span className="row" style={{ gap: 6 }}>
                       <button className="btn sec" onClick={() => stampaScheda(edA)}>Stampa scheda da firmare</button>
-                      {modifica && !edV && <button className="btn" onClick={() => setEdV({ az: edA.id, data: oggi(), chi: edA.dati.incaricato, esito: "Conforme" })}>Registra verifica</button>}
+                      {!edV && <button className="btn" onClick={() => { setEdV({ az: edA.id, data: oggi(), chi: edA.dati.incaricato, esito: "Conforme" }); setFirmato(false); setFotoNuove([]); }}>Registra verifica</button>}
                     </span>
                   </div>
                   {edV && (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(170px,1fr))", gap: 10, alignItems: "end", marginBottom: 8 }}>
-                      <label style={lab}>Data<input type="date" style={inp} value={edV.data} onChange={(e) => setEdV({ ...edV, data: e.target.value })} /></label>
-                      <label style={lab}>Chi ha verificato<select value={edV.chi || ""} onChange={(e) => setEdV({ ...edV, chi: e.target.value })}><option value="">—</option>{dip.filter(inForza).map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}</select></label>
-                      <label style={lab}>Esito<select value={edV.esito || ""} onChange={(e) => setEdV({ ...edV, esito: e.target.value })}><option>Conforme</option><option>Non conforme</option></select></label>
-                      <label style={lab}>Note<input style={inp} value={edV.note || ""} onChange={(e) => setEdV({ ...edV, note: e.target.value })} /></label>
-                      <span className="row" style={{ gap: 6 }}>
-                        <button className="btn sec" onClick={() => setEdV(null)}>Annulla</button>
-                        <button className="btn" onClick={async () => {
-                          if (!edV.chi) { setMsg({ t: "Indica chi ha fatto la verifica.", err: true }); return; }
-                          if (!(await scrivi("verifica", uid(), edV, "Verifica registrata."))) return;
-                          const nuovo = { ...edA.dati, ...(edV.data >= (edA.dati.ultimo || "") ? { ultimo: edV.data, ...(edA.dati.mesi ? { prossima: piuMesi(edV.data, edA.dati.mesi) } : {}) } : {}) };
-                          await scrivi("azienda", edA.id, nuovo, "Verifica registrata."); setEdA({ ...edA, dati: nuovo }); setEdV(null);
-                        }}>Salva verifica</button>
-                      </span>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 10, padding: 10, border: "1px dashed var(--line)", borderRadius: 8 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(170px,1fr))", gap: 10 }}>
+                        <label style={lab}>Data<input type="date" style={inp} value={edV.data} onChange={(e) => setEdV({ ...edV, data: e.target.value })} /></label>
+                        <label style={lab}>Chi ha verificato<select value={edV.chi || ""} onChange={(e) => setEdV({ ...edV, chi: e.target.value })}><option value="">—</option>{dip.filter(inForza).map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}</select></label>
+                        <label style={lab}>Esito<select value={edV.esito || ""} onChange={(e) => setEdV({ ...edV, esito: e.target.value })}><option>Conforme</option><option>Non conforme</option></select></label>
+                      </div>
+                      <label style={lab}>Note<textarea rows={2} style={inp} value={edV.note || ""} onChange={(e) => setEdV({ ...edV, note: e.target.value })} /></label>
+                      <label style={lab}>Foto (facoltative: dispositivo, bicchierino, modulo compilato…)
+                        <input type="file" accept="image/*" multiple capture="environment" onChange={(e) => setFotoNuove([...fotoNuove, ...Array.from(e.target.files || [])])} />
+                      </label>
+                      {!!fotoNuove.length && <div className="row" style={{ gap: 6 }}>{fotoNuove.map((f, i) => <span key={i} className="chip">{f.name} <button className="btn link" onClick={() => setFotoNuove(fotoNuove.filter((_, j) => j !== i))}>✕</button></span>)}</div>}
+                      <div style={lab}>Firma di chi ha verificato (con il dito o il mouse)
+                        <Firma onCanvas={(c) => { firmaRef.current = c; }} onFirma={setFirmato} />
+                      </div>
+                      <div className="row" style={{ gap: 6 }}>
+                        <span style={{ flex: 1 }} />
+                        <button className="btn sec" disabled={salvo} onClick={() => { setEdV(null); setFotoNuove([]); setFirmato(false); }}>Annulla</button>
+                        <button className="btn" disabled={salvo} onClick={() => salvaVerifica(edA)}>{salvo ? "Salvo…" : "Salva verifica firmata"}</button>
+                      </div>
                     </div>
                   )}
-                  <table>
-                    <thead><tr><th>Data</th><th>Chi</th><th>Esito</th><th>Note</th></tr></thead>
+                  <div className="mx"><table>
+                    <thead><tr><th>Data</th><th>Chi</th><th>Esito</th><th>Note</th><th>Firma</th><th>Foto</th></tr></thead>
                     <tbody>
                       {ver.filter((v) => v.dati.az === edA.id).map((v) => (
-                        <tr key={v.id}><td>{fd(v.dati.data)}</td><td>{byId[v.dati.chi || ""]?.nome}</td><td style={{ color: v.dati.esito === "Non conforme" ? "var(--danger)" : undefined }}>{v.dati.esito}</td><td>{v.dati.note}</td></tr>
+                        <tr key={v.id}>
+                          <td>{fd(v.dati.data)}</td><td>{byId[v.dati.chi || ""]?.nome}</td>
+                          <td style={{ color: v.dati.esito === "Non conforme" ? "var(--danger)" : undefined }}>{v.dati.esito}</td><td>{v.dati.note}</td>
+                          <td>{v.dati.firma && url[v.dati.firma] ? <img src={url[v.dati.firma]} alt="firma" style={{ height: 34, background: "#fff", borderRadius: 4 }} /> : v.dati.firma ? "…" : <small>su carta</small>}</td>
+                          <td>{(v.dati.foto || []).map((f, i) => url[f.path] ? <a key={i} href={url[f.path]} target="_blank" rel="noreferrer"><img src={url[f.path]} alt={f.nome || "foto"} style={{ height: 34, width: 34, objectFit: "cover", borderRadius: 4, marginRight: 4 }} /></a> : null)}</td>
+                        </tr>
                       ))}
-                      {!ver.some((v) => v.dati.az === edA.id) && <tr><td colSpan={4} style={{ color: "var(--muted)" }}>Nessuna verifica registrata.</td></tr>}
+                      {!ver.some((v) => v.dati.az === edA.id) && <tr><td colSpan={6} style={{ color: "var(--muted)" }}>Nessuna verifica registrata.</td></tr>}
                     </tbody>
-                  </table>
+                  </table></div>
                 </div>
               )}
               <div className="row">
@@ -459,7 +515,7 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
     const e = (x?: string) => String(x ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] as string);
     const fatte = ver.filter((v) => v.dati.az === a.id).slice().reverse();
     const vuote = Array.from({ length: Math.max(6, 14 - fatte.length) }, (_, i) => a.dati.prossima && a.dati.mesi ? piuMesi(a.dati.prossima, a.dati.mesi * i) : "");
-    const righe = fatte.map((v) => `<tr><td>${fd(v.dati.data)}</td><td>${e(byId[v.dati.chi || ""]?.nome)}</td><td>${e(v.dati.esito)}</td><td>${e(v.dati.note)}</td><td></td></tr>`).join("")
+    const righe = fatte.map((v) => `<tr><td>${fd(v.dati.data)}</td><td>${e(byId[v.dati.chi || ""]?.nome)}</td><td>${e(v.dati.esito)}</td><td>${e(v.dati.note)}${(v.dati.foto || []).length ? " (" + (v.dati.foto || []).length + " foto nel gestionale)" : ""}</td><td>${v.dati.firma && url[v.dati.firma] ? `<img src="${url[v.dati.firma]}" style="height:30px">` : ""}</td></tr>`).join("")
       + vuote.map((d) => `<tr><td>${d ? "entro il " + fd(d) : ""}</td><td></td><td>☐ Conforme ☐ Non conforme</td><td></td><td></td></tr>`).join("");
     const w = window.open("", "_blank");
     if (!w) { setMsg({ t: "Il browser ha bloccato la finestra di stampa: consenti i popup per il gestionale.", err: true }); return; }
@@ -498,4 +554,37 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
       </div>
     );
   }
+}
+
+// Riquadro per firmare con il dito (telefono, tablet) o con il mouse
+function Firma({ onCanvas, onFirma }: { onCanvas: (c: HTMLCanvasElement | null) => void; onFirma: (b: boolean) => void }) {
+  const ref = useRef<HTMLCanvasElement | null>(null);
+  const giu = useRef(false);
+  useEffect(() => {
+    const c = ref.current; if (!c) return;
+    const r = c.getBoundingClientRect(), k = window.devicePixelRatio || 1;
+    c.width = Math.round(r.width * k); c.height = Math.round(r.height * k);
+    const g = c.getContext("2d")!; g.scale(k, k); g.lineWidth = 2.2; g.lineCap = "round"; g.lineJoin = "round"; g.strokeStyle = "#111";
+    onCanvas(c);
+    return () => onCanvas(null);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const pos = (e: React.PointerEvent) => { const r = ref.current!.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  return (
+    <div>
+      <canvas ref={ref} style={{ width: "100%", maxWidth: 520, height: 150, background: "#fff", border: "1px solid var(--line)", borderRadius: 8, touchAction: "none", cursor: "crosshair", display: "block" }}
+        onPointerDown={(e) => { giu.current = true; ref.current!.setPointerCapture(e.pointerId); const g = ref.current!.getContext("2d")!; const [x, y] = pos(e); g.beginPath(); g.moveTo(x, y); g.lineTo(x + 0.1, y + 0.1); g.stroke(); onFirma(true); }}
+        onPointerMove={(e) => { if (!giu.current) return; const g = ref.current!.getContext("2d")!; const [x, y] = pos(e); g.lineTo(x, y); g.stroke(); }}
+        onPointerUp={() => { giu.current = false; }} onPointerCancel={() => { giu.current = false; }} />
+      <button className="btn link" type="button" onClick={() => { const c = ref.current!; c.getContext("2d")!.clearRect(0, 0, c.width, c.height); onFirma(false); }}>Cancella firma</button>
+    </div>
+  );
+}
+
+// Foto ridotte a 1600 px in JPEG prima del caricamento
+async function rimpicciolisci(f: File): Promise<Blob> {
+  const img = await createImageBitmap(f);
+  const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+  const c = document.createElement("canvas"); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+  c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
+  return new Promise((ok, ko) => c.toBlob((b) => (b ? ok(b) : ko(new Error("foto"))), "image/jpeg", 0.82));
 }
