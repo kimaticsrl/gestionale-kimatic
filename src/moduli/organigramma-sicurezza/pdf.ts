@@ -21,7 +21,14 @@ export function pdfOrganigramma(jsPDF: typeof JsPDF, livelli: Livello[], gruppi:
 
   // intestazione
   let y = M;
-  if (logo) { try { doc.addImage(logo, "PNG", M, y - 2, 34, 11); } catch { /* logo facoltativo */ } }
+  if (logo) {
+    try {
+      // proporzioni originali del logo: al massimo 40 × 13 mm
+      const { width, height } = doc.getImageProperties(logo);
+      const k = Math.min(40 / width, 13 / height);
+      doc.addImage(logo, "PNG", M, y - 3, width * k, height * k);
+    } catch { /* logo facoltativo */ }
+  }
   doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.setTextColor(34, 38, 42);
   doc.text("Organigramma della sicurezza sul lavoro", W - M, y + 3, { align: "right" });
   doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(107, 111, 114);
