@@ -3,7 +3,7 @@
 // Stessa logica e stessi dati; il salvataggio passa da Supabase (vedi dati.js).
 import { RI } from './pdf.js';
 import { pdfReport } from './reportOre.js';
-import { calcola, listinoPerPaese, LISTINO_BASE, pdfAddebiti } from './addebito.js';
+import { calcola, listinoPerPaese, LISTINO_BASE, pdfAddebiti, MEZZI, mezzoDi } from './addebito.js';
 
 export function avvia(ROOT, CTX) {
 const APP = ROOT.querySelector('[data-ri=app]'), TABS = ROOT.querySelector('[data-ri=tabs]'), SYNC = ROOT.querySelector('[data-ri=sync]'), TOAST = ROOT.querySelector('[data-ri=toast]');
@@ -136,6 +136,8 @@ function vEdit(){
     <label class="w2">Indirizzo<input id="f-ind" data-k="cli.indirizzo" value="${esc(r.cli.indirizzo)}"${dis}></label>
     <label>Persona di riferimento cliente<input id="f-con" data-k="cli.contatto" value="${esc(r.cli.contatto)}"${dis}></label>
     <label>Tecnici BMTEK<input id="f-tec" data-k="tecnici" value="${esc(r.tecnici)}" placeholder="Nome Cognome, Nome Cognome"${dis}></label>
+    <label>Mezzo utilizzato<select id="f-mez" data-k="mezzo"${dis}><option value="">— da indicare —</option>${MEZZI.map(m=>`<option value="${m.targa}"${r.mezzo===m.targa?' selected':''}>${esc(m.nome)} · ${m.targa}</option>`).join('')}<option value="altro"${r.mezzo==='altro'?' selected':''}>Altro (noleggio, mezzo del cliente, aereo…)</option></select></label>
+    ${r.mezzo==='altro'?`<label>Quale mezzo<input id="f-mza" data-k="mezzoAltro" value="${esc(r.mezzoAltro||'')}" placeholder="es. auto a noleggio, targa"${dis}></label>`:''}
     <label>Matricola macchina<input id="f-mat" list="dl-mac" data-k="matr" value="${esc(r.matr)}"${dis} autocomplete="off"></label>
     <label>Descrizione macchina<input id="f-mde" data-k="macDesc" value="${esc(r.macDesc)}"${dis}></label>
     <label>Ore lavoro macchina<input id="f-ore" data-k="oreMac" inputmode="numeric" value="${esc(r.oreMac)}"${dis}></label>
@@ -225,7 +227,7 @@ function onField(e){
   setK(CUR,k,v);
   if(k==='cli.nome'&&e.type==='change'){const hit=Object.entries(S.clienti).find(([,c])=>c.nome.toLowerCase()===String(v).trim().toLowerCase());
     if(hit){const[id,c]=hit;CUR.cli={id,nome:c.nome,indirizzo:CUR.cli.indirizzo||indCompleto(c),contatto:CUR.cli.contatto||c.contatto||''};const l=linguaCli(c);if(!CUR.lingua||CUR.lingua===CUR.linguaAuto||CUR.lingua==='IT'){CUR.lingua=l}CUR.linguaAuto=l}else CUR.cli.id='';queueSave();render();return}
-  if(k==='lingua'){queueSave();render();return}
+  if(k==='lingua'||k==='mezzo'){queueSave();render();return}
   const mc=/^ric\.(\d+)\.cod$/.exec(k);if(mc){if(e.type==='input')suggerisciArticoli(v);else{queueSave();compilaParte(+mc[1],String(v));return}}
   if(k==='matr'&&e.type==='change'){const c=S.clienti[CUR.cli.id];const m=c&&(c.commesse||[]).flatMap(x=>x.macchine||[]).find(m=>m.matr===v);if(m&&!CUR.macDesc){CUR.macDesc=m.desc;const f=$('#f-mde');if(f)f.value=m.desc}}
   const mi=/^giorni\.(\d+)\.(f|nt|d)/.exec(k);if(mi){const c=$('#calc'+mi[1]);if(c)c.innerHTML=calcTxt(CUR.giorni[+mi[1]]);if(mi[2]==='d'&&e.type==='change')render()}
@@ -360,7 +362,7 @@ function vFatt(){
   const L=Object.values(S.rapporti).filter(r=>r.firma&&r.firma.ts).sort((a,b)=>b.firma.ts.localeCompare(a.firma.ts));
   const da=L.filter(r=>!S.fatture[r.id]),fa=L.filter(r=>S.fatture[r.id]);
   L.forEach(checkInteg);
-  const row=(r,done)=>{const t=RI.totals(r),f=S.fatture[r.id];return `<tr><td><b>${esc(r.cli.nome)}</b><br><span class="mono" style="font-size:12px;color:var(--mut)">${esc(r.num)}</span></td><td>${r.tipo==='inst'?'Installazione':'Manutenzione'}<br><span class="note">${esc(range(r))}</span></td><td class="n num">${RI.hrs(t.ordU)}</td><td class="n num">${RI.hrs(t.extU)}</td><td class="n num">${RI.hrs(t.ordG+t.extG)}</td><td class="n num">${RI.hrs(t.viaggioU)}</td><td class="n num">${t.km}</td><td class="n num">${t.ricambi}</td><td class="n num"><b>${euro(addebitoDi(r).totale)}</b></td><td>${INTEG[r.id]===false?'<span class="pill bad">Modificato dopo la firma</span>':RI.fd(r.firma.ts.slice(0,10))}</td><td><div class="row"><button type="button" class="sm" data-act="pdfid" data-id="${esc(r.id)}">PDF</button><button type="button" class="sm" data-act="orepdfid" data-id="${esc(r.id)}">Report ore</button><button type="button" class="sm${UI.add===r.id?' pri':''}" data-add="${esc(r.id)}">Importo</button><button type="button" class="sm" data-act="addpdf" data-id="${esc(r.id)}">Riepilogo addebiti</button><button type="button" class="sm" data-openr="${esc(r.id)}">Apri</button>${done?`<span class="note">${f.nf?'Fatt. '+esc(f.nf):''} ${f.df?RI.fd(f.df):''}</span><button type="button" class="sm" data-act="annfatt" data-id="${esc(r.id)}">Annulla</button>`:`<button type="button" class="sm pri" data-fatt="${esc(r.id)}">Segna fatturato</button>`}</div></td></tr>`};
+  const row=(r,done)=>{const t=RI.totals(r),f=S.fatture[r.id];return `<tr><td><b>${esc(r.cli.nome)}</b><br><span class="mono" style="font-size:12px;color:var(--mut)">${esc(r.num)}</span></td><td>${r.tipo==='inst'?'Installazione':'Manutenzione'}<br><span class="note">${esc(range(r))}${mezzoDi(r,S.addebiti[r.id])?' · '+esc(mezzoDi(r,S.addebiti[r.id]).testo):''}</span></td><td class="n num">${RI.hrs(t.ordU)}</td><td class="n num">${RI.hrs(t.extU)}</td><td class="n num">${RI.hrs(t.ordG+t.extG)}</td><td class="n num">${RI.hrs(t.viaggioU)}</td><td class="n num">${t.km}</td><td class="n num">${t.ricambi}</td><td class="n num"><b>${euro(addebitoDi(r).totale)}</b></td><td>${INTEG[r.id]===false?'<span class="pill bad">Modificato dopo la firma</span>':RI.fd(r.firma.ts.slice(0,10))}</td><td><div class="row"><button type="button" class="sm" data-act="pdfid" data-id="${esc(r.id)}">PDF</button><button type="button" class="sm" data-act="orepdfid" data-id="${esc(r.id)}">Report ore</button><button type="button" class="sm${UI.add===r.id?' pri':''}" data-add="${esc(r.id)}">Importo</button><button type="button" class="sm" data-act="addpdf" data-id="${esc(r.id)}">Riepilogo addebiti</button><button type="button" class="sm" data-openr="${esc(r.id)}">Apri</button>${done?`<span class="note">${f.nf?'Fatt. '+esc(f.nf):''} ${f.df?RI.fd(f.df):''}</span><button type="button" class="sm" data-act="annfatt" data-id="${esc(r.id)}">Annulla</button>`:`<button type="button" class="sm pri" data-fatt="${esc(r.id)}">Segna fatturato</button>`}</div></td></tr>`};
   const hd='<thead><tr><th>Cliente</th><th>Intervento</th><th class="n">Ore ord.</th><th class="n">Ore extra</th><th class="n">In garanzia</th><th class="n">Viaggio</th><th class="n">Km</th><th class="n">Parti</th><th class="n">Da addebitare €</th><th>Firmato</th><th></th></tr></thead>';
   const form=UI.fatt?`<div class="confirm"><b>Fatturazione di ${esc((S.rapporti[UI.fatt.id]||{}).num)}</b><div class="g"><label>Numero fattura<input id="ff-n" data-fk="nf" value="${esc(UI.fatt.nf)}"></label><label>Data fattura<input id="ff-d" type="date" data-fk="df" value="${esc(UI.fatt.df)}"></label><label class="w2">Note<input id="ff-no" data-fk="note" value="${esc(UI.fatt.note)}"></label></div><div class="row"><button type="button" class="pri" data-act="savefatt">Segna fatturato</button><button type="button" data-act="nofatt">Annulla</button></div></div>`:'';
   return `<div class="top"><h2>Da fatturare</h2><span class="note">Ore in ore uomo (ore × nr. tecnici). Le ore oltre le 8 giornaliere sono extra.</span><span class="sp"></span>${da.length?'<button type="button" data-act="xlsadd">Esporta importi (Excel)</button>':''}<button type="button" data-act="listini">Listini</button></div>${form}${UI.lst?vListini():''}${UI.add&&S.rapporti[UI.add]?vAddebito(S.rapporti[UI.add]):''}
@@ -384,7 +386,9 @@ function vAddebito(r){
   const num=(k,l)=>`<label>${l}<input type="number" step="0.01" min="0" inputmode="decimal" data-ak="${k}" value="${esc(o[k]??'')}"${ro}></label>`;
   return `<section class="panel" id="addebito"><h2>Importo da fatturare · ${esc(r.num)} <small>${esc(r.cli.nome)}</small></h2>
   <div class="g"><label>Listino<select data-ak="listino"${ro}>${['EU','EXTRA_EU'].map(id=>`<option value="${id}"${A.lid===id?' selected':''}>${nomeL[id]}${A.auto.id===id?' (dal paese del cliente)':''}</option>`).join('')}</select></label>
-  <label>Veicolo<select data-ak="veicolo"${ro}><option value="auto"${o.veicolo!=='furgone'?' selected':''}>Auto</option><option value="furgone"${o.veicolo==='furgone'?' selected':''}>Furgone</option></select></label>
+  <label>Mezzo utilizzato<select data-ak="mezzo"${ro}><option value=""${!o.mezzo?' selected':''}>${r.mezzo?'Come nel rapporto: '+esc((mezzoDi(r,{})||{}).testo||''):'— non indicato nel rapporto —'}</option>${MEZZI.map(m=>`<option value="${m.targa}"${o.mezzo===m.targa?' selected':''}>${esc(m.nome)} · ${m.targa}</option>`).join('')}<option value="altro"${o.mezzo==='altro'?' selected':''}>Altro</option></select></label>
+  ${o.mezzo==='altro'?`<label>Quale mezzo<input data-ak="mezzoAltro" value="${esc(o.mezzoAltro||'')}"${ro}></label>`:''}
+  <label>Tariffa km<select data-ak="veicolo"${ro}><option value=""${!o.veicolo?' selected':''}>Secondo il mezzo (${A.furgone?'furgone':'auto'})</option><option value="auto"${o.veicolo==='auto'?' selected':''}>Auto</option><option value="furgone"${o.veicolo==='furgone'?' selected':''}>Furgone</option></select></label>
   ${chk('km','Addebita i km',true)}${chk('pasti','Addebita i pasti (non pagati dal cliente)',true)}
   ${num('speseViaggio','Spese di viaggio a costo (€)')}${num('alloggio','Alloggio e trasporti locali a costo (€)')}${num('altre','Altre spese a costo (€)')}
   ${num('oreRemote','Ore di assistenza da remoto')}${num('oreOfficina','Ore di lavoro in Kimatic')}
@@ -427,9 +431,9 @@ async function esportaAddebiti(){
   const L=Object.values(S.rapporti).filter(r=>r.firma&&r.firma.ts&&!S.fatture[r.id]).sort((a,b)=>(a.cli.nome||'').localeCompare(b.cli.nome||'','it'));
   try{const ExcelJS=(await import('exceljs')).default;const wb=new ExcelJS.Workbook();
     const ws=wb.addWorksheet('Da fatturare');
-    ws.columns=[{header:'Cliente',width:34},{header:'Rapporto',width:16},{header:'Periodo',width:24},{header:'Listino',width:12},{header:'Voce',width:46},{header:'Quantità',width:10},{header:'U.m.',width:6},{header:'Prezzo €',width:11},{header:'Importo €',width:12},{header:'Note',width:40}];
+    ws.columns=[{header:'Cliente',width:34},{header:'Rapporto',width:16},{header:'Periodo',width:24},{header:'Listino',width:12},{header:'Mezzo',width:24},{header:'Voce',width:46},{header:'Quantità',width:10},{header:'U.m.',width:6},{header:'Prezzo €',width:11},{header:'Importo €',width:12},{header:'Note',width:40}];
     ws.getRow(1).font={bold:true};
-    for(const r of L){const A=addebitoDi(r),base=[r.cli.nome||'',r.num,range(r),A.lid==='EU'?'Europa':'Extra Europa'];
+    for(const r of L){const A=addebitoDi(r),base=[r.cli.nome||'',r.num,range(r),A.lid==='EU'?'Europa':'Extra Europa',A.mezzo||''];
       A.righe.forEach(x=>ws.addRow([...base,x.voce,x.costo?null:x.qta,x.um,x.costo?null:x.prezzo,x.importo,'']));
       A.ricambi.forEach(x=>ws.addRow([...base,'Parte: '+[x.cod,x.des].filter(Boolean).join(' – '),+String(x.q).replace(',','.')||x.q,'n.',null,null,'prezzo da listino ricambi']));
       const t=ws.addRow([...base,'TOTALE DA ADDEBITARE',null,'',null,A.totale,[A.o.note,...A.avvisi].filter(Boolean).join('; ')]);t.font={bold:true};
