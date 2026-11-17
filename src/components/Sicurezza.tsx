@@ -6,7 +6,8 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 type Dip = { id: string; nome: string; mansione: string | null; reparto: string | null; contratto: string | null; attivo: boolean; assunzione: string | null; fine: string | null; finecontr?: string | null };
 type Persona = { rischio?: string; gen?: string; dpi?: string; addestr?: string; preass?: string; period?: string; ultvis?: string; scadvis?: string; note?: string };
 type Corso = { dip: string; tipo: string; data?: string; scadenza?: string; ore?: string; note?: string; chiuso?: boolean };
-type Azienda = { nome: string; mesi?: number; ultimo?: string; prossima?: string; note?: string };
+type Azienda = { nome: string; mesi?: number; ultimo?: string; prossima?: string; note?: string; incaricato?: string; procedura?: string };
+type Verifica = { az: string; data: string; chi?: string; esito?: string; note?: string };
 type Sanitari = { idoneo?: string; prescr?: string };
 type Incarico = { ruolo: string; dip?: string; esterno?: string; dal?: string; note?: string };
 type Infortunio = { data?: string; dip?: string; nome?: string; luogo?: string; desc?: string; prog1?: string; prog2?: string; giorni?: number };
@@ -75,6 +76,8 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
   const [edS, setEdS] = useState<Sanitari>({});
   const [edC, setEdC] = useState<Doc<Corso> | null>(null);
   const [edA, setEdA] = useState<Doc<Azienda> | null>(null);
+  const [ver, setVer] = useState<Doc<Verifica>[]>([]);
+  const [edV, setEdV] = useState<Verifica | null>(null);
   const [edI, setEdI] = useState<Doc<Infortunio> | null>(null);
   const [ftipo, setFtipo] = useState("");
 
@@ -82,16 +85,16 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
     const [d, s] = await Promise.all([sb.rpc("sic_dipendenti"), sb.from("sic_docs").select("coll,id,dati")]);
     if (d.error || s.error) setMsg({ t: "Errore nel caricamento: " + (d.error || s.error)?.message, err: true });
     setDip((d.data ?? []) as Dip[]);
-    const N: Doc<Incarico>[] = [], P: Record<string, Persona> = {}, S: Record<string, Sanitari> = {}, C: Doc<Corso>[] = [], A: Doc<Azienda>[] = [], I: Doc<Infortunio>[] = [];
+    const V: Doc<Verifica>[] = [], N: Doc<Incarico>[] = [], P: Record<string, Persona> = {}, S: Record<string, Sanitari> = {}, C: Doc<Corso>[] = [], A: Doc<Azienda>[] = [], I: Doc<Infortunio>[] = [];
     ((s.data ?? []) as { coll: string; id: string; dati: never }[]).forEach((x) => {
       if (x.coll === "persona") P[x.id] = x.dati; else if (x.coll === "sanitari") S[x.id] = x.dati;
       else if (x.coll === "corso") {
         // corso senza scadenza scritta: la si calcola dalla data con la validità del tipo
         const c = x.dati as Corso, anni = TIPI.find((t) => t.k === c.tipo)?.anni || 0;
         C.push(!c.scadenza && c.data && anni ? { ...x, dati: { ...c, scadenza: piuMesi(c.data, 12 * anni) } } : x);
-      } else if (x.coll === "azienda") A.push(x); else if (x.coll === "infortunio") I.push(x); else if (x.coll === "incarico") N.push(x);
+      } else if (x.coll === "azienda") A.push(x); else if (x.coll === "infortunio") I.push(x); else if (x.coll === "incarico") N.push(x); else if (x.coll === "verifica") V.push(x);
     });
-    setInc(N); setPers(P); setSan(S); setCorsi(C); setInf(I.sort((a, b) => (b.dati.data || "").localeCompare(a.dati.data || "")));
+    setVer(V.sort((a, b) => b.dati.data.localeCompare(a.dati.data))); setInc(N); setPers(P); setSan(S); setCorsi(C); setInf(I.sort((a, b) => (b.dati.data || "").localeCompare(a.dati.data || "")));
     setAz(A.sort((a, b) => (a.dati.prossima || "9").localeCompare(b.dati.prossima || "9")));
     setCarico(false);
   }
@@ -344,9 +347,50 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
                 <label style={lab}>Ultimo controllo<input type="date" style={inp} value={edA.dati.ultimo || ""} disabled={!modifica} onChange={(e) => { const ultimo = e.target.value; setEdA({ ...edA, dati: { ...edA.dati, ultimo, ...(ultimo && edA.dati.mesi ? { prossima: piuMesi(ultimo, edA.dati.mesi) } : {}) } }); }} /></label>
                 <label style={lab}>Prossima scadenza<input type="date" style={inp} value={edA.dati.prossima || ""} disabled={!modifica} onChange={(e) => setEdA({ ...edA, dati: { ...edA.dati, prossima: e.target.value } })} /></label>
               </div>
-              <label style={lab}>Note (chi se ne occupa, riferimenti)<input style={inp} value={edA.dati.note || ""} disabled={!modifica} onChange={(e) => setEdA({ ...edA, dati: { ...edA.dati, note: e.target.value } })} /></label>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 12 }}>
+                <label style={lab}>Incaricato della verifica<select value={edA.dati.incaricato || ""} disabled={!modifica} onChange={(e) => setEdA({ ...edA, dati: { ...edA.dati, incaricato: e.target.value || undefined } })}><option value="">— da nominare —</option>{dip.filter((d) => inForza(d) || d.id === edA.dati.incaricato).map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}</select></label>
+                <label style={lab}>Note (riferimenti, chi chiamare)<input style={inp} value={edA.dati.note || ""} disabled={!modifica} onChange={(e) => setEdA({ ...edA, dati: { ...edA.dati, note: e.target.value } })} /></label>
+              </div>
+              <label style={lab}>Procedura (cosa controllare, dove si trova il manuale)<textarea rows={4} style={inp} value={edA.dati.procedura || ""} disabled={!modifica} onChange={(e) => setEdA({ ...edA, dati: { ...edA.dati, procedura: e.target.value } })} /></label>
+              {edA.id && (
+                <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10 }}>
+                  <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
+                    <b>Registro delle verifiche</b>
+                    <span className="row" style={{ gap: 6 }}>
+                      <button className="btn sec" onClick={() => stampaScheda(edA)}>Stampa scheda da firmare</button>
+                      {modifica && !edV && <button className="btn" onClick={() => setEdV({ az: edA.id, data: oggi(), chi: edA.dati.incaricato, esito: "Conforme" })}>Registra verifica</button>}
+                    </span>
+                  </div>
+                  {edV && (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(170px,1fr))", gap: 10, alignItems: "end", marginBottom: 8 }}>
+                      <label style={lab}>Data<input type="date" style={inp} value={edV.data} onChange={(e) => setEdV({ ...edV, data: e.target.value })} /></label>
+                      <label style={lab}>Chi ha verificato<select value={edV.chi || ""} onChange={(e) => setEdV({ ...edV, chi: e.target.value })}><option value="">—</option>{dip.filter(inForza).map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}</select></label>
+                      <label style={lab}>Esito<select value={edV.esito || ""} onChange={(e) => setEdV({ ...edV, esito: e.target.value })}><option>Conforme</option><option>Non conforme</option></select></label>
+                      <label style={lab}>Note<input style={inp} value={edV.note || ""} onChange={(e) => setEdV({ ...edV, note: e.target.value })} /></label>
+                      <span className="row" style={{ gap: 6 }}>
+                        <button className="btn sec" onClick={() => setEdV(null)}>Annulla</button>
+                        <button className="btn" onClick={async () => {
+                          if (!edV.chi) { setMsg({ t: "Indica chi ha fatto la verifica.", err: true }); return; }
+                          if (!(await scrivi("verifica", uid(), edV, "Verifica registrata."))) return;
+                          const nuovo = { ...edA.dati, ...(edV.data >= (edA.dati.ultimo || "") ? { ultimo: edV.data, ...(edA.dati.mesi ? { prossima: piuMesi(edV.data, edA.dati.mesi) } : {}) } : {}) };
+                          await scrivi("azienda", edA.id, nuovo, "Verifica registrata."); setEdA({ ...edA, dati: nuovo }); setEdV(null);
+                        }}>Salva verifica</button>
+                      </span>
+                    </div>
+                  )}
+                  <table>
+                    <thead><tr><th>Data</th><th>Chi</th><th>Esito</th><th>Note</th></tr></thead>
+                    <tbody>
+                      {ver.filter((v) => v.dati.az === edA.id).map((v) => (
+                        <tr key={v.id}><td>{fd(v.dati.data)}</td><td>{byId[v.dati.chi || ""]?.nome}</td><td style={{ color: v.dati.esito === "Non conforme" ? "var(--danger)" : undefined }}>{v.dati.esito}</td><td>{v.dati.note}</td></tr>
+                      ))}
+                      {!ver.some((v) => v.dati.az === edA.id) && <tr><td colSpan={4} style={{ color: "var(--muted)" }}>Nessuna verifica registrata.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              )}
               <div className="row">
-                {modifica && edA.dati.mesi && <button className="btn sec" onClick={() => setEdA({ ...edA, dati: { ...edA.dati, ultimo: oggi(), prossima: piuMesi(oggi(), edA.dati.mesi || 0) } })}>Fatto oggi</button>}
+                {modifica && edA.dati.mesi && !edA.dati.procedura && <button className="btn sec" onClick={() => setEdA({ ...edA, dati: { ...edA.dati, ultimo: oggi(), prossima: piuMesi(oggi(), edA.dati.mesi || 0) } })}>Fatto oggi</button>}
                 <span style={{ flex: 1 }} />
                 {modifica && edA.id && <button className="btn danger" onClick={() => { if (confirm("Eliminare questa scadenza?")) { togli("azienda", edA.id, "Scadenza eliminata."); setEdA(null); } }}>Elimina</button>}
                 <button className="btn sec" onClick={() => setEdA(null)}>{modifica ? "Annulla" : "Chiudi"}</button>
@@ -355,11 +399,11 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
             </div>
           )}
           <div className="mx"><table>
-            <thead><tr><th>Cosa</th><th>Frequenza</th><th>Ultimo controllo</th><th>Prossima scadenza</th><th>Note</th></tr></thead>
+            <thead><tr><th>Cosa</th><th>Frequenza</th><th>Incaricato</th><th>Ultimo controllo</th><th>Prossima scadenza</th><th>Note</th></tr></thead>
             <tbody>
               {az.map((a) => (
                 <tr key={a.id} style={{ cursor: "pointer" }} onClick={() => setEdA(JSON.parse(JSON.stringify(a)))}>
-                  <td><b>{a.dati.nome}</b></td><td>{a.dati.mesi ? `ogni ${a.dati.mesi} mesi` : ""}</td><td>{fd(a.dati.ultimo)}</td>{cella(a.dati.prossima)}<td><small style={{ color: "inherit" }}>{a.dati.note}</small></td>
+                  <td><b>{a.dati.nome}</b></td><td>{a.dati.mesi ? (a.dati.mesi === 1 ? "ogni mese" : `ogni ${a.dati.mesi} mesi`) : ""}</td><td>{a.dati.incaricato ? byId[a.dati.incaricato]?.nome : <small>da nominare</small>}</td><td>{fd(a.dati.ultimo)}</td>{cella(a.dati.prossima)}<td><small style={{ color: "inherit" }}>{a.dati.note}</small></td>
                 </tr>
               ))}
             </tbody>
@@ -409,6 +453,27 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
       )}
     </>
   );
+
+  // Scheda cartacea da appendere vicino all'impianto: verifiche registrate + righe vuote per i prossimi controlli
+  function stampaScheda(a: Doc<Azienda>) {
+    const e = (x?: string) => String(x ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] as string);
+    const fatte = ver.filter((v) => v.dati.az === a.id).slice().reverse();
+    const vuote = Array.from({ length: Math.max(6, 14 - fatte.length) }, (_, i) => a.dati.prossima && a.dati.mesi ? piuMesi(a.dati.prossima, a.dati.mesi * i) : "");
+    const righe = fatte.map((v) => `<tr><td>${fd(v.dati.data)}</td><td>${e(byId[v.dati.chi || ""]?.nome)}</td><td>${e(v.dati.esito)}</td><td>${e(v.dati.note)}</td><td></td></tr>`).join("")
+      + vuote.map((d) => `<tr><td>${d ? "entro il " + fd(d) : ""}</td><td></td><td>☐ Conforme ☐ Non conforme</td><td></td><td></td></tr>`).join("");
+    const w = window.open("", "_blank");
+    if (!w) { setMsg({ t: "Il browser ha bloccato la finestra di stampa: consenti i popup per il gestionale.", err: true }); return; }
+    w.document.write(`<!doctype html><html lang="it"><head><meta charset="utf-8"><title>${e(a.dati.nome)}</title><style>
+      body{font:13px/1.4 Arial,sans-serif;margin:18mm} h1{font-size:18px;margin:0 0 4px} p{margin:4px 0} .proc{white-space:pre-wrap;border:1px solid #999;padding:8px;margin:10px 0}
+      table{border-collapse:collapse;width:100%;margin-top:10px} th,td{border:1px solid #555;padding:7px 6px;text-align:left;vertical-align:top} th{background:#eee} td{height:22px}
+      @media print{body{margin:10mm}}</style></head><body>
+      <h1>Kimatic srl · Scheda di verifica</h1><p><b>${e(a.dati.nome)}</b> — ${a.dati.mesi === 1 ? "ogni mese" : a.dati.mesi ? "ogni " + a.dati.mesi + " mesi" : ""}</p>
+      <p>Incaricato: <b>${e(a.dati.incaricato ? byId[a.dati.incaricato]?.nome : "")}</b></p>
+      ${a.dati.procedura ? `<div class="proc">${e(a.dati.procedura)}</div>` : ""}
+      <table><thead><tr><th style="width:18%">Data</th><th style="width:22%">Nome di chi verifica</th><th style="width:22%">Esito</th><th>Note</th><th style="width:18%">Firma</th></tr></thead><tbody>${righe}</tbody></table>
+      <script>window.onload=()=>window.print()</script></body></html>`);
+    w.document.close();
+  }
 
   function formCorso() {
     if (!edC) return null;
