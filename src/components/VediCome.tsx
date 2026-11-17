@@ -10,8 +10,10 @@ export default function VediCome({ ruoli, attuale }: { ruoli: Ruolo[]; attuale: 
   const [inCorso, avvia] = useTransition();
   const router = useRouter();
   const cambia = (v: string) => avvia(async () => {
-    try { await simula(v || null); router.refresh(); }
-    catch (e) { alert("Non riesco a cambiare vista: " + (e instanceof Error ? e.message : "errore")); }
+    try {
+      const errore = await simula(v || null);
+      if (errore) alert("Non riesco a cambiare vista: " + errore); else router.refresh();
+    } catch { alert("Non riesco a cambiare vista: riprova tra poco."); }
   });
   const nome = ruoli.find((r) => r.id === attuale)?.nome ?? attuale;
   return (

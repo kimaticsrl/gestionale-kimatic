@@ -11,12 +11,18 @@ export async function esci() {
 }
 
 // «Vedi come»: l'amministratore usa il gestionale con i soli permessi di un ruolo (null = torna amministratore)
-export async function simula(ruolo: string | null) {
+export async function simula(ruolo: string | null): Promise<string | null> {
   const { supabase, profilo } = await utenteCorrente();
-  if (!profilo?.is_admin || !profilo.attivo) throw new Error("Solo per amministratori");
+  if (!profilo?.is_admin || !profilo.attivo) return "Solo gli amministratori possono cambiare vista.";
   const { error } = await supabase.rpc("simula_ruolo", { p_ruolo: ruolo || null });
-  verifica(error);
+  if (error) {
+    // (gli errori lanciati qui arriverebbero nascosti: si restituisce il messaggio)
+    if (error.code === "PGRST202" || /simula_ruolo/.test(error.message))
+      return "Manca la migrazione 0043 (Vedi come): lanciala nell'SQL Editor di Supabase.";
+    return error.message;
+  }
   revalidatePath("/", "layout");
+  return null;
 }
 
 function verifica(error: { message: string } | null) {
