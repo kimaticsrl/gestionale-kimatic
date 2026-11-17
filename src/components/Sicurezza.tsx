@@ -231,6 +231,96 @@ export default function Sicurezza({ modifica, gestisce = false }: { modifica: bo
   const cella = (s?: string | null, testo?: string, k?: string) => <td key={k} style={{ background: SFONDO[stato(s)], whiteSpace: "nowrap" }}>{testo ?? fd(s)}</td>;
   const tabs: [string, string][] = [["scad", `Scadenze${scadute.length ? ` (${scadute.length} scadute)` : ""}`], ["dip", "Dipendenti"], ["add", "Addetti"], ["corsi", "Corsi"], ["az", "Scadenze aziendali"], ...(modifica ? [["inf", "Infortuni"] as [string, string]] : [])];
 
+  // Backup Excel di tutta la Sicurezza (modello «Elenco dipendenti in forza»)
+  async function scaricaBackup() {
+    setMsg({ t: "Preparo il backup…" });
+    try {
+      // dati anagrafici completi: li legge solo chi può vedere l'Anagrafica dipendenti (Direzione)
+      type Ana = { nascita?: string; luogo?: string; sesso?: string; cf?: string };
+      const ana: Record<string, Ana> = {};
+      const { data: an } = await sb.from("dipendenti").select("id,dati");
+      (an || []).forEach((x: { id: string; dati: Ana }) => { ana[x.id] = x.dati; });
+      const D = (s?: string | null) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || ""); return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], 12)) : s || null; };
+      const col = (s?: string | null) => { const x = stato(s); return x || undefined; };
+      const ordinati = dip.slice().sort((a, b) => Number(inForza(b)) - Number(inForza(a)) || a.nome.localeCompare(b.nome, "it"));
+      const nomeDi = (id?: string) => byId[id || ""]?.nome || "";
+      const fogli: import("./sicurezzaBackup").Foglio[] = [];
+
+      fogli.push({
+        nome: "DIPENDENTI KIMATIC", blocca: 1,
+        titolo: ["ELENCO DIPENDENTI CON RELATIVE MANSIONI – focus SICUREZZA", "AZIENDA: KIMATIC SRL – Via Matteotti 26, Loc. Cadriano, Granarolo dell'Emilia (BO)", `Aggiornato al ${fd(oggi())} · scaricato dal Gestionale Kimatic`],
+        gruppi: [["VISITE CON MEDICO DEL LAVORO", 10, 15], ["CORSI SICUREZZA", 19, 22], ["CORSI CARRELLISTI", 23, 24], ["PRIMO SOCCORSO", 25, 26], ["CORSO ANTINCENDIO", 27, 28], ["RLS", 29, 30], ["CORSO PES-PAV-PEI", 31, 32]],
+        intestazioni: [["COGNOME e NOME", 30], ["MANSIONE", 24], ["DATA DI NASCITA", 12], ["LUOGO DI NASCITA", 16], ["SESSO", 7], ["CODICE FISCALE", 19], ["DATA ASSUNZIONE", 12], ["Modulo consegna DPI", 14], ["Modulo addestramento", 14],
+          ["DATA VISITA PREASSUNTIVA", 13], ["IDONEO", 8], ["CON PRESCRIZIONE", 18], ["Periodicità visita", 12], ["ULTIMA VISITA", 12], ["SCADENZA VISITA", 12],
+          ["IN FORZA", 8], ["ULTIMO GIORNO DI LAVORO", 13], ["SCADENZA CONTRATTO", 13],
+          ["FORMAZIONE GENERALE", 11], ["RISCHIO (basso 4h / alto 12h)", 12], ["Ultimo corso sicurezza", 12], ["Scadenza (6 h ogni 5 anni)", 12],
+          ["Ultimo corso carrellisti", 12], ["Scadenza (4 h ogni 5 anni)", 12], ["Ultimo corso (classe A 16h)", 12], ["Scadenza (6 h ogni 3 anni)", 12],
+          ["Ultimo corso (8 h medio)", 12], ["Scadenza (5 h ogni 5 anni)", 12], ["Ultimo corso (32h il primo)", 12], ["Scadenza (4 h ogni anno)", 12], ["Ultimo corso", 12], ["Scadenza", 12]],
+        righe: ordinati.map((d) => {
+          const p = pers[d.id] || {}, a = ana[d.id] || {}, sa = san[d.id] || {}, u = ultimo[d.id] || {};
+          const corso = (k: string): Cella[] => { const c = u[k]; return c ? [D(c.data) ?? (c.note || null), c.chiuso ? "non rinnovato" : D(c.scadenza)] : [null, null]; };
+          const v: Cella[] = [d.nome, d.mansione, D(a.nascita), a.luogo, a.sesso, a.cf, D(d.assunzione), p.dpi, p.addestr,
+            D(p.preass), sa.idoneo, sa.prescr || (modifica && sa.idoneo ? "NO" : ""), p.period, D(p.ultvis), D(p.scadvis),
+            inForza(d) ? "SI" : "NO", D(d.fine), D(d.finecontr),
+            p.gen, p.rischio, ...corso("sic"), ...corso("car"), ...corso("ps"), ...corso("ai"), ...corso("rls"), ...corso("pes")];
+          const colori: Record<number, "scad" | "presto" | "ok"> = {};
+          if (inForza(d)) {
+            const set = (i: number, s?: string | null) => { const c = col(s); if (c) colori[i] = c; };
+            set(14, p.scadvis); set(17, d.finecontr);
+            ["sic", "car", "ps", "ai", "rls", "pes"].forEach((k, j) => { const c = u[k]; if (c && !c.chiuso) set(21 + j * 2, c.scadenza); });
+          }
+          return { v, colori, grigia: !inForza(d) };
+        }),
+      });
+      type Cella = string | number | Date | null | undefined;
+
+      fogli.push({
+        nome: "STORICO CORSI",
+        intestazioni: [["Dipendente", 30], ["In forza", 8], ["Corso", 34], ["Data", 12], ["Scadenza", 12], ["Ore", 7], ["Ultimo di quel tipo", 10], ["Non rinnovato", 10], ["Note", 40]],
+        righe: corsi.filter((c) => byId[c.dati.dip]).sort((a, b) => nomeDi(a.dati.dip).localeCompare(nomeDi(b.dati.dip), "it") || a.dati.tipo.localeCompare(b.dati.tipo) || (b.dati.data || "").localeCompare(a.dati.data || ""))
+          .map(({ dati: c }) => { const ult = ultimo[c.dip]?.[c.tipo] === c, fz = inForza(byId[c.dip]); return { v: [nomeDi(c.dip), fz ? "SI" : "NO", nomeTipo(c.tipo), D(c.data), D(c.scadenza), c.ore, ult ? "SI" : "", c.chiuso ? "SI" : "", c.note], grigia: !ult || !fz, colori: ult && fz && !c.chiuso && col(c.scadenza) ? { 4: col(c.scadenza)! } : undefined }; }),
+      });
+
+      fogli.push({
+        nome: "ADDETTI",
+        intestazioni: [["Incarico", 28], ["Nominativo", 30], ["Nominato il", 12], ["Corso del", 12], ["Corso valido fino al", 14], ["Note", 40]],
+        righe: RUOLI.flatMap((r) => inc.filter((x) => x.dati.ruolo === r.k && (!x.dati.dip || (byId[x.dati.dip] && inForza(byId[x.dati.dip])))).map(({ dati: x }) => {
+          const c = x.dip && r.corso ? ultimo[x.dip]?.[r.corso] : undefined;
+          return { v: [r.n, x.dip ? nomeDi(x.dip) : x.esterno, D(x.dal), D(c?.data), r.corso && x.dip ? (c ? D(c.scadenza) : "corso mancante") : null, x.note], colori: c?.scadenza && col(c.scadenza) ? { 4: col(c.scadenza)! } : undefined };
+        })),
+      });
+
+      fogli.push({
+        nome: "SCADENZE AZIENDALI",
+        intestazioni: [["Cosa", 44], ["Frequenza", 12], ["Incaricato", 26], ["Ultimo controllo", 13], ["Prossima scadenza", 13], ["Verifiche registrate", 11], ["Note", 40]],
+        righe: az.map(({ id, dati: a }) => ({ v: [a.nome, a.mesi ? (a.mesi === 1 ? "ogni mese" : `ogni ${a.mesi} mesi`) : "", nomeDi(a.incaricato), D(a.ultimo), D(a.prossima), ver.filter((v) => v.dati.az === id).length, a.note], colori: col(a.prossima) ? { 4: col(a.prossima)! } : undefined })),
+      });
+
+      fogli.push({
+        nome: "REGISTRO VERIFICHE",
+        intestazioni: [["Scadenza aziendale", 40], ["Data", 12], ["Eseguita da", 26], ["Esito", 13], ["Controlli OK", 11], ["Da sistemare", 60], ["Note", 40], ["Firma", 8], ["Foto", 6]],
+        righe: ver.slice().sort((a, b) => a.dati.data.localeCompare(b.dati.data)).map(({ dati: v }) => ({
+          v: [az.find((a) => a.id === v.az)?.dati.nome || "(scadenza eliminata)", D(v.data), nomeDi(v.chi), v.esito, v.controlli ? `${v.controlli.filter((c) => c.ok).length}/${v.controlli.length}` : "", (v.controlli || []).filter((c) => !c.ok).map((c) => c.voce + (c.nota ? ": " + c.nota : "")).join("; "), v.note, v.firma ? "SI" : "", (v.foto || []).length || null],
+          colori: v.esito === "Non conforme" ? { 3: "scad" as const } : undefined,
+        })),
+      });
+
+      if (modifica) fogli.push({
+        nome: "INFORTUNI",
+        intestazioni: [["Data infortunio", 12], ["Dipendente", 30], ["Luogo", 24], ["Cosa è successo", 50], ["1° prognosi", 12], ["Ultima prognosi", 12], ["Giorni tot", 9]],
+        righe: inf.slice().sort((a, b) => (a.dati.data || "").localeCompare(b.dati.data || "")).map(({ dati: x }) => ({ v: [D(x.data), nomeDi(x.dip) || x.nome, x.luogo, x.desc, D(x.prog1), D(x.prog2), durata(x) || null] })),
+      });
+
+      const [ExcelJS, { creaBackup }] = await Promise.all([import("exceljs").then((m) => m.default), import("./sicurezzaBackup")]);
+      const buf = await creaBackup(ExcelJS, fogli);
+      const el = document.createElement("a");
+      el.href = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+      el.download = `Sicurezza_backup_${oggi()}.xlsx`; el.click();
+      setTimeout(() => URL.revokeObjectURL(el.href), 5000);
+      setMsg({ t: `Backup scaricato${an?.length ? "" : " (senza data di nascita e codice fiscale: li vede solo la Direzione)"}.` });
+    } catch (e) { setMsg({ t: "Backup non creato: " + (e as Error).message, err: true }); }
+  }
+
   const durata = (x: Infortunio) => x.giorni ?? (x.data && (x.prog2 || x.prog1) ? Math.max(0, Math.round((new Date((x.prog2 || x.prog1) + "T12:00:00").getTime() - new Date(x.data + "T12:00:00").getTime()) / 864e5) + 1) : 0);
   const anniI = Object.values(inf.reduce((m, x) => {
     const anno = (x.dati.data || "").slice(0, 4) || "senza data";
@@ -297,7 +387,7 @@ export default function Sicurezza({ modifica, gestisce = false }: { modifica: bo
 
   return (
     <>
-      <header><h1>Sicurezza e formazione</h1><p className="sub">Corsi, visite mediche, DPI e scadenze. Le persone arrivano dall&apos;Anagrafica dipendenti: nuovi assunti e uscite si registrano lì.</p></header>
+      <header>{modifica && <button className="btn sec" style={{ float: "right" }} onClick={scaricaBackup}>Scarica backup Excel</button>}<h1>Sicurezza e formazione</h1><p className="sub">Corsi, visite mediche, DPI e scadenze. Le persone arrivano dall&apos;Anagrafica dipendenti: nuovi assunti e uscite si registrano lì.</p></header>
       <div className="row" style={{ gap: 6, marginBottom: 12 }}>
         {tabs.map(([k, n]) => <button key={k} className={"btn" + (tab === k ? "" : " sec")} onClick={() => { setTab(k); setMsg(null); }}>{n}</button>)}
       </div>
