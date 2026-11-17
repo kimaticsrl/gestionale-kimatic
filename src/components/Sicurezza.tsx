@@ -8,6 +8,7 @@ type Persona = { rischio?: string; gen?: string; dpi?: string; addestr?: string;
 type Corso = { dip: string; tipo: string; data?: string; scadenza?: string; ore?: string; note?: string };
 type Azienda = { nome: string; mesi?: number; ultimo?: string; prossima?: string; note?: string };
 type Sanitari = { idoneo?: string; prescr?: string };
+type Incarico = { ruolo: string; dip?: string; esterno?: string; dal?: string; note?: string };
 type Infortunio = { data?: string; dip?: string; nome?: string; luogo?: string; desc?: string; prog1?: string; prog2?: string; giorni?: number };
 type Doc<T> = { id: string; dati: T };
 
@@ -19,7 +20,22 @@ const TIPI: { k: string; n: string; anni: number }[] = [
   { k: "ai", n: "Antincendio", anni: 5 },
   { k: "rls", n: "RLS", anni: 1 },
   { k: "pes", n: "PES-PAV-PEI", anni: 5 },
+  { k: "prep", n: "Preposto", anni: 2 },
+  { k: "dirs", n: "Dirigente per la sicurezza", anni: 5 },
+  { k: "rspp", n: "RSPP / ASPP", anni: 5 },
   { k: "altro", n: "Altro corso", anni: 0 },
+];
+// Incarichi della sicurezza e corso che li abilita (per controllare che sia valido)
+const RUOLI: { k: string; n: string; corso?: string; esterno?: boolean }[] = [
+  { k: "dl", n: "Datore di lavoro" },
+  { k: "rspp", n: "RSPP", corso: "rspp", esterno: true },
+  { k: "mc", n: "Medico competente", esterno: true },
+  { k: "rls", n: "RLS", corso: "rls" },
+  { k: "dirs", n: "Dirigente per la sicurezza", corso: "dirs" },
+  { k: "prep", n: "Preposto", corso: "prep" },
+  { k: "ps", n: "Addetto primo soccorso", corso: "ps" },
+  { k: "ai", n: "Addetto antincendio", corso: "ai" },
+  { k: "car", n: "Carrellista", corso: "car" },
 ];
 const COL = ["sic", "car", "ps", "ai", "rls", "pes"];
 const BREVE: Record<string, string> = { sic: "Sicurezza", car: "Carrelli", ps: "Primo socc.", ai: "Antincendio", rls: "RLS", pes: "PES-PAV-PEI" };
@@ -48,6 +64,8 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
   const [az, setAz] = useState<Doc<Azienda>[]>([]);
   const [san, setSan] = useState<Record<string, Sanitari>>({});
   const [inf, setInf] = useState<Doc<Infortunio>[]>([]);
+  const [inc, setInc] = useState<Doc<Incarico>[]>([]);
+  const [edN, setEdN] = useState<Doc<Incarico> | null>(null);
   const [carico, setCarico] = useState(true);
   const [msg, setMsg] = useState<{ t: string; err?: boolean } | null>(null);
   const [q, setQ] = useState("");
@@ -64,16 +82,16 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
     const [d, s] = await Promise.all([sb.rpc("sic_dipendenti"), sb.from("sic_docs").select("coll,id,dati")]);
     if (d.error || s.error) setMsg({ t: "Errore nel caricamento: " + (d.error || s.error)?.message, err: true });
     setDip((d.data ?? []) as Dip[]);
-    const P: Record<string, Persona> = {}, S: Record<string, Sanitari> = {}, C: Doc<Corso>[] = [], A: Doc<Azienda>[] = [], I: Doc<Infortunio>[] = [];
+    const N: Doc<Incarico>[] = [], P: Record<string, Persona> = {}, S: Record<string, Sanitari> = {}, C: Doc<Corso>[] = [], A: Doc<Azienda>[] = [], I: Doc<Infortunio>[] = [];
     ((s.data ?? []) as { coll: string; id: string; dati: never }[]).forEach((x) => {
       if (x.coll === "persona") P[x.id] = x.dati; else if (x.coll === "sanitari") S[x.id] = x.dati;
       else if (x.coll === "corso") {
         // corso senza scadenza scritta: la si calcola dalla data con la validità del tipo
         const c = x.dati as Corso, anni = TIPI.find((t) => t.k === c.tipo)?.anni || 0;
         C.push(!c.scadenza && c.data && anni ? { ...x, dati: { ...c, scadenza: piuMesi(c.data, 12 * anni) } } : x);
-      } else if (x.coll === "azienda") A.push(x); else if (x.coll === "infortunio") I.push(x);
+      } else if (x.coll === "azienda") A.push(x); else if (x.coll === "infortunio") I.push(x); else if (x.coll === "incarico") N.push(x);
     });
-    setPers(P); setSan(S); setCorsi(C); setInf(I.sort((a, b) => (b.dati.data || "").localeCompare(a.dati.data || "")));
+    setInc(N); setPers(P); setSan(S); setCorsi(C); setInf(I.sort((a, b) => (b.dati.data || "").localeCompare(a.dati.data || "")));
     setAz(A.sort((a, b) => (a.dati.prossima || "9").localeCompare(b.dati.prossima || "9")));
     setCarico(false);
   }
@@ -110,6 +128,11 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
     if (p.scadvis) righe.push({ quando: p.scadvis, cosa: "Visita medica" + (p.period ? ` (${p.period.toLowerCase()})` : ""), chi: d.nome, dip: d.id });
     Object.values(ultimo[d.id] || {}).forEach((c) => { if (c.scadenza) righe.push({ quando: c.scadenza, cosa: nomeTipo(c.tipo), chi: d.nome, dip: d.id }); });
   });
+  inc.forEach((x) => {
+    const r = RUOLI.find((y) => y.k === x.dati.ruolo), d = x.dati.dip ? byId[x.dati.dip] : null;
+    if (!r?.corso || !d || !inForza(d) || ultimo[d.id]?.[r.corso]) return;
+    righe.push({ quando: oggi(), cosa: `${r.n}: manca il corso`, chi: d.nome, dip: d.id });
+  });
   az.forEach((a) => { if (a.dati.prossima) righe.push({ quando: a.dati.prossima, cosa: a.dati.nome, chi: "Azienda", az: a.id }); });
   righe.sort((a, b) => a.quando.localeCompare(b.quando));
   const scadute = righe.filter((r) => stato(r.quando) === "scad"), presto = righe.filter((r) => stato(r.quando) === "presto");
@@ -131,7 +154,7 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
   });
 
   const cella = (s?: string | null, testo?: string, k?: string) => <td key={k} style={{ background: SFONDO[stato(s)], whiteSpace: "nowrap" }}>{testo ?? fd(s)}</td>;
-  const tabs: [string, string][] = [["scad", `Scadenze${scadute.length ? ` (${scadute.length} scadute)` : ""}`], ["dip", "Dipendenti"], ["corsi", "Corsi"], ["az", "Scadenze aziendali"], ...(modifica ? [["inf", "Infortuni"] as [string, string]] : [])];
+  const tabs: [string, string][] = [["scad", `Scadenze${scadute.length ? ` (${scadute.length} scadute)` : ""}`], ["dip", "Dipendenti"], ["add", "Addetti"], ["corsi", "Corsi"], ["az", "Scadenze aziendali"], ...(modifica ? [["inf", "Infortuni"] as [string, string]] : [])];
 
   if (carico) return <div className="empty">Caricamento…</div>;
   const ds = sel ? byId[sel] : null;
@@ -261,6 +284,53 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
                 ))}
             </tbody>
           </table></div>
+        </div>
+      )}
+
+      {tab === "add" && (
+        <div className="box">
+          <p className="tag" style={{ marginTop: 0 }}>Chi ricopre gli incarichi della sicurezza. Accanto a ognuno c&apos;è la scadenza del corso che lo abilita: rossa se scaduto o mancante.</p>
+          {edN && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 12, border: "1px solid var(--line)", borderRadius: 8, marginBottom: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 12 }}>
+                <label style={lab}>Incarico<select value={edN.dati.ruolo} onChange={(e) => setEdN({ ...edN, dati: { ...edN.dati, ruolo: e.target.value } })}>{RUOLI.map((r) => <option key={r.k} value={r.k}>{r.n}</option>)}</select></label>
+                <label style={lab}>Dipendente<select value={edN.dati.dip || ""} onChange={(e) => setEdN({ ...edN, dati: { ...edN.dati, dip: e.target.value || undefined } })}><option value="">— esterno —</option>{dip.filter((d) => inForza(d) || d.id === edN.dati.dip).map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}</select></label>
+                {!edN.dati.dip && <label style={lab}>Nome (se esterno)<input style={inp} value={edN.dati.esterno || ""} onChange={(e) => setEdN({ ...edN, dati: { ...edN.dati, esterno: e.target.value } })} /></label>}
+                <label style={lab}>Nominato il<input type="date" style={inp} value={edN.dati.dal || ""} onChange={(e) => setEdN({ ...edN, dati: { ...edN.dati, dal: e.target.value } })} /></label>
+              </div>
+              <label style={lab}>Note<input style={inp} value={edN.dati.note || ""} onChange={(e) => setEdN({ ...edN, dati: { ...edN.dati, note: e.target.value } })} /></label>
+              <div className="row">
+                <span style={{ flex: 1 }} />
+                {edN.id && <button className="btn danger" onClick={() => { if (confirm("Togliere questo incarico?")) { togli("incarico", edN.id, "Incarico tolto."); setEdN(null); } }}>Togli incarico</button>}
+                <button className="btn sec" onClick={() => setEdN(null)}>Annulla</button>
+                <button className="btn" onClick={async () => { if (!edN.dati.dip && !edN.dati.esterno?.trim()) { setMsg({ t: "Scegli il dipendente o scrivi il nome dell'esterno.", err: true }); return; } if (await scrivi("incarico", edN.id || uid(), edN.dati, "Incarico salvato.")) setEdN(null); }}>Salva</button>
+              </div>
+            </div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 14 }}>
+            {RUOLI.map((r) => {
+              const lista = inc.filter((x) => x.dati.ruolo === r.k && (!x.dati.dip || (byId[x.dati.dip] && inForza(byId[x.dati.dip]))));
+              return (
+                <div key={r.k} style={{ border: "1px solid var(--line)", borderTop: "4px solid var(--sic)", borderRadius: 8, padding: 12 }}>
+                  <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
+                    <b>{r.n}</b>
+                    <span className="tag" style={{ margin: 0 }}>{lista.length || "nessuno"}</span>
+                  </div>
+                  {lista.map((x) => {
+                    const c = x.dati.dip && r.corso ? ultimo[x.dati.dip]?.[r.corso] : undefined;
+                    const st = r.corso && x.dati.dip ? (c?.scadenza ? stato(c.scadenza) : c?.data ? "ok" : "scad") : "";
+                    return (
+                      <div key={x.id} onClick={() => modifica && setEdN(JSON.parse(JSON.stringify(x)))} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "6px 8px", borderRadius: 6, marginBottom: 4, background: SFONDO[st as Stato] || "transparent", cursor: modifica ? "pointer" : undefined }}>
+                        <span>{x.dati.dip ? byId[x.dati.dip]?.nome : x.dati.esterno}{x.dati.note && <small style={{ display: "block", color: "var(--muted)" }}>{x.dati.note}</small>}</span>
+                        <small style={{ whiteSpace: "nowrap", color: "inherit" }}>{r.corso && x.dati.dip ? (c?.scadenza ? "corso fino al " + fd(c.scadenza) : c?.data ? "corso del " + fd(c.data) : "corso mancante") : x.dati.dal ? "dal " + fd(x.dati.dal) : ""}</small>
+                      </div>
+                    );
+                  })}
+                  {modifica && <button className="btn link" style={{ marginTop: 4 }} onClick={() => setEdN({ id: "", dati: { ruolo: r.k } })}>+ aggiungi</button>}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
