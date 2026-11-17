@@ -403,7 +403,6 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
                   <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
                     <b>Registro delle verifiche</b>
                     <span className="row" style={{ gap: 6 }}>
-                      <button className="btn sec" onClick={() => stampaScheda(edA)}>Stampa scheda da firmare</button>
                       {!edV && <button className="btn" onClick={() => { setEdV({ az: edA.id, data: oggi(), chi: edA.dati.incaricato, esito: "Conforme" }); setFirmato(false); setFotoNuove([]); }}>Registra verifica</button>}
                     </span>
                   </div>
@@ -436,7 +435,7 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
                         <tr key={v.id}>
                           <td>{fd(v.dati.data)}</td><td>{byId[v.dati.chi || ""]?.nome}</td>
                           <td style={{ color: v.dati.esito === "Non conforme" ? "var(--danger)" : undefined }}>{v.dati.esito}</td><td>{v.dati.note}</td>
-                          <td>{v.dati.firma && url[v.dati.firma] ? <img src={url[v.dati.firma]} alt="firma" style={{ height: 34, background: "#fff", borderRadius: 4 }} /> : v.dati.firma ? "…" : <small>su carta</small>}</td>
+                          <td>{v.dati.firma && url[v.dati.firma] ? <img src={url[v.dati.firma]} alt="firma" style={{ height: 34, background: "#fff", borderRadius: 4 }} /> : v.dati.firma ? "…" : ""}</td>
                           <td>{(v.dati.foto || []).map((f, i) => url[f.path] ? <a key={i} href={url[f.path]} target="_blank" rel="noreferrer"><img src={url[f.path]} alt={f.nome || "foto"} style={{ height: 34, width: 34, objectFit: "cover", borderRadius: 4, marginRight: 4 }} /></a> : null)}</td>
                         </tr>
                       ))}
@@ -509,27 +508,6 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
       )}
     </>
   );
-
-  // Scheda cartacea da appendere vicino all'impianto: verifiche registrate + righe vuote per i prossimi controlli
-  function stampaScheda(a: Doc<Azienda>) {
-    const e = (x?: string) => String(x ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] as string);
-    const fatte = ver.filter((v) => v.dati.az === a.id).slice().reverse();
-    const vuote = Array.from({ length: Math.max(6, 14 - fatte.length) }, (_, i) => a.dati.prossima && a.dati.mesi ? piuMesi(a.dati.prossima, a.dati.mesi * i) : "");
-    const righe = fatte.map((v) => `<tr><td>${fd(v.dati.data)}</td><td>${e(byId[v.dati.chi || ""]?.nome)}</td><td>${e(v.dati.esito)}</td><td>${e(v.dati.note)}${(v.dati.foto || []).length ? " (" + (v.dati.foto || []).length + " foto nel gestionale)" : ""}</td><td>${v.dati.firma && url[v.dati.firma] ? `<img src="${url[v.dati.firma]}" style="height:30px">` : ""}</td></tr>`).join("")
-      + vuote.map((d) => `<tr><td>${d ? "entro il " + fd(d) : ""}</td><td></td><td>☐ Conforme ☐ Non conforme</td><td></td><td></td></tr>`).join("");
-    const w = window.open("", "_blank");
-    if (!w) { setMsg({ t: "Il browser ha bloccato la finestra di stampa: consenti i popup per il gestionale.", err: true }); return; }
-    w.document.write(`<!doctype html><html lang="it"><head><meta charset="utf-8"><title>${e(a.dati.nome)}</title><style>
-      body{font:13px/1.4 Arial,sans-serif;margin:18mm} h1{font-size:18px;margin:0 0 4px} p{margin:4px 0} .proc{white-space:pre-wrap;border:1px solid #999;padding:8px;margin:10px 0}
-      table{border-collapse:collapse;width:100%;margin-top:10px} th,td{border:1px solid #555;padding:7px 6px;text-align:left;vertical-align:top} th{background:#eee} td{height:22px}
-      @media print{body{margin:10mm}}</style></head><body>
-      <h1>Kimatic srl · Scheda di verifica</h1><p><b>${e(a.dati.nome)}</b> — ${a.dati.mesi === 1 ? "ogni mese" : a.dati.mesi ? "ogni " + a.dati.mesi + " mesi" : ""}</p>
-      <p>Incaricato: <b>${e(a.dati.incaricato ? byId[a.dati.incaricato]?.nome : "")}</b></p>
-      ${a.dati.procedura ? `<div class="proc">${e(a.dati.procedura)}</div>` : ""}
-      <table><thead><tr><th style="width:18%">Data</th><th style="width:22%">Nome di chi verifica</th><th style="width:22%">Esito</th><th>Note</th><th style="width:18%">Firma</th></tr></thead><tbody>${righe}</tbody></table>
-      <script>window.onload=()=>window.print()</script></body></html>`);
-    w.document.close();
-  }
 
   function formCorso() {
     if (!edC) return null;
