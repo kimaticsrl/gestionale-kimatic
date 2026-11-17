@@ -5,7 +5,7 @@ import { LIVELLI, NOME_LIVELLO, type Livello } from "@/lib/livelli";
 
 type Props = {
   ruoli: { id: string; nome: string }[];
-  moduli: { id: string; nome: string; sigla: string }[];
+  moduli: { id: string; nome: string; sigla: string; reparto: string; nomeReparto: string }[];
   iniziale: Record<string, Livello>;
 };
 
@@ -35,9 +35,19 @@ export default function GrigliaPermessi({ ruoli, moduli, iniziale }: Props) {
         <table style={{ minWidth: 980 }}>
           <thead><tr><th>Modulo</th>{ruoli.map((r) => <th key={r.id}>{r.nome}</th>)}</tr></thead>
           <tbody>
-            {moduli.map((m) => (
-              <tr key={m.id}>
-                <td><small>{m.sigla}</small>{m.nome}</td>
+            {moduli.map((m, i) => {
+              const c = `var(--${m.reparto})`;
+              const primo = i === 0 || moduli[i - 1].reparto !== m.reparto;
+              return [
+              primo && (
+                <tr key={"g-" + m.reparto}>
+                  <td colSpan={ruoli.length + 1} style={{ background: `color-mix(in srgb,${c} 16%,var(--surface))`, borderLeft: `5px solid ${c}`, color: c, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", fontSize: 12 }}>
+                    {m.sigla} · {m.nomeReparto}
+                  </td>
+                </tr>
+              ),
+              <tr key={m.id} style={{ background: `color-mix(in srgb,${c} 6%,var(--surface))` }}>
+                <td style={{ borderLeft: `5px solid ${c}` }}><small style={{ color: c, fontWeight: 700 }}>{m.sigla}</small>{m.nome}</td>
                 {ruoli.map((r) => {
                   const lv = valori[`${r.id}|${m.id}`] ?? "nessuno";
                   return (
@@ -49,8 +59,9 @@ export default function GrigliaPermessi({ ruoli, moduli, iniziale }: Props) {
                     </td>
                   );
                 })}
-              </tr>
-            ))}
+              </tr>,
+              ];
+            })}
           </tbody>
         </table>
       </div>
