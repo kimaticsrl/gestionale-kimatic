@@ -6,5 +6,5 @@ export default async function PaginaSicurezza() {
   const { supabase } = await utenteCorrente();
   const { data } = await supabase.rpc("livello_modulo", { p_modulo: "sicurezza" });
   if (!data || data === "nessuno") notFound();
-  return <Sicurezza modifica={data === "modifica" || data === "gestisce"} />;
+  return <Sicurezza modifica={data === "modifica" || data === "gestisce"} gestisce={data === "gestisce"} />;
 }

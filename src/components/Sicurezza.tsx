@@ -59,7 +59,7 @@ const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) 
 const inp: React.CSSProperties = { padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 6, background: "var(--surface)", font: "inherit" };
 const lab: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 4, fontSize: 13 };
 
-export default function Sicurezza({ modifica }: { modifica: boolean }) {
+export default function Sicurezza({ modifica, gestisce = false }: { modifica: boolean; gestisce?: boolean }) {
   const sb = useMemo(() => supabaseBrowser(), []);
   const [tab, setTab] = useState("scad");
   const [dip, setDip] = useState<Dip[]>([]);
@@ -537,7 +537,7 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
               <div className="row">
                 {modifica && edA.dati.mesi && !edA.dati.procedura && <button className="btn sec" onClick={() => setEdA({ ...edA, dati: { ...edA.dati, ultimo: oggi(), prossima: piuMesi(oggi(), edA.dati.mesi || 0) } })}>Fatto oggi</button>}
                 <span style={{ flex: 1 }} />
-                {modifica && edA.id && !edA.dati.fisso && <button className="btn danger" onClick={() => { if (confirm("Eliminare questa scadenza?")) { togli("azienda", edA.id, "Scadenza eliminata."); setEdA(null); } }}>Elimina</button>}
+                {gestisce && edA.id && !edA.dati.fisso && <button className="btn danger" onClick={() => { if (confirm("Eliminare questa scadenza?")) { togli("azienda", edA.id, "Scadenza eliminata."); setEdA(null); } }}>Elimina</button>}
                 <button className="btn sec" onClick={() => setEdA(null)}>{modifica ? "Annulla" : "Chiudi"}</button>
                 {modifica && <button className="btn" onClick={async () => { if (!edA.dati.nome?.trim()) { setMsg({ t: "Scrivi cosa va controllato.", err: true }); return; } if (await scrivi("azienda", edA.id || uid(), edA.dati, "Scadenza salvata.")) setEdA(null); }}>Salva</button>}
               </div>
