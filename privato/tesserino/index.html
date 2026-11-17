@@ -28,8 +28,8 @@ fieldset{border:0;padding:0;margin:0 0 18px;display:grid;gap:12px}
 legend{font:600 12px var(--f-label);letter-spacing:.12em;text-transform:uppercase;color:var(--red);margin-bottom:10px}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 label{display:grid;gap:4px;font-size:13px;color:var(--muted);font-weight:500}
-input[type=text],input[type=date]{font:15px var(--f-ui);color:var(--ink);padding:9px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;width:100%;min-width:0}
-input:focus-visible,button:focus-visible,.file:focus-within{outline:2px solid var(--focus);outline-offset:1px}
+input[type=text],input[type=date],select{font:15px var(--f-ui);color:var(--ink);padding:9px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;width:100%;min-width:0}
+input:focus-visible,select:focus-visible,button:focus-visible,.file:focus-within{outline:2px solid var(--focus);outline-offset:1px}
 .cf input{font-family:ui-monospace,Consolas,monospace;letter-spacing:.04em;text-transform:uppercase}
 .hint{font-size:12px;color:var(--muted)}
 .hint.err{color:var(--red)}
@@ -214,7 +214,7 @@ function readImg(file,cb){if(!file)return;const r=new FileReader();r.onload=()=>
 $("fotoIn").onchange=e=>readImg(e.target.files[0],d=>{
   const im=new Image();im.onload=()=>{const s=Math.min(1,600/Math.max(im.width,im.height));
     const c=document.createElement("canvas");c.width=im.width*s;c.height=im.height*s;
-    c.getContext("2d").drawImage(im,0,0,c.width,c.height);photo=c.toDataURL("image/jpeg",.88);render()};
+    c.getContext("2d").drawImage(im,0,0,c.width,c.height);photo=c.toDataURL("image/jpeg",.88);render();if(window.fotoNuova)window.fotoNuova(photo)};
   im.src=d});
 $("logoIn").onchange=e=>readImg(e.target.files[0],d=>{$("pLogo").src=d;try{localStorage.setItem("kim_logo",d)}catch(_){}});
 
@@ -268,9 +268,7 @@ $("btnPdf").onclick=e=>run(e.currentTarget,async()=>{
   await deliver(fileBase()+".pdf",pdf.output("blob"));
 });
 
-/* Gestionale Kimatic: l'elenco dei dipendenti salvati è condiviso e sta nel gestionale */
-const KT=(()=>{try{return window.parent&&window.parent.KIMATIC_TES}catch(_){return null}})();
-const store=KT?{get:()=>KT.lista(),set:l=>KT.salva(l)}:{get(){try{return JSON.parse(localStorage.getItem("kim_dip")||"[]")}catch(_){return[]}},
+const store={get(){try{return JSON.parse(localStorage.getItem("kim_dip")||"[]")}catch(_){return[]}},
   set(l){try{localStorage.setItem("kim_dip",JSON.stringify(l))}catch(_){}}};
 function drawList(){
   const l=store.get(),ul=$("list");ul.innerHTML="";$("emptyMsg").hidden=l.length>0;
@@ -290,6 +288,34 @@ $("btnSave").onclick=()=>{
 $("btnClear").onclick=()=>{F.forEach(k=>{if(k!=="sede")$(k).value=""});photo="";$("fotoIn").value="";render()};
 
 try{const lg=localStorage.getItem("kim_logo");if(lg)$("pLogo").src=lg}catch(_){}
+
+/* ---------- Gestionale Kimatic ----------
+   I dipendenti arrivano dall'Anagrafica dipendenti (solo quelli in forza); la foto di ognuno
+   resta salvata nel gestionale per le volte successive. L'elenco «Dipendenti salvati» non serve più. */
+const KT=(()=>{try{return window.parent&&window.parent.KIMATIC_TES}catch(_){return null}})();
+if(KT){
+  const P=KT.personale();let pid="";
+  const fs=$("nome").closest("fieldset");
+  const lab=document.createElement("label");
+  lab.innerHTML='Dipendente<select id="pers"><option value="">— scegli dall\'anagrafica —</option></select>';
+  fs.insertBefore(lab,fs.querySelector(".row"));
+  const sel=lab.querySelector("select");
+  const rep=[...new Set(P.map(d=>d.reparto||"Senza reparto"))].sort((a,b)=>a.localeCompare(b));
+  rep.forEach(r=>{const g=document.createElement("optgroup");g.label=r;
+    P.filter(d=>(d.reparto||"Senza reparto")===r).forEach(d=>{const o=document.createElement("option");o.value=d.id;o.textContent=d.etichetta;g.append(o)});sel.append(g)});
+  if(!P.length){sel.disabled=true;sel.options[0].textContent="Nessun dipendente in anagrafica"}
+  sel.onchange=()=>{pid=sel.value;const d=P.find(x=>x.id===pid);
+    if(!d){$("btnClear").click();return}
+    ["nome","cognome","luogo","nascita","cf"].forEach(k=>$(k).value=d[k]||"");$("assunto").value=d.assunzione||"";
+    photo=d.photo||"";$("fotoIn").value="";render();
+    const manca=["luogo","nascita","cf","assunzione"].filter(k=>!d[k]).length;
+    say(manca?"Alcuni dati mancano in anagrafica: completali qui o chiedi alla Direzione di aggiornarla.":!d.photo?"Manca la foto: caricala con «Foto», resterà salvata per le prossime trasferte.":"");};
+  window.fotoNuova=async p=>{const d=P.find(x=>x.id===pid);if(!d)return;
+    const ok=await KT.salvaFoto(pid,p);if(ok){d.photo=p;say("Foto salvata per "+d.etichetta+".")}else say("La foto è sul tesserino ma non è stata salvata: serve il livello «Modifica».",true)};
+  $("btnClear").addEventListener("click",()=>{pid="";sel.value=""});
+  document.querySelector(".saved").hidden=true;$("btnSave").hidden=true;
+  ["nome","cognome","luogo","nascita","cf","assunto"].forEach(k=>$(k).value="");
+}
 render();drawList();
 </script>
 </body>
