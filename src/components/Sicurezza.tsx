@@ -297,12 +297,15 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
 
       {tab === "inf" && modifica && (
         <div className="box">
-          <p className="tag" style={{ marginTop: 0 }}>Registro infortuni: dati sanitari, visibile solo a chi può modificare la Sicurezza.</p>
+          <div className="row" style={{ marginBottom: 12 }}>
+            <span className="tag" style={{ margin: 0 }}>Registro infortuni: dati sanitari, visibile solo a chi può modificare la Sicurezza.</span>
+            <label className="ck"><input type="checkbox" checked={tutti} onChange={(e) => setTutti(e.target.checked)} /> Anche chi non è più in forza</label>
+          </div>
           {edI && (
             <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(190px,1fr))", gap: 12 }}>
                 <label style={lab}>Data<input type="date" style={inp} value={edI.dati.data || ""} onChange={(e) => setEdI({ ...edI, dati: { ...edI.dati, data: e.target.value } })} /></label>
-                <label style={{ ...lab, gridColumn: "span 2" }}>Dipendente<select value={edI.dati.dip || ""} onChange={(e) => setEdI({ ...edI, dati: { ...edI.dati, dip: e.target.value, nome: byId[e.target.value]?.nome || edI.dati.nome } })}><option value="">{edI.dati.nome ? `${edI.dati.nome} (non in anagrafica)` : "—"}</option>{dip.map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}</select></label>
+                <label style={{ ...lab, gridColumn: "span 2" }}>Dipendente<select value={edI.dati.dip || ""} onChange={(e) => setEdI({ ...edI, dati: { ...edI.dati, dip: e.target.value, nome: byId[e.target.value]?.nome || edI.dati.nome } })}><option value="">{edI.dati.nome ? `${edI.dati.nome} (non in anagrafica)` : "—"}</option>{dip.filter((d) => inForza(d) || d.id === edI.dati.dip).map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}</select></label>
                 <label style={lab}>Luogo<input style={inp} value={edI.dati.luogo || ""} onChange={(e) => setEdI({ ...edI, dati: { ...edI.dati, luogo: e.target.value } })} /></label>
                 <label style={lab}>Prima prognosi fino al<input type="date" style={inp} value={edI.dati.prog1 || ""} onChange={(e) => setEdI({ ...edI, dati: { ...edI.dati, prog1: e.target.value } })} /></label>
                 <label style={lab}>Ultima prognosi fino al<input type="date" style={inp} value={edI.dati.prog2 || ""} onChange={(e) => setEdI({ ...edI, dati: { ...edI.dati, prog2: e.target.value } })} /></label>
@@ -320,12 +323,12 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
           <div className="mx"><table>
             <thead><tr><th>Data</th><th>Dipendente</th><th>Luogo</th><th>Cosa è successo</th><th>Giorni</th></tr></thead>
             <tbody>
-              {inf.map((x) => (
+              {inf.filter((x) => tutti || (x.dati.dip && byId[x.dati.dip] && inForza(byId[x.dati.dip]))).map((x) => (
                 <tr key={x.id} style={{ cursor: "pointer" }} onClick={() => setEdI(JSON.parse(JSON.stringify(x)))}>
                   <td>{fd(x.dati.data)}</td><td>{byId[x.dati.dip || ""]?.nome || x.dati.nome}</td><td>{x.dati.luogo}</td><td>{x.dati.desc}</td><td>{x.dati.giorni}</td>
                 </tr>
               ))}
-              {!inf.length && <tr><td colSpan={5} style={{ color: "var(--muted)" }}>Nessun infortunio registrato.</td></tr>}
+              {!inf.filter((x) => tutti || (x.dati.dip && byId[x.dati.dip] && inForza(byId[x.dati.dip]))).length && <tr><td colSpan={5} style={{ color: "var(--muted)" }}>Nessun infortunio registrato.</td></tr>}
             </tbody>
           </table></div>
           {!edI && <div className="row" style={{ marginTop: 12 }}><button className="btn" onClick={() => setEdI({ id: "", dati: { data: oggi() } })}>Nuovo infortunio</button></div>}
