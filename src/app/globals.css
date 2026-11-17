@@ -2,7 +2,7 @@
 :root{
   --bg:#eef1f4; --surface:#fff; --fg:#17202a; --muted:#5b6876; --line:#d6dce3;
   --accent:#1d5b86; --accent-soft:#e1ecf4; --danger:#a3352b; --ok:#2f6b4f;
-  --com:#1d5b86; --pro:#9a5b12; --acq:#6b4c9a; --amm:#2f6b4f; --ser:#a83a5c; --per:#0e7490;
+  --com:#1d5b86; --pro:#9a5b12; --acq:#6b4c9a; --amm:#2f6b4f; --ser:#a83a5c; --per:#0e7490; --sic:#c2410c;
   --f-display:"Archivo","Helvetica Neue",Arial,sans-serif;
   --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
@@ -11,7 +11,7 @@
 @media (prefers-color-scheme:dark){:root{
   --bg:#11161c; --surface:#1a2129; --fg:#e6ebf0; --muted:#97a3b0; --line:#2b3540;
   --accent:#6aa9d6; --accent-soft:#1d2d3b; --danger:#e07a6f; --ok:#6dbb94;
-  --com:#6aa9d6; --pro:#e0a25a; --acq:#b79be0; --amm:#6dbb94; --ser:#e88aa3; --per:#5cc4d6; color-scheme:dark}}
+  --com:#6aa9d6; --pro:#e0a25a; --acq:#b79be0; --amm:#6dbb94; --ser:#e88aa3; --per:#5cc4d6; --sic:#f08a4b; color-scheme:dark}}
 *{box-sizing:border-box}
 html,body{margin:0}
 body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.5}

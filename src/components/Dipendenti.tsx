@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
-type Dati = { nome?: string; cc?: string; mansione?: string; contratto?: string; liv?: string; ral?: number | null; assunzione?: string; scadenza?: string; nascita?: string; cf?: string; email?: string; telefono?: string; pid?: string; note?: string };
+type Dati = { nome?: string; cc?: string; mansione?: string; contratto?: string; liv?: string; ral?: number | null; assunzione?: string; scadenza?: string; nascita?: string; luogo?: string; sesso?: string; cf?: string; email?: string; telefono?: string; pid?: string; note?: string };
 type Dip = { id: string; dati: Dati; attivo: boolean };
 type Persona = { id: string; name: string };
 type Pers = { n?: string; cc?: string; liv?: string; ral?: number; att?: number; pid?: string };
@@ -92,9 +92,9 @@ export default function Dipendenti({ modifica }: { modifica: boolean }) {
   }
 
   function csv() {
-    const H = ["Nome e cognome", "Reparto / centro di costo", "Mansione", "Contratto", "Livello", "RAL", "Assunzione", "Fine rapporto", "Data di nascita", "Codice fiscale", "E-mail", "Telefono", "Persona nel Piano", "In forza", "Note"];
+    const H = ["Nome e cognome", "Reparto / centro di costo", "Mansione", "Contratto", "Livello", "RAL", "Assunzione", "Fine rapporto", "Data di nascita", "Luogo di nascita", "Sesso", "Codice fiscale", "E-mail", "Telefono", "Persona nel Piano", "In forza", "Note"];
     const c = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const L = vis.map((x) => { const d = x.dati; return [d.nome, d.cc, d.mansione, d.contratto, d.liv, d.ral != null ? String(d.ral).replace(".", ",") : "", fd(d.assunzione), fd(d.scadenza), fd(d.nascita), d.cf, d.email, d.telefono, nomePiano(d.pid), inForzaD(x) ? "sì" : "no", d.note].map(c).join(";"); });
+    const L = vis.map((x) => { const d = x.dati; return [d.nome, d.cc, d.mansione, d.contratto, d.liv, d.ral != null ? String(d.ral).replace(".", ",") : "", fd(d.assunzione), fd(d.scadenza), fd(d.nascita), d.luogo, d.sesso, d.cf, d.email, d.telefono, nomePiano(d.pid), inForzaD(x) ? "sì" : "no", d.note].map(c).join(";"); });
     const url = URL.createObjectURL(new Blob(["﻿" + [H.map(c).join(";"), ...L].join("\r\n")], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a"); a.href = url; a.download = `Anagrafica_dipendenti_${new Date().toLocaleDateString("sv-SE")}.csv`; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 3000);
@@ -136,6 +136,10 @@ export default function Dipendenti({ modifica }: { modifica: boolean }) {
             {campo("assunzione", "Data di assunzione", "date")}
             {campo("scadenza", "Fine rapporto (ultimo giorno)", "date")}
             {campo("nascita", "Data di nascita", "date")}
+            {campo("luogo", "Luogo di nascita")}
+            <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13 }}>Sesso
+              <select value={ed.dati.sesso || ""} disabled={!modifica} onChange={(e) => set("sesso", e.target.value)}><option value="">—</option><option value="M">M</option><option value="F">F</option></select>
+            </label>
             {campo("cf", "Codice fiscale")}
             {campo("email", "E-mail", "email")}
             {campo("telefono", "Telefono")}
