@@ -6,9 +6,10 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 type Dip = { id: string; nome: string; mansione: string | null; reparto: string | null; contratto: string | null; attivo: boolean; assunzione: string | null; fine: string | null; finecontr?: string | null };
 type Persona = { rischio?: string; gen?: string; dpi?: string; addestr?: string; preass?: string; period?: string; ultvis?: string; scadvis?: string; note?: string };
 type Corso = { dip: string; tipo: string; data?: string; scadenza?: string; ore?: string; note?: string; chiuso?: boolean };
-type Azienda = { nome: string; mesi?: number; ultimo?: string; prossima?: string; note?: string; incaricato?: string; procedura?: string };
+type Azienda = { nome: string; mesi?: number; ultimo?: string; prossima?: string; note?: string; incaricato?: string; procedura?: string; controlli?: string[] };
+type Voce = { voce: string; ok: boolean; nota?: string };
 type Foto = { path: string; nome?: string };
-type Verifica = { az: string; data: string; chi?: string; esito?: string; note?: string; firma?: string; foto?: Foto[] };
+type Verifica = { az: string; data: string; chi?: string; esito?: string; note?: string; firma?: string; foto?: Foto[]; controlli?: Voce[] };
 type Sanitari = { idoneo?: string; prescr?: string };
 type Incarico = { ruolo: string; dip?: string; esterno?: string; dal?: string; note?: string };
 type Infortunio = { data?: string; dip?: string; nome?: string; luogo?: string; desc?: string; prog1?: string; prog2?: string; giorni?: number };
@@ -397,13 +398,14 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
                 <label style={lab}>Incaricato della verifica<select value={edA.dati.incaricato || ""} disabled={!modifica} onChange={(e) => setEdA({ ...edA, dati: { ...edA.dati, incaricato: e.target.value || undefined } })}><option value="">— da nominare —</option>{dip.filter((d) => inForza(d) || d.id === edA.dati.incaricato).map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}</select></label>
                 <label style={lab}>Note (riferimenti, chi chiamare)<input style={inp} value={edA.dati.note || ""} disabled={!modifica} onChange={(e) => setEdA({ ...edA, dati: { ...edA.dati, note: e.target.value } })} /></label>
               </div>
+              <label style={lab}>Controlli da fare a ogni verifica (uno per riga: compariranno come lista da spuntare)<textarea rows={4} style={inp} value={(edA.dati.controlli || []).join("\n")} disabled={!modifica} onChange={(e) => setEdA({ ...edA, dati: { ...edA.dati, controlli: e.target.value.split("\n").map((x) => x.replace(/^\s+/, "")).filter((x, i, a) => x || i < a.length - 1) } })} /></label>
               <label style={lab}>Procedura (cosa controllare, dove si trova il manuale)<textarea rows={4} style={inp} value={edA.dati.procedura || ""} disabled={!modifica} onChange={(e) => setEdA({ ...edA, dati: { ...edA.dati, procedura: e.target.value } })} /></label>
               {edA.id && (
                 <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10 }}>
                   <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
                     <b>Registro delle verifiche</b>
                     <span className="row" style={{ gap: 6 }}>
-                      {!edV && <button className="btn" onClick={() => { setEdV({ az: edA.id, data: oggi(), chi: edA.dati.incaricato, esito: "Conforme" }); setFirmato(false); setFotoNuove([]); }}>Registra verifica</button>}
+                      {!edV && <button className="btn" onClick={() => { setEdV({ az: edA.id, data: oggi(), chi: edA.dati.incaricato, esito: "Conforme", ...(edA.dati.controlli?.filter(Boolean).length ? { controlli: edA.dati.controlli.filter(Boolean).map((voce) => ({ voce, ok: false })) } : {}) }); setFirmato(false); setFotoNuove([]); }}>Registra verifica</button>}
                     </span>
                   </div>
                   {edV && (
@@ -413,6 +415,23 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
                         <label style={lab}>Chi ha verificato<select value={edV.chi || ""} onChange={(e) => setEdV({ ...edV, chi: e.target.value })}><option value="">—</option>{dip.filter(inForza).map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}</select></label>
                         <label style={lab}>Esito<select value={edV.esito || ""} onChange={(e) => setEdV({ ...edV, esito: e.target.value })}><option>Conforme</option><option>Non conforme</option></select></label>
                       </div>
+                      {edV.controlli && (
+                        <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 8 }}>
+                          <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
+                            <b style={{ fontSize: 13 }}>Controlli ({edV.controlli.filter((c) => c.ok).length} di {edV.controlli.length} OK)</b>
+                            <button className="btn link" type="button" onClick={() => setEdV({ ...edV, controlli: edV.controlli!.map((c) => ({ ...c, ok: true })), esito: "Conforme" })}>Tutto OK</button>
+                          </div>
+                          {edV.controlli.map((c, i) => {
+                            const set = (n: Partial<Voce>) => { const l = edV.controlli!.map((x, j) => (j === i ? { ...x, ...n } : x)); setEdV({ ...edV, controlli: l, esito: l.every((x) => x.ok) ? "Conforme" : "Non conforme" }); };
+                            return (
+                              <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 0", borderTop: i ? "1px solid var(--line)" : undefined, flexWrap: "wrap" }}>
+                                <label className="ck" style={{ flex: "1 1 260px" }}><input type="checkbox" checked={c.ok} onChange={(e) => set({ ok: e.target.checked })} /> {c.voce}</label>
+                                {!c.ok && <input style={{ ...inp, flex: "1 1 200px", padding: "4px 8px" }} placeholder="cosa manca / da sostituire" value={c.nota || ""} onChange={(e) => set({ nota: e.target.value })} />}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                       <label style={lab}>Note<textarea rows={2} style={inp} value={edV.note || ""} onChange={(e) => setEdV({ ...edV, note: e.target.value })} /></label>
                       <label style={lab}>Foto (facoltative: dispositivo, bicchierino, modulo compilato…)
                         <input type="file" accept="image/*" multiple capture="environment" onChange={(e) => setFotoNuove([...fotoNuove, ...Array.from(e.target.files || [])])} />
@@ -434,7 +453,7 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
                       {ver.filter((v) => v.dati.az === edA.id).map((v) => (
                         <tr key={v.id}>
                           <td>{fd(v.dati.data)}</td><td>{byId[v.dati.chi || ""]?.nome}</td>
-                          <td style={{ color: v.dati.esito === "Non conforme" ? "var(--danger)" : undefined }}>{v.dati.esito}</td><td>{v.dati.note}</td>
+                          <td style={{ color: v.dati.esito === "Non conforme" ? "var(--danger)" : undefined }}>{v.dati.esito}</td><td>{v.dati.controlli && <small style={{ color: "inherit" }} title={v.dati.controlli.filter((c) => !c.ok).map((c) => c.voce + (c.nota ? ": " + c.nota : "")).join("\n")}>{v.dati.controlli.filter((c) => c.ok).length}/{v.dati.controlli.length} controlli OK{v.dati.controlli.some((c) => !c.ok) ? " · da sistemare: " + v.dati.controlli.filter((c) => !c.ok).map((c) => c.voce + (c.nota ? " (" + c.nota + ")" : "")).join("; ") : ""}</small>}{v.dati.note}</td>
                           <td>{v.dati.firma && url[v.dati.firma] ? <img src={url[v.dati.firma]} alt="firma" style={{ height: 34, background: "#fff", borderRadius: 4 }} /> : v.dati.firma ? "…" : ""}</td>
                           <td>{(v.dati.foto || []).map((f, i) => url[f.path] ? <a key={i} href={url[f.path]} target="_blank" rel="noreferrer"><img src={url[f.path]} alt={f.nome || "foto"} style={{ height: 34, width: 34, objectFit: "cover", borderRadius: 4, marginRight: 4 }} /></a> : null)}</td>
                         </tr>
