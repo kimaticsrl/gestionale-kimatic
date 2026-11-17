@@ -2,12 +2,21 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { supabaseServer } from "@/lib/supabase/server";
-import { soloAdmin, type Livello } from "@/lib/dati";
+import { soloAdmin, utenteCorrente, type Livello } from "@/lib/dati";
 
 export async function esci() {
   const supabase = await supabaseServer();
   await supabase.auth.signOut();
   redirect("/login");
+}
+
+// «Vedi come»: l'amministratore usa il gestionale con i soli permessi di un ruolo (null = torna amministratore)
+export async function simula(ruolo: string | null) {
+  const { supabase, profilo } = await utenteCorrente();
+  if (!profilo?.is_admin || !profilo.attivo) throw new Error("Solo per amministratori");
+  const { error } = await supabase.rpc("simula_ruolo", { p_ruolo: ruolo || null });
+  verifica(error);
+  revalidatePath("/", "layout");
 }
 
 function verifica(error: { message: string } | null) {

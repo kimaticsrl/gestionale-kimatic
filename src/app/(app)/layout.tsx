@@ -1,17 +1,20 @@
 import Nav from "@/components/Nav";
+import VediCome from "@/components/VediCome";
 import { utenteCorrente, diDirezione } from "@/lib/dati";
 import { esci } from "./azioni";
 
 export const dynamic = "force-dynamic";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const { supabase, user, profilo } = await utenteCorrente();
-  const [{ data: reparti }, { data: moduli }] = await Promise.all([
+  const { supabase, user, profilo, simulato } = await utenteCorrente();
+  const adminVero = !!profilo?.is_admin && !!profilo.attivo;
+  const [{ data: reparti }, { data: moduli }, { data: ruoli }] = await Promise.all([
     supabase.from("reparti").select("id,nome").order("ordine"),
     supabase.rpc("miei_moduli"),
+    adminVero ? supabase.from("ruoli").select("id,nome").order("ordine") : Promise.resolve({ data: [] }),
   ]);
   const mods = (moduli ?? []) as { reparto_id: string }[];
-  const admin = !!profilo?.is_admin && profilo.attivo;
+  const admin = adminVero && !simulato;
   const direzione = await diDirezione(supabase);
 
   const voci = [
@@ -37,6 +40,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
       <main>
+        {adminVero && <VediCome ruoli={(ruoli ?? []) as { id: string; nome: string }[]} attuale={simulato} />}
         {!profilo?.attivo
           ? <div className="empty">Il tuo accesso è disattivato. Rivolgiti a un amministratore.</div>
           : children}

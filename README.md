@@ -23,6 +23,13 @@ Chi ha più ruoli ottiene il livello più alto. Gli amministratori gestiscono tu
 Solo gli indirizzi invitati da un amministratore (pagina **Utenti**) possono registrarsi:
 la prima volta si entra da «Primo accesso» e si sceglie una password.
 
+### Vedi come (amministratori)
+
+In cima a ogni pagina gli amministratori scelgono un ruolo e usano il gestionale con i soli
+permessi di quel ruolo, anche nel database (migrazione 0043): menu, moduli, livelli e dati sono
+quelli che vede chi ha il ruolo. Le modifiche fatte in simulazione sono vere. «Torna amministratore»
+ripristina tutto. Con le regole «solo i propri» contano i record creati dall'amministratore.
+
 ## Prima installazione
 
 1. Supabase → SQL Editor: eseguire in ordine i file in `supabase/migrations/`.

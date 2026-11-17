@@ -88,3 +88,8 @@ select.lv-nessuno{color:var(--muted)}
   main{padding:20px 16px 40px}
 }
 @media (max-width:820px){.cli-grid{grid-template-columns:minmax(0,1fr)!important}}
+/* «Vedi come» (solo amministratori) */
+.vedi-come{display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:14px}
+.vedi-come label{display:flex;align-items:center;gap:8px;font-weight:600}
+.vedi-come .nota{color:var(--muted)}
+.vedi-come.attiva{border-color:#d97706;background:color-mix(in srgb,#f59e0b 14%,var(--surface));position:sticky;top:0;z-index:20}

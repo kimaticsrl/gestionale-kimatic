@@ -10,8 +10,13 @@ export async function utenteCorrente() {
   const supabase = await supabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
-  const { data: profilo } = await supabase.from("profili").select("*").eq("id", user.id).single<Profilo>();
-  return { supabase, user, profilo };
+  const [{ data: profilo }, { data: sim }] = await Promise.all([
+    supabase.from("profili").select("*").eq("id", user.id).single<Profilo>(),
+    supabase.rpc("ruolo_simulato"),
+  ]);
+  // «Vedi come»: ruolo che l'amministratore sta simulando (null = nessuno)
+  const simulato = profilo?.is_admin && typeof sim === "string" && sim ? sim : null;
+  return { supabase, user, profilo, simulato };
 }
 
 /** Ruolo Direzione (attivo): l'unico che vede e scarica il backup. */
@@ -28,6 +33,6 @@ export async function soloDirezione() {
 
 export async function soloAdmin() {
   const ctx = await utenteCorrente();
-  if (!ctx.profilo?.is_admin || !ctx.profilo.attivo) redirect("/");
+  if (!ctx.profilo?.is_admin || !ctx.profilo.attivo || ctx.simulato) redirect("/");
   return ctx;
 }
