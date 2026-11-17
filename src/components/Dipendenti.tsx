@@ -219,25 +219,29 @@ export default function Dipendenti({ modifica }: { modifica: boolean }) {
   );
 }
 
+const FASCE = ["fino a 29 anni", "30–39 anni", "40–49 anni", "50–59 anni", "60 anni e oltre"];
+// livelli dal più basso al più alto: apprendisti, poi i numeri (9Q dopo 9), quadri e dirigenti in fondo
+const ordLiv = (l: string) => { const u = l.toUpperCase().trim(); if (u.startsWith("APP")) return 0; const m = /^(\d+)(Q?)/.exec(u); if (m) return Number(m[1]) * 10 + (m[2] ? 5 : 0); return u === "Q" ? 900 : u === "D" ? 1000 : 950; };
 // Statistiche sui dipendenti in forza (soci titolari esclusi)
 function Statistiche({ dip, soci, coeff }: { dip: Dip[]; soci: number; coeff: number }) {
   const n = dip.length || 1;
   const ral = (l: Dip[]) => l.reduce((a, x) => a + (Number(x.dati.ral) || 0), 0);
-  const gruppi = (f: (x: Dip) => string) => {
+  const gruppi = (f: (x: Dip) => string, ordine?: (k: string) => number) => {
     const m: Record<string, Dip[]> = {};
     dip.forEach((x) => { const k = f(x) || "non indicato"; (m[k] ??= []).push(x); });
-    return Object.entries(m).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+    const nd = (k: string) => (k === "non indicato" ? 1 : 0);
+    return Object.entries(m).sort((a, b) => nd(a[0]) - nd(b[0]) || (ordine ? ordine(a[0]) - ordine(b[0]) : b[1].length - a[1].length) || a[0].localeCompare(b[0]));
   };
   const media = (v: (number | null)[]) => { const ok = v.filter((x): x is number => x != null); return ok.length ? ok.reduce((a, b) => a + b, 0) / ok.length : null; };
   const etaM = media(dip.map((x) => eta(x.dati.nascita))), anzM = media(dip.map((x) => anni(x.dati.assunzione)));
   const tot = ral(dip);
-  const tab = (titolo: string, f: (x: Dip) => string, costi = false) => (
+  const tab = (titolo: string, f: (x: Dip) => string, costi = false, ordine?: (k: string) => number) => (
     <div style={{ flex: "1 1 300px" }}>
       <h3 style={{ margin: "0 0 6px", fontSize: 14 }}>{titolo}</h3>
       <table>
         <thead><tr><th></th><th style={{ textAlign: "right" }}>Persone</th><th style={{ textAlign: "right" }}>%</th>{costi && <><th style={{ textAlign: "right" }}>RAL</th><th style={{ textAlign: "right" }}>Costo azienda</th><th style={{ textAlign: "right" }}>RAL media</th></>}</tr></thead>
         <tbody>
-          {gruppi(f).map(([k, l]) => (
+          {gruppi(f, ordine).map(([k, l]) => (
             <tr key={k}><td>{k}</td><td style={{ textAlign: "right" }}>{l.length}</td><td style={{ textAlign: "right" }}>{Math.round((l.length / n) * 100)}%</td>
               {costi && <><td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{eur(ral(l))}</td><td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{eur(ral(l) * coeff)}</td><td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{eur(ral(l) / l.length)}</td></>}
             </tr>
@@ -263,8 +267,8 @@ function Statistiche({ dip, soci, coeff }: { dip: Dip[]; soci: number; coeff: nu
         {tab("Per inquadramento", (x) => x.dati.inq || "", true)}
         {tab("Per contratto", (x) => x.dati.contratto || "")}
         {tab("Per sesso", sesso)}
-        {tab("Per età", fascia)}
-        {tab("Per livello", (x) => (x.dati.liv ? "Livello " + x.dati.liv : ""), true)}
+        {tab("Per età", fascia, false, (k) => FASCE.indexOf(k))}
+        {tab("Per livello", (x) => (x.dati.liv ? "Livello " + x.dati.liv : ""), true, (k) => ordLiv(k.replace("Livello ", "")))}
       </div>
       <p className="tag" style={{ marginBottom: 0 }}>Solo dipendenti in forza{soci ? `; esclusi i ${soci} soci titolari` : ""}. Il costo azienda è la RAL moltiplicata per il coefficiente del Controllo di gestione ({String(coeff).replace(".", ",")}): è una stima, non comprende straordinari, trasferte e premi.</p>
     </div>
