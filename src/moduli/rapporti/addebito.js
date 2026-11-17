@@ -18,8 +18,8 @@ export const MEZZI = [
   { targa: 'HD922TR', nome: 'IVECO DAILY', tipo: 'furgone' },
   { targa: 'GD852NM', nome: 'Volvo', tipo: 'auto' },
   { targa: 'GG928ZD', nome: 'Jumper', tipo: 'furgone' },
-  { targa: 'GX806HS', nome: 'SKODA (Andrea)', tipo: 'auto' },
-  { targa: 'GS435RD', nome: 'CUPRA (Giulio)', tipo: 'auto' },
+  { targa: 'GX806HS', nome: 'SKODA Andrea', tipo: 'auto' },
+  { targa: 'GS435RD', nome: 'CUPRA Giulio', tipo: 'auto' },
 ];
 // Mezzo del rapporto: scelto nell'addebito (o.mezzo) oppure dal tecnico nel rapporto (r.mezzo); 'altro' = testo libero
 export function mezzoDi(r, o) {
@@ -27,7 +27,7 @@ export function mezzoDi(r, o) {
   if (!t) return null;
   if (t === 'altro') { const x = ((o && o.mezzo === 'altro' ? o.mezzoAltro : r.mezzoAltro) || '').trim(); return { targa: '', nome: x || 'Altro mezzo', tipo: '', testo: x || 'Altro mezzo' }; }
   const m = MEZZI.find((x) => x.targa === t);
-  return m ? { ...m, testo: m.nome + ' · ' + m.targa } : { targa: t, nome: t, tipo: '', testo: t };
+  return m ? { ...m, testo: m.nome + ', targa ' + m.targa } : { targa: t, nome: t, tipo: '', testo: t };
 }
 
 export const LISTINO_BASE = { ore: 65, oreExtra: 75, viaggio: 35, viaggioOltre: 40, kmAuto: 0.7, kmFurgone: 0.8, pasto: 25, remoto: 55, officina: 55 };
@@ -75,7 +75,7 @@ export function calcola(r, L, o) {
     ['Ore extra, sabato, domenica e festivi', h(B.ext), 'h', L.oreExtra],
     ['Ore di viaggio (fino a 8 ore/giorno)', h(B.vIn), 'h', L.viaggio],
     ['Ore di viaggio (oltre 8 ore/giorno)', h(B.vOl), 'h', L.viaggioOltre],
-    [(furgone ? 'Rimborso km furgone' : 'Rimborso km auto') + (mz ? ' – ' + mz.testo : ''), o.km === false ? 0 : B.km, 'km', furgone ? L.kmFurgone : L.kmAuto],
+    [(furgone ? 'Rimborso km furgone' : 'Rimborso km auto') + (mz ? ' (' + mz.testo + ')' : ''), o.km === false ? 0 : B.km, 'km', furgone ? L.kmFurgone : L.kmAuto],
     ['Indennità pasti (giorni × tecnici)', o.pasti === false ? 0 : B.pasti, 'n.', L.pasto],
     ...(conExtra ? [['Ore di assistenza da remoto', +o.oreRemote || 0, 'h', L.remoto], ['Ore di premontaggio/lavoro in Kimatic', +o.oreOfficina || 0, 'h', L.officina]] : []),
   ].map(([voce, qta, um, prezzo]) => ({ voce, qta, um, prezzo: +prezzo || 0, importo: eur(qta * (+prezzo || 0)) })).filter((x) => x.qta);
@@ -132,7 +132,7 @@ export function pdfAddebiti(jsPDF, r, A, info) {
   [['Cliente', r.cli && r.cli.nome], ['P.IVA / VAT', info.piva], ['Indirizzo', r.cli && r.cli.indirizzo], ['Listino', info.listino],
     ['Intervento', r.tipo === 'inst' ? 'Installazione' : 'Manutenzione'], ['Periodo', periodo],
     ['Macchina', [r.macDesc, r.matr && 'matr. ' + r.matr].filter(Boolean).join(' – ')], ['Tecnici', r.tecnici],
-    ['Mezzo', A.mezzo ? A.mezzo + (A.furgone ? ' (furgone)' : ' (auto)') : '']]
+    ['Mezzo', A.mezzo ? (A.furgone ? 'Furgone' : 'Auto') + ' (' + A.mezzo + ')' : '']]
     .forEach(([k, v], i) => { const x = i % 2 ? L + W / 2 : L, yy = y + Math.floor(i / 2) * 6; t(k, x, yy, { sz: 7.5, c: '#666666' }); t(taglia(v || '–', W / 2 - 26, 9), x + 22, yy, { sz: 9 }); });
   y += 33;
 
