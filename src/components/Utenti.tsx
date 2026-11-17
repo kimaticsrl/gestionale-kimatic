@@ -2,7 +2,7 @@
 import { useTransition, useState } from "react";
 import { impostaProfilo, impostaRuolo } from "@/app/(app)/azioni";
 
-type P = { id: string; email: string; nome: string; is_admin: boolean; attivo: boolean; ruoli: string[] };
+type P = { id: string; email: string; nome: string; is_admin: boolean; attivo: boolean; ruoli: string[]; cessato: string | null };
 
 export default function Utenti({ persone, ruoli, io }: { persone: P[]; ruoli: { id: string; nome: string }[]; io: string }) {
   const [pending, start] = useTransition();
@@ -15,14 +15,14 @@ export default function Utenti({ persone, ruoli, io }: { persone: P[]; ruoli: { 
   return (
     <div className="box" style={{ opacity: pending ? 0.7 : 1 }}>
       <h2>Persone con accesso</h2>
-      <p className="tag">Spunta i ruoli di ogni persona: le modifiche si salvano subito.</p>
+      <p className="tag">Spunta i ruoli di ogni persona: le modifiche si salvano subito. Chi nell&apos;Anagrafica dipendenti ha il contratto cessato viene disattivato da solo dal giorno dopo la cessazione.</p>
       {errore && <div className="msg err" role="alert">{errore}</div>}
       <div className="mx">
         <table style={{ minWidth: 760 }}>
           <thead><tr><th>Persona</th><th>Ruoli</th><th>Amministratore</th><th>Accesso</th></tr></thead>
           <tbody>
             {persone.map((p) => (
-              <tr key={p.id} style={{ opacity: p.attivo ? 1 : 0.55 }}>
+              <tr key={p.id} style={{ opacity: p.attivo && !p.cessato ? 1 : 0.55 }}>
                 <td><b>{p.nome || p.email}</b><small>{p.email}</small></td>
                 <td>
                   {ruoli.map((r) => (
@@ -38,6 +38,7 @@ export default function Utenti({ persone, ruoli, io }: { persone: P[]; ruoli: { 
                     onChange={(e) => esegui(() => impostaProfilo(p.id, "is_admin", e.target.checked))} />
                 </td>
                 <td>
+                  {p.cessato && <small style={{ display: "block", marginBottom: 4 }}>Disattivato in automatico dal {p.cessato.split("-").reverse().join("/")} (cessato in anagrafica)</small>}
                   {p.id === io ? <small>Sei tu</small> : (
                     <button type="button" className={`btn ${p.attivo ? "danger" : "sec"}`}
                       onClick={() => esegui(() => impostaProfilo(p.id, "attivo", !p.attivo))}>

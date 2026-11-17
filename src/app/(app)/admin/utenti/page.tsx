@@ -4,15 +4,18 @@ import { annullaInvito, invita } from "../../azioni";
 
 export default async function PaginaUtenti() {
   const { supabase, user } = await soloAdmin();
-  const [{ data: ruoli }, { data: profili }, { data: assegnati }, { data: inviti }] = await Promise.all([
+  const [{ data: ruoli }, { data: profili }, { data: assegnati }, { data: inviti }, { data: cessati }] = await Promise.all([
     supabase.from("ruoli").select("id,nome").order("ordine"),
     supabase.from("profili").select("id,email,nome,is_admin,attivo").order("nome"),
     supabase.from("profilo_ruoli").select("profilo_id,ruolo_id"),
     supabase.from("inviti").select("email,nome,ruoli,is_admin,creato_il").order("creato_il", { ascending: false }),
+    supabase.rpc("utenti_cessati"),
   ]);
+  const cessatoDal = Object.fromEntries(((cessati ?? []) as { profilo_id: string; dal: string }[]).map((c) => [c.profilo_id, c.dal]));
   const nomeRuolo = Object.fromEntries((ruoli ?? []).map((r) => [r.id, r.nome]));
   const persone = (profili ?? []).map((p) => ({
     ...p, ruoli: (assegnati ?? []).filter((a) => a.profilo_id === p.id).map((a) => a.ruolo_id),
+    cessato: (cessatoDal[p.id] as string | undefined) ?? null,
   }));
 
   return (

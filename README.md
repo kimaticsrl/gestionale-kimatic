@@ -30,6 +30,25 @@ permessi di quel ruolo, anche nel database (migrazione 0043): menu, moduli, live
 quelli che vede chi ha il ruolo. Le modifiche fatte in simulazione sono vere. «Torna amministratore»
 ripristina tutto. Con le regole «solo i propri» contano i record creati dall'amministratore.
 
+### Password dimenticata
+
+Dalla pagina di accesso «Password dimenticata?» manda una mail con il link a `/reimposta`,
+dove si sceglie la nuova password (da collegati la stessa pagina serve per cambiarla).
+Le mail le spedisce Supabase con la Gmail del gestionale (Authentication → SMTP).
+
+### Utenti cessati
+
+Dal giorno dopo la cessazione nell'Anagrafica dipendenti (o se il dipendente è segnato non attivo)
+l'utente con lo stesso nome e cognome è disattivato da solo (migrazione 0044).
+
+## Notifiche
+
+Il database mette in coda le mail (tabella `notifiche`, migrazione 0045): non conformità inserita o
+chiusa, rapporto d'intervento firmato, riepilogo mattutino delle scadenze della Sicurezza. Chi le
+riceve si sceglie nella pagina **Notifiche** (amministratori). Le spedisce `/api/notifiche` con la
+Gmail del gestionale: subito dopo l'evento e ogni mattina (Vercel Cron, `vercel.json`).
+Variabili su Vercel: `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `SUPABASE_SECRET_KEY`, `CRON_SECRET`.
+
 ## Prima installazione
 
 1. Supabase → SQL Editor: eseguire in ordine i file in `supabase/migrations/`.

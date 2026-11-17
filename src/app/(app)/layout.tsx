@@ -22,7 +22,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ...(reparti ?? [])
       .filter((r) => mods.some((m) => m.reparto_id === r.id))
       .map((r) => ({ href: `/reparto/${r.id}`, label: r.nome, colore: `var(--${r.id})`, n: mods.filter((m) => m.reparto_id === r.id).length })),
-    ...(admin ? ["sep" as const, { href: "/admin/utenti", label: "Utenti" }, { href: "/admin/permessi", label: "Permessi" }, { href: "/admin/registro", label: "Registro modifiche" }, { href: "/admin/loghi", label: "Loghi" }] : []),
+    ...(admin ? ["sep" as const, { href: "/admin/utenti", label: "Utenti" }, { href: "/admin/permessi", label: "Permessi" }, { href: "/admin/registro", label: "Registro modifiche" }, { href: "/admin/loghi", label: "Loghi" }, { href: "/admin/notifiche", label: "Notifiche" }] : []),
     ...(direzione ? [...(admin ? [] : ["sep" as const]), { href: "/admin/backup", label: "Backup" }] : []),
   ];
 
@@ -36,6 +36,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <Nav voci={voci} />
         <div className="me">
           <span><b>{profilo?.nome || user.email}</b>{admin ? " · amministratore" : ""}</span>
+          <a className="btn link" href="/reimposta">Cambia password</a>
           <form action={esci}><button className="btn link" type="submit">Esci</button></form>
         </div>
       </aside>

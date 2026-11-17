@@ -10,10 +10,13 @@ export async function utenteCorrente() {
   const supabase = await supabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
-  const [{ data: profilo }, { data: sim }] = await Promise.all([
+  const [{ data: prof }, { data: sim }, { data: attivo }] = await Promise.all([
     supabase.from("profili").select("*").eq("id", user.id).single<Profilo>(),
     supabase.rpc("ruolo_simulato"),
+    supabase.rpc("utente_attivo"),
   ]);
+  // attivo: disattivato dalla pagina Utenti o cessato nell'Anagrafica dipendenti
+  const profilo = prof ? { ...prof, attivo: prof.attivo && attivo !== false } : prof;
   // «Vedi come»: ruolo che l'amministratore sta simulando (null = nessuno)
   const simulato = profilo?.is_admin && typeof sim === "string" && sim ? sim : null;
   return { supabase, user, profilo, simulato };

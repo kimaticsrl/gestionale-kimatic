@@ -70,3 +70,30 @@ export async function annullaInvito(email: string) {
   verifica(error);
   revalidatePath("/admin/utenti");
 }
+
+// ---------- Notifiche (pagina «Notifiche», solo amministratori) ----------
+export async function salvaRegolaNotifica(evento: string, campi: { attivo?: boolean; ruoli?: string[]; persone?: string[]; email_extra?: string[]; anticipi?: number[] }): Promise<string | null> {
+  const { supabase } = await soloAdmin();
+  const { error } = await supabase.from("notifiche_regole").update(campi).eq("evento", evento);
+  if (error) return "Non salvato: " + error.message;
+  revalidatePath("/admin/notifiche");
+  return null;
+}
+
+export async function provaNotifiche(): Promise<string | null> {
+  const { supabase } = await soloAdmin();
+  const { error } = await supabase.rpc("notifica_prova");
+  if (error) return "Prova non riuscita: " + error.message;
+  return spedisciOra(false);
+}
+
+export async function spedisciOra(scadenze = true): Promise<string | null> {
+  await soloAdmin();
+  const { spedisci } = await import("@/lib/notifiche");
+  try {
+    const r = await spedisci({ scadenze });
+    if (r.manca.length) return "Notifica in coda, ma le mail non partono: su Vercel mancano " + r.manca.join(", ") + ".";
+    if (r.errori) return `Spedite ${r.inviate}, non spedite ${r.errori}: guarda «Ultime notifiche» per il motivo.`;
+    return null;
+  } catch (e) { return e instanceof Error ? e.message : "Errore nella spedizione"; }
+}

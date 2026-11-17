@@ -339,6 +339,7 @@ async function doSign(b){
   DIRTY=true;await flush();
   if(DIRTY){b.disabled=false;toast('Firma non salvata: controlla la connessione e riprova');return}
   S.rapporti[CUR.id]=JSON.parse(JSON.stringify(CUR));INTEG[CUR.id]=true;UI.sign=false;togliBozzaFirme();render();scrollTo(0,0);toast('Rapporto firmato');
+  fetch('/api/notifiche',{method:'POST'}).catch(()=>{}); // notifica «rapporto firmato»
 }
 
 /* ---------- PDF ---------- */

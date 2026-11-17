@@ -182,6 +182,7 @@ export default function NonConformita({ me, nome, gestisce, modifica }: Props) {
     if (stato !== "chiusa") { delete g.chiusa_il; delete g.chiusa_da; }
     const { error } = await sb.from("nc").update({ stato, dati: { ...x.dati, gestione: g } }).eq("id", x.id);
     setMsg(error ? "Stato non cambiato: " + error.message : `${x.numero}: stato cambiato in «${nomeStato(stato)}».`);
+    if (!error && stato === "chiusa") fetch("/api/notifiche", { method: "POST" }).catch(() => {});
     if (!error) await carica();
   }
   async function salva(chiudi = false) {
@@ -212,6 +213,7 @@ export default function NonConformita({ me, nome, gestisce, modifica }: Props) {
       return;
     }
     const salvata = r.data as NC;
+    if (!ed.id || stato === "chiusa") fetch("/api/notifiche", { method: "POST" }).catch(() => {}); // notifiche in coda
     setMsg(`Non conformità ${salvata.numero} salvata.`);
     await carica();
     if (chiudi) setEd(null); else setEd(JSON.parse(JSON.stringify(salvata)));

@@ -14,7 +14,8 @@ function traduci(msg: string) {
 
 export default function Login() {
   const router = useRouter();
-  const [modo, setModo] = useState<"accedi" | "primo">("accedi");
+  const [modo, setModo] = useState<"accedi" | "primo" | "recupero">("accedi");
+  const [ok, setOk] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errore, setErrore] = useState("");
@@ -22,7 +23,16 @@ export default function Login() {
 
   async function invia(e: React.FormEvent) {
     e.preventDefault();
-    setErrore("");
+    setErrore(""); setOk("");
+    if (modo === "recupero") {
+      setAttesa(true);
+      const { error } = await supabaseBrowser().auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: location.origin + "/reimposta" });
+      setAttesa(false);
+      if (error && /rate limit|too many/i.test(error.message)) { setErrore("Troppe richieste: riprova tra qualche minuto."); return; }
+      // stessa risposta che l'indirizzo esista o no
+      setOk("Se l'indirizzo ha un accesso al gestionale, tra poco riceverai una mail con il link per scegliere una nuova password. Controlla anche lo spam.");
+      return;
+    }
     if (modo === "primo" && password.length < 8) { setErrore("La password deve avere almeno 8 caratteri."); return; }
     setAttesa(true);
     const supabase = supabaseBrowser();
@@ -52,11 +62,16 @@ export default function Login() {
         <label>Email aziendale
           <input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </label>
-        <label>{modo === "primo" ? "Scegli una password (almeno 8 caratteri)" : "Password"}
-          <input type="password" required autoComplete={modo === "primo" ? "new-password" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} />
-        </label>
+        {modo === "recupero"
+          ? <p className="sub" style={{ margin: 0, fontSize: 13.5 }}>Scrivi l&apos;email con cui accedi: ti mandiamo un link per scegliere una nuova password.</p>
+          : <label>{modo === "primo" ? "Scegli una password (almeno 8 caratteri)" : "Password"}
+              <input type="password" required autoComplete={modo === "primo" ? "new-password" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} />
+            </label>}
         {errore && <div className="msg err" role="alert">{errore}</div>}
-        <button className="btn" disabled={attesa} type="submit">{attesa ? "Attendi…" : modo === "accedi" ? "Accedi" : "Crea il mio accesso"}</button>
+        {ok && <div className="msg ok" role="status">{ok}</div>}
+        <button className="btn" disabled={attesa} type="submit">{attesa ? "Attendi…" : modo === "accedi" ? "Accedi" : modo === "primo" ? "Crea il mio accesso" : "Invia il link"}</button>
+        {modo === "accedi" && <button type="button" className="btn link" onClick={() => { setModo("recupero"); setErrore(""); setOk(""); }}>Password dimenticata?</button>}
+        {modo === "recupero" && <button type="button" className="btn link" onClick={() => { setModo("accedi"); setErrore(""); setOk(""); }}>← Torna all&apos;accesso</button>}
       </form>
     </div>
   );
