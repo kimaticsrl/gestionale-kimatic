@@ -41,7 +41,7 @@ export default function Login() {
     <div className="login">
       <form className="box" onSubmit={invia}>
         <div className="brand">
-          <span className="logo"><img src="/logo-kimatic.png" alt="Kimatic" width={356} height={252} /></span>
+          <span className="logo"><img src="/logo/kimatic" alt="Kimatic" width={356} height={252} /></span>
           <span className="tag">Gestionale aziendale</span>
         </div>
         <div className="tabs" role="group" aria-label="Tipo di accesso">

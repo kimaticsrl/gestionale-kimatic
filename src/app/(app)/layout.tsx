@@ -19,7 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ...(reparti ?? [])
       .filter((r) => mods.some((m) => m.reparto_id === r.id))
       .map((r) => ({ href: `/reparto/${r.id}`, label: r.nome, colore: `var(--${r.id})`, n: mods.filter((m) => m.reparto_id === r.id).length })),
-    ...(admin ? ["sep" as const, { href: "/admin/utenti", label: "Utenti" }, { href: "/admin/permessi", label: "Permessi" }, { href: "/admin/registro", label: "Registro modifiche" }] : []),
+    ...(admin ? ["sep" as const, { href: "/admin/utenti", label: "Utenti" }, { href: "/admin/permessi", label: "Permessi" }, { href: "/admin/registro", label: "Registro modifiche" }, { href: "/admin/loghi", label: "Loghi" }] : []),
     ...(direzione ? [...(admin ? [] : ["sep" as const]), { href: "/admin/backup", label: "Backup" }] : []),
   ];
 
@@ -27,7 +27,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="shell">
       <aside>
         <div className="brand">
-          <span className="logo"><img src="/logo-kimatic.png" alt="Kimatic" width={356} height={252} /></span>
+          <span className="logo"><img src="/logo/kimatic" alt="Kimatic" width={356} height={252} /></span>
           <span className="tag">Gestionale aziendale</span>
         </div>
         <Nav voci={voci} />

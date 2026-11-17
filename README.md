@@ -51,3 +51,7 @@ node scripts/test-rapporti.mjs                                   # prova le rego
 | Piano di rientro fornitori | `/moduli/rientro-fornitori` | Riquadro (`/pagine/rientro-fornitori/index.html`); fornitori e impostazioni nella tabella `rf_docs`. Stesso passaggio dei dati con Backup → Ripristina backup. |
 | Tesserino trasferta | `/moduli/tesserino-trasferta` | Riquadro; i dipendenti in forza arrivano dall'Anagrafica dipendenti tramite la funzione `tesserino_dipendenti()` (solo i dati da stampare, niente RAL o contatti). La foto di ognuno sta nella tabella `tesserini` (id = id del dipendente) e si carica anche dalla scheda del dipendente in Anagrafica. Lo usano Operativi e Tecnici service (Modifica). |
 | Organigramma della sicurezza | `/moduli/organigramma-sicurezza` | Costruito dai dati (funzione `organigramma_dati()`): figure dagli incarichi di Sicurezza e formazione, lavoratori in forza dall'Anagrafica dipendenti. Il reparto nell'organigramma sta in `sic_docs` (coll `org`) e lo cambia chi Gestisce («Cambia reparti»); senza, vale il centro di costo. PDF scaricabile (jsPDF). |
+
+## Loghi
+
+I loghi Kimatic e BMTEK si servono da `/logo/kimatic` e `/logo/bmtek` (route pubblica): se un amministratore ne ha caricato uno dalla pagina **Loghi** (tabella `loghi`, migrazione 0040) si usa quello, altrimenti l'originale in `public/`. I loghi dentro i modelli Word (Offerte BMTEK, Lettere d'impegno) restano quelli dei modelli.

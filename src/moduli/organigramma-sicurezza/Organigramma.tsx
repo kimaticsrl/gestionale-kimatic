@@ -69,7 +69,7 @@ export default function Organigramma({ gestisce }: { gestisce: boolean }) {
   async function scaricaPdf() {
     setPdfInCorso(true);
     try {
-      const [{ jsPDF }, logo] = await Promise.all([import("jspdf"), fetch("/logo-kimatic.png").then((r) => r.blob()).then((b) => new Promise<string>((ok) => { const f = new FileReader(); f.onload = () => ok(String(f.result)); f.readAsDataURL(b); })).catch(() => undefined)]);
+      const [{ jsPDF }, logo] = await Promise.all([import("jspdf"), fetch("/logo/kimatic").then((r) => r.blob()).then((b) => new Promise<string>((ok) => { const f = new FileReader(); f.onload = () => ok(String(f.result)); f.readAsDataURL(b); })).catch(() => undefined)]);
       const doc = pdfOrganigramma(jsPDF, livelli, gruppi.map((g) => (g.reparto === DA_ASSEGNARE ? { ...g, reparto: "Altri lavoratori" } : g)), oggi(), logo);
       doc.save(`Organigramma sicurezza Kimatic ${new Date().toLocaleDateString("sv-SE")}.pdf`);
     } catch (e) { setMsg({ t: "PDF non riuscito: " + (e as Error).message, err: true }); }

@@ -157,7 +157,7 @@ export default function Sicurezza({ modifica, gestisce = false }: { modifica: bo
     try {
       const comeUrl = (b: Blob) => new Promise<string>((ok) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.readAsDataURL(b); });
       const scarica = async (path?: string) => { if (!path) return undefined; const { data } = await sb.storage.from("sicurezza").download(path); return data ? comeUrl(data) : undefined; };
-      const [{ jsPDF }, { pdfVerifiche }, logo] = await Promise.all([import("jspdf"), import("./sicurezzaPdf"), fetch("/logo-kimatic.png").then((r) => r.blob()).then(comeUrl).catch(() => undefined)]);
+      const [{ jsPDF }, { pdfVerifiche }, logo] = await Promise.all([import("jspdf"), import("./sicurezzaPdf"), fetch("/logo/kimatic").then((r) => r.blob()).then(comeUrl).catch(() => undefined)]);
       const righe = await Promise.all(lista.slice().sort((x, y) => x.dati.data.localeCompare(y.dati.data)).map(async ({ dati: v }) => ({
         data: v.data, chi: byId[v.chi || ""]?.nome || "", esito: v.esito, note: v.note, controlli: v.controlli,
         firma: await scarica(v.firma), foto: (await Promise.all((v.foto || []).map((f) => scarica(f.path)))).filter((x): x is string => !!x),
@@ -373,7 +373,7 @@ export default function Sicurezza({ modifica, gestisce = false }: { modifica: bo
       .no{margin:0 0 14px}@media print{.no{display:none}}
     </style></head><body>
       <div class="no"><button onclick="print()">Stampa / salva PDF</button></div>
-      <header><img src="${location.origin}/logo-kimatic.png" alt="Kimatic"><h1>Organigramma della sicurezza<small>Figure e addetti ai sensi del D.Lgs. 81/2008 · aggiornato al ${fd(oggi())}</small></h1></header>
+      <header><img src="${location.origin}/logo/kimatic" alt="Kimatic"><h1>Organigramma della sicurezza<small>Figure e addetti ai sensi del D.Lgs. 81/2008 · aggiornato al ${fd(oggi())}</small></h1></header>
       <table>${righe}</table>
       <footer>Kimatic S.r.l. · Via G. Matteotti 26, 40057 Cadriano di Granarolo dell'Emilia (BO) · P.IVA 03286631209</footer>
       <script>window.onload=function(){setTimeout(function(){print()},300)}</script>

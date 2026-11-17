@@ -7,7 +7,7 @@ import ReportOre from "./ReportOre";
 type Props = { me: string; nome: string; modifica: boolean; gestisce: boolean; clienti: boolean };
 
 async function logoBmtek(): Promise<string> {
-  const blob = await (await fetch("/logo-bmtek.png")).blob();
+  const blob = await (await fetch("/logo/bmtek")).blob();
   return new Promise((ok) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.readAsDataURL(blob); });
 }
 
@@ -58,7 +58,7 @@ export default function Rapporti({ me, nome, modifica, gestisce, clienti }: Prop
   return (
     <div className="ri" ref={root} style={{ position: "relative" }}>
       <div className="bar">
-        <img src="/logo-bmtek.png" alt="BMTEK" />
+        <img src="/logo/bmtek" alt="BMTEK" />
         <h1>Rapporti d&apos;intervento</h1>
         <nav className="tabs" data-ri="tabs" aria-label="Sezioni del modulo" />
         <span className="sp" />

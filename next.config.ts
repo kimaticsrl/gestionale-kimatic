@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
     "/manuali/[...path]": ["./privato/manuali/**/*"],
     "/piano/[...path]": ["./privato/piano/**/*"],
     "/cdg/[...path]": ["./privato/cdg/**/*"],
+    "/logo/[nome]": ["./public/logo-kimatic.png", "./public/logo-bmtek.png"],
     "/pagine/[modulo]/[...path]": ["./privato/rateizzazioni/**/*", "./privato/rientro/**/*", "./privato/tesserino/**/*"],
   },
 };
