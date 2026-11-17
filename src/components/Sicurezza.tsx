@@ -462,13 +462,14 @@ export default function Sicurezza({ modifica, gestisce = false }: { modifica: bo
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(190px,1fr))", gap: 12 }}>
                 <label style={{ ...lab, gridColumn: "span 2" }}>Cosa<input style={inp} value={edA.dati.nome || ""} disabled={!modifica} onChange={(e) => setEdA({ ...edA, dati: { ...edA.dati, nome: e.target.value } })} /></label>
                 <label style={lab}>Ogni quanti mesi<input type="number" min={1} style={inp} value={edA.dati.mesi ?? ""} disabled={!modifica} onChange={(e) => { const mesi = Number(e.target.value) || undefined; setEdA({ ...edA, dati: { ...edA.dati, mesi, ...(mesi && edA.dati.ultimo ? { prossima: piuMesi(edA.dati.ultimo, mesi) } : {}) } }); }} /></label>
-                <label style={lab}>Ultimo controllo<input type="date" style={inp} value={edA.dati.ultimo || ""} disabled={!modifica} onChange={(e) => { const ultimo = e.target.value; setEdA({ ...edA, dati: { ...edA.dati, ultimo, ...(ultimo && edA.dati.mesi ? { prossima: piuMesi(ultimo, edA.dati.mesi) } : {}) } }); }} /></label>
+                <label style={lab}>Ultimo controllo<input type="date" style={inp} value={edA.dati.ultimo || ""} disabled title="Si aggiorna da solo quando si registra una verifica" /></label>
                 <label style={lab}>Prossima scadenza<input type="date" style={inp} value={edA.dati.prossima || ""} disabled={!modifica} onChange={(e) => setEdA({ ...edA, dati: { ...edA.dati, prossima: e.target.value } })} /></label>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 12 }}>
                 <label style={lab}>Incaricato della verifica<select value={edA.dati.incaricato || ""} disabled={!modifica} onChange={(e) => setEdA({ ...edA, dati: { ...edA.dati, incaricato: e.target.value || undefined } })}><option value="">— da nominare —</option>{dip.filter((d) => inForza(d) || d.id === edA.dati.incaricato).map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}</select></label>
                 <label style={lab}>Note (riferimenti, chi chiamare)<input style={inp} value={edA.dati.note || ""} disabled={!modifica} onChange={(e) => setEdA({ ...edA, dati: { ...edA.dati, note: e.target.value } })} /></label>
               </div>
+              <p className="tag" style={{ margin: 0 }}>{edA.id ? "Ogni controllo si registra con «Registra verifica» qui sotto (data, esito, firma): l'ultimo controllo e la prossima scadenza si aggiornano da soli e resta lo storico." : "Dopo aver salvato, ogni controllo si registra con «Registra verifica»: l'ultimo controllo e la prossima scadenza si aggiornano da soli."}</p>
               <label style={lab}>Controlli da fare a ogni verifica (uno per riga: compariranno come lista da spuntare)<textarea rows={4} style={inp} value={(edA.dati.controlli || []).join("\n")} disabled={!modifica} onChange={(e) => setEdA({ ...edA, dati: { ...edA.dati, controlli: e.target.value.split("\n").map((x) => x.replace(/^\s+/, "")).filter((x, i, a) => x || i < a.length - 1) } })} /></label>
               <label style={lab}>Procedura (cosa controllare, dove si trova il manuale)<textarea rows={4} style={inp} value={edA.dati.procedura || ""} disabled={!modifica} onChange={(e) => setEdA({ ...edA, dati: { ...edA.dati, procedura: e.target.value } })} /></label>
               {edA.id && (
@@ -535,7 +536,7 @@ export default function Sicurezza({ modifica, gestisce = false }: { modifica: bo
                 </div>
               )}
               <div className="row">
-                {modifica && edA.dati.mesi && !edA.dati.procedura && <button className="btn sec" onClick={() => setEdA({ ...edA, dati: { ...edA.dati, ultimo: oggi(), prossima: piuMesi(oggi(), edA.dati.mesi || 0) } })}>Fatto oggi</button>}
+                
                 <span style={{ flex: 1 }} />
                 {gestisce && edA.id && <button className="btn danger" onClick={() => { if (confirm("Eliminare questa scadenza?")) { togli("azienda", edA.id, "Scadenza eliminata."); setEdA(null); } }}>Elimina</button>}
                 <button className="btn sec" onClick={() => setEdA(null)}>{modifica ? "Annulla" : "Chiudi"}</button>
