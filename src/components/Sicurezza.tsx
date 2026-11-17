@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 // Le persone arrivano dall'Anagrafica dipendenti (funzione sic_dipendenti): qui non si inseriscono.
-type Dip = { id: string; nome: string; mansione: string | null; reparto: string | null; contratto: string | null; attivo: boolean; assunzione: string | null; fine: string | null };
+type Dip = { id: string; nome: string; mansione: string | null; reparto: string | null; contratto: string | null; attivo: boolean; assunzione: string | null; fine: string | null; finecontr?: string | null };
 type Persona = { rischio?: string; gen?: string; dpi?: string; addestr?: string; preass?: string; period?: string; ultvis?: string; scadvis?: string; note?: string };
 type Corso = { dip: string; tipo: string; data?: string; scadenza?: string; ore?: string; note?: string };
 type Azienda = { nome: string; mesi?: number; ultimo?: string; prossima?: string; note?: string };
@@ -106,6 +106,7 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
   const righe: Riga[] = [];
   attivi.forEach((d) => {
     const p = pers[d.id] || {};
+    if (d.finecontr) righe.push({ quando: d.finecontr, cosa: "Scadenza contratto" + (d.contratto ? ` (${d.contratto.toLowerCase()})` : ""), chi: d.nome, dip: d.id });
     if (p.scadvis) righe.push({ quando: p.scadvis, cosa: "Visita medica" + (p.period ? ` (${p.period.toLowerCase()})` : ""), chi: d.nome, dip: d.id });
     Object.values(ultimo[d.id] || {}).forEach((c) => { if (c.scadenza) righe.push({ quando: c.scadenza, cosa: nomeTipo(c.tipo), chi: d.nome, dip: d.id }); });
   });
@@ -171,7 +172,7 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
         <div className="box" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div className="row" style={{ justifyContent: "space-between" }}>
             <h2 style={{ margin: 0 }}>{ds.nome}</h2>
-            <span className="tag" style={{ margin: 0 }}>{[ds.mansione, ds.reparto, ds.contratto, ds.assunzione && "assunto il " + fd(ds.assunzione), ds.fine && (ds.fine < oggi() ? "uscito il " : "esce il ") + fd(ds.fine)].filter(Boolean).join(" · ")}</span>
+            <span className="tag" style={{ margin: 0 }}>{[ds.mansione, ds.reparto, ds.contratto, ds.assunzione && "assunto il " + fd(ds.assunzione), ds.finecontr && "contratto fino al " + fd(ds.finecontr), ds.fine && (ds.fine < oggi() ? "uscito il " : "esce il ") + fd(ds.fine)].filter(Boolean).join(" · ")}</span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(190px,1fr))", gap: 12 }}>
             <label style={lab}>Rischio<select value={edP.rischio || ""} disabled={!modifica} onChange={(e) => setEdP({ ...edP, rischio: e.target.value })}><option value="">—</option><option value="BASSO">Basso (4 h)</option><option value="ALTO">Alto (12 h)</option></select></label>
@@ -217,7 +218,7 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
             <span className="tag" style={{ margin: 0 }}>{attivi.length} in forza</span>
           </div>
           <div className="mx"><table>
-            <thead><tr><th>Nome</th><th>Mansione</th><th>Rischio</th><th>Visita</th>{COL.map((k) => <th key={k}>{BREVE[k]}</th>)}<th>DPI</th></tr></thead>
+            <thead><tr><th>Nome</th><th>Mansione</th><th>Contratto</th><th>Scad. contratto</th><th>Rischio</th><th>Visita</th>{COL.map((k) => <th key={k}>{BREVE[k]}</th>)}<th>DPI</th></tr></thead>
             <tbody>
               {vis.map((d) => {
                 const p = pers[d.id] || {}, u = ultimo[d.id] || {};
@@ -225,6 +226,8 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
                   <tr key={d.id} onClick={() => apriPersona(d.id)} style={{ cursor: "pointer", opacity: inForza(d) ? 1 : 0.55, outline: sel === d.id ? "2px solid var(--sic)" : undefined }}>
                     <td><b>{d.nome}</b>{!inForza(d) && <small>non più in forza</small>}</td>
                     <td><small style={{ color: "inherit" }}>{d.mansione}</small></td>
+                    <td><small style={{ color: "inherit" }}>{d.contratto}</small></td>
+                    {cella(d.finecontr)}
                     <td>{p.rischio ? p.rischio[0] + p.rischio.slice(1).toLowerCase() : ""}</td>
                     {cella(p.scadvis)}
                     {COL.map((k) => { const c = u[k]; return c ? cella(c.scadenza, c.scadenza ? fd(c.scadenza) : c.data ? "fatto " + fd(c.data) : c.note || "", k) : <td key={k}></td>; })}
