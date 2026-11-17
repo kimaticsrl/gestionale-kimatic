@@ -83,9 +83,24 @@ export default function Dipendenti({ modifica }: { modifica: boolean }) {
     const riga = { dati, attivo: ed.attivo, ...(ed.id ? { id: ed.id } : {}) };
     const { error } = await sb.from("dipendenti").upsert(riga);
     if (error) { setMsg({ t: "Non salvato: " + error.message, err: true }); return; }
-    setMsg({ t: `${nome} salvato.` });
+    const piano = await allineaPiano(dati, ed.attivo);
+    setMsg({ t: `${nome} salvato.${piano}` });
     setEd(null);
     carica();
+  }
+  // Chi si dimette esce anche dal Piano di produzione: l'ultimo giorno passa alla sua persona del planning
+  // (dopo quella data non viene più proposta) e, se la data è già passata, la persona diventa non attiva.
+  async function allineaPiano(d: Dati, attivo: boolean): Promise<string> {
+    if (!d.pid) return "";
+    const { data: pp } = await sb.from("pp_docs").select("dati").eq("coll", "persone").eq("id", d.pid).maybeSingle();
+    if (!pp) return "";
+    const p = (pp.dati || {}) as { fine?: string; att?: boolean; name?: string };
+    const uscito = !attivo || (!!d.scadenza && d.scadenza < new Date().toLocaleDateString("sv-SE"));
+    const nuovo = { ...p, ...(d.scadenza ? { fine: d.scadenza } : {}), ...(uscito ? { att: false } : {}) };
+    if (nuovo.fine === p.fine && nuovo.att === p.att) return "";
+    const { error } = await sb.from("pp_docs").update({ dati: nuovo }).eq("coll", "persone").eq("id", d.pid);
+    if (error) return ` Piano di produzione non aggiornato (${error.message}): togli la persona a mano in Persone e reparti.`;
+    return uscito ? " Tolto anche dal Piano di produzione." : ` Nel Piano di produzione non sarà più proposto dopo il ${d.scadenza!.split("-").reverse().join("/")}.`;
   }
   async function elimina() {
     if (!ed?.id || !confirm(`Eliminare ${ed.dati.nome} dall'anagrafica? Se ha solo lasciato l'azienda, togli invece la spunta «In forza».`)) return;
