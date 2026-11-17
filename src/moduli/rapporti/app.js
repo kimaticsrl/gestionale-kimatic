@@ -135,6 +135,7 @@ function vEdit(){
     <label class="w2">Ragione sociale<input id="f-cli" list="dl-cli" data-k="cli.nome" value="${esc(r.cli.nome)}" placeholder="Scegli dall'anagrafica o scrivi"${dis} autocomplete="off"></label>
     <label class="w2">Indirizzo<input id="f-ind" data-k="cli.indirizzo" value="${esc(r.cli.indirizzo)}"${dis}></label>
     <label>Persona di riferimento cliente<input id="f-con" data-k="cli.contatto" value="${esc(r.cli.contatto)}"${dis}></label>
+    <label>E-mail cliente<input id="f-mail" type="email" data-k="cli.email" value="${esc(r.cli.email||(S.clienti[r.cli.id]||{}).email||'')}" placeholder="per l'invio del rapporto firmato"${dis} autocomplete="off"></label>
     <label>Tecnici BMTEK<input id="f-tec" data-k="tecnici" value="${esc(r.tecnici)}" placeholder="Nome Cognome, Nome Cognome"${dis}></label>
     <label>Mezzo utilizzato<select id="f-mez" data-k="mezzo"${dis}><option value="">— da indicare —</option>${MEZZI.map(m=>`<option value="${m.targa}"${r.mezzo===m.targa?' selected':''}>${esc(m.nome)} · ${m.targa}</option>`).join('')}<option value="altro"${r.mezzo==='altro'?' selected':''}>Altro (noleggio, mezzo del cliente, aereo…)</option></select></label>
     ${r.mezzo==='altro'?`<label>Quale mezzo<input id="f-mza" data-k="mezzoAltro" value="${esc(r.mezzoAltro||'')}" placeholder="es. auto a noleggio, targa"${dis}></label>`:''}
@@ -230,8 +231,8 @@ function onField(e){
     const prima=CUR.cli.id||'',mDi=id=>{const c=S.clienti[id];return c?(c.commesse||[]).flatMap(x=>x.macchine||[]).some(m=>m.matr===CUR.matr):false};
     const cambiato=hit?hit[0]!==prima:!!prima;
     if(cambiato&&prima&&CUR.matr&&mDi(prima)){CUR.matr='';CUR.macDesc=''}
-    if(hit){const[id,c]=hit;CUR.cli={id,nome:c.nome,indirizzo:cambiato||!CUR.cli.indirizzo?indCompleto(c):CUR.cli.indirizzo,contatto:cambiato||!CUR.cli.contatto?(c.contatto||''):CUR.cli.contatto};const l=linguaCli(c);if(!CUR.lingua||CUR.lingua===CUR.linguaAuto||CUR.lingua==='IT'){CUR.lingua=l}CUR.linguaAuto=l}
-    else{CUR.cli.id='';if(cambiato){CUR.cli.indirizzo='';CUR.cli.contatto=''}}
+    if(hit){const[id,c]=hit;CUR.cli={id,nome:c.nome,indirizzo:cambiato||!CUR.cli.indirizzo?indCompleto(c):CUR.cli.indirizzo,contatto:cambiato||!CUR.cli.contatto?(c.contatto||''):CUR.cli.contatto,email:cambiato||!CUR.cli.email?(c.email||''):CUR.cli.email};const l=linguaCli(c);if(!CUR.lingua||CUR.lingua===CUR.linguaAuto||CUR.lingua==='IT'){CUR.lingua=l}CUR.linguaAuto=l}
+    else{CUR.cli.id='';if(cambiato){CUR.cli.indirizzo='';CUR.cli.contatto='';CUR.cli.email=''}}
     queueSave();render();return}
   if(k==='lingua'||k==='mezzo'){queueSave();render();return}
   const mc=/^ric\.(\d+)\.cod$/.exec(k);if(mc){if(e.type==='input')suggerisciArticoli(v);else{queueSave();compilaParte(+mc[1],String(v));return}}
@@ -333,7 +334,7 @@ const MAILT={
   ES:{s:'Informe de intervención',b:'Estimado cliente:\nadjuntamos el informe de intervención {n} firmado.\n\nAtentamente\nKimatic'}};
 async function doInvia(r){
   if(!r||!r.firma||!r.firma.ts){toast('Si può inviare solo un rapporto firmato');return}
-  const an=S.clienti[r.cli&&r.cli.id]||{},to=(an.email||'').trim();
+  const an=S.clienti[r.cli&&r.cli.id]||{},to=(r.cli&&r.cli.email||an.email||'').trim();
   const T=MAILT[r.lingua]||MAILT.IT,sub=T.s+' '+r.num+' – '+(r.cli.nome||''),body=T.b.replace('{n}',r.num);
   let file=null;
   try{const jsPDF=await CTX.jsPDF();const blob=RI.build(jsPDF,r,LOGO).output('blob');
