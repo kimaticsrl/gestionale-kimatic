@@ -216,6 +216,7 @@ function calcTxt(g){const s=RI.split(g),nt=Math.max(1,+g.nt||1);if(!s.tot)return
 
 /* ---------- binding dei campi ---------- */
 function setK(o,k,v){const p=k.split('.');let x=o;for(let i=0;i<p.length-1;i++){const q=p[i];if(x[q]==null)x[q]=/^\d+$/.test(p[i+1])?[]:{};x=x[q]}x[p[p.length-1]]=v}
+ROOT.addEventListener('input',e=>{if(e.target.id==='s-tn'||e.target.id==='s-cn')salvaBozzaFirme()});
 ROOT.addEventListener('input',onField);ROOT.addEventListener('change',onField);
 function onField(e){
   const el=e.target;
@@ -249,7 +250,7 @@ ROOT.addEventListener('click',async e=>{
   const b=e.target.closest('button');if(!b)return;const d=b.dataset;
   if(d.filt){UI.filt=d.filt;saveUI();render();return}
   if(d.openr){openR(d.openr);return}
-  if(d.clr){const c=document.getElementById(d.clr);c.getContext('2d').clearRect(0,0,c.width,c.height);c.dataset.ink='';return}
+  if(d.clr){const c=document.getElementById(d.clr);c.getContext('2d').clearRect(0,0,c.width,c.height);c.dataset.ink='';salvaBozzaFirme();return}
   if(d.opencli){UI.cli=d.opencli;UI.cliEdit=null;saveUI();render();return}
   if(d.fatt){UI.fatt={id:d.fatt,nf:'',df:today(),note:''};render();return}
   if(d.add){UI.add=UI.add===d.add?null:d.add;UI.lst=false;render();if(UI.add){const p=ROOT.querySelector('#addebito');if(p)p.scrollIntoView({behavior:'smooth',block:'start'})}return}
@@ -262,11 +263,11 @@ ROOT.addEventListener('click',async e=>{
   if(d.delric){CUR.ric.splice(+d.delric,1);queueSave();render();return}
   switch(d.act){
     case'nuovo':{const r=newRap();S.rapporti[r.id]=r;CUR=r;UI.open=r.id;UI.sign=false;DIRTY=true;await flush();saveUI();render();scrollTo(0,0);break}
-    case'back':flush();UI.open=null;CUR=null;UI.sign=false;saveUI();render();break;
+    case'back':flush();togliBozzaFirme();UI.open=null;CUR=null;UI.sign=false;saveUI();render();break;
     case'addday':{const L=CUR.giorni,last=L.slice(-1)[0];let nd=today();if(last&&last.d){const n=RI.d2n(last.d);if(n!=null)nd=RI.n2s(n+1)}if(L.some(g=>g.d===nd)&&!L.some(g=>g.d===today()))nd=today();L.push({id:rid(),d:nd,v:{},vr:{},tr:{},f:last&&last.f?last.f.map(f=>({da:f.da,a:f.a})):[{da:'08:00',a:'12:00'},{da:'13:00',a:'17:00'}],nt:last?last.nt:'1',gar:last?last.gar:false,att:''});queueSave();render();break}
     case'addric':(CUR.ric??=[]).push({cod:'',des:'',q:'1',gar:false});queueSave();render();break;
     case'firma':flush();UI.sign=true;render();ROOT.querySelector('.confirm').scrollIntoView({behavior:'smooth',block:'start'});break;
-    case'nofirma':UI.sign=false;render();break;
+    case'nofirma':UI.sign=false;togliBozzaFirme();render();break;
     case'conferma':await doSign(b);break;
     case'pdf':await doPdf(CUR);break;
     case'anteprima':anteprima(CUR);break;
@@ -290,14 +291,22 @@ ROOT.addEventListener('click',async e=>{
   }
 });
 function confirmTwice(b,msg){if(b.dataset.armed&&Date.now()-b.dataset.armed<5000)return true;b.dataset.armed=Date.now();toast(msg);return false}
-function openR(id){const r=S.rapporti[id];if(!r)return;CUR=JSON.parse(JSON.stringify(r));CUR.id=id;UI.open=id;UI.sign=false;UI.tab='int';saveUI();render();scrollTo(0,0);checkInteg(CUR)}
+function openR(id){const r=S.rapporti[id];if(!r)return;CUR=JSON.parse(JSON.stringify(r));CUR.id=id;UI.open=id;UI.sign=!!(bozzaFirme()&&!(r.firma&&r.firma.ts));UI.tab='int';saveUI();render();scrollTo(0,0);checkInteg(CUR)}
 
 /* ---------- firma ---------- */
-function initPads(){['pad-tec','pad-cli'].forEach(id=>{const c=document.getElementById(id);if(!c||c.dataset.on)return;c.dataset.on=1;const x=c.getContext('2d');x.lineWidth=4.5;x.lineCap='round';x.lineJoin='round';x.strokeStyle='#0b1b4d';let dn=false,lx=0,ly=0;
+/* firme in corso: restano anche se la pagina si ridisegna o il telefono la ricarica (es. dopo l'anteprima PDF) */
+const BOZZA_K='ri_firme';
+const bozzaFirme=()=>{try{const o=JSON.parse(sessionStorage.getItem(BOZZA_K)||'null');return o&&CUR&&o.id===CUR.id?o:null}catch(e){return null}};
+function salvaBozzaFirme(){if(!CUR||!UI.sign)return;const o={id:CUR.id};['pad-tec','pad-cli'].forEach(id=>{const c=document.getElementById(id);if(c&&c.dataset.ink)o[id]=c.toDataURL('image/png')});
+  const tn=$('#s-tn'),cn=$('#s-cn');if(tn)o.tn=tn.value;if(cn)o.cn=cn.value;try{sessionStorage.setItem(BOZZA_K,JSON.stringify(o))}catch(e){}}
+const togliBozzaFirme=()=>{try{sessionStorage.removeItem(BOZZA_K)}catch(e){}};
+function initPads(){const B=bozzaFirme();if(B){const tn=$('#s-tn'),cn=$('#s-cn');if(tn&&B.tn!=null)tn.value=B.tn;if(cn&&B.cn!=null)cn.value=B.cn}
+  ['pad-tec','pad-cli'].forEach(id=>{const c=document.getElementById(id);if(!c||c.dataset.on)return;c.dataset.on=1;const x=c.getContext('2d');x.lineWidth=4.5;x.lineCap='round';x.lineJoin='round';x.strokeStyle='#0b1b4d';let dn=false,lx=0,ly=0;
+  if(B&&B[id]){const im=new Image();im.onload=()=>{x.drawImage(im,0,0,c.width,c.height);c.dataset.ink=1};im.src=B[id]}
   const P=e=>{const r=c.getBoundingClientRect();return[(e.clientX-r.left)*c.width/r.width,(e.clientY-r.top)*c.height/r.height]};
   c.addEventListener('pointerdown',e=>{dn=true;c.setPointerCapture(e.pointerId);[lx,ly]=P(e);x.beginPath();x.arc(lx,ly,2,0,7);x.fillStyle='#0b1b4d';x.fill();c.dataset.ink=1});
   c.addEventListener('pointermove',e=>{if(!dn)return;const[nx,ny]=P(e);x.beginPath();x.moveTo(lx,ly);x.lineTo(nx,ny);x.stroke();lx=nx;ly=ny});
-  ['pointerup','pointercancel','pointerleave'].forEach(t=>c.addEventListener(t,()=>dn=false))})}
+  ['pointerup','pointercancel','pointerleave'].forEach(t=>c.addEventListener(t,()=>{if(dn)salvaBozzaFirme();dn=false}))})}
 function padPng(id){const c=document.getElementById(id);if(!c||!c.dataset.ink)return null;const o=document.createElement('canvas');o.width=600;o.height=200;o.getContext('2d').drawImage(c,0,0,600,200);return o.toDataURL('image/png')}
 async function doSign(b){
   const tec=padPng('pad-tec'),cli=padPng('pad-cli'),tn=$('#s-tn').value.trim(),cn=$('#s-cn').value.trim();
@@ -317,7 +326,7 @@ async function doSign(b){
   CUR.firma.hash=await digest(CUR);
   DIRTY=true;await flush();
   if(DIRTY){b.disabled=false;toast('Firma non salvata: controlla la connessione e riprova');return}
-  S.rapporti[CUR.id]=JSON.parse(JSON.stringify(CUR));INTEG[CUR.id]=true;UI.sign=false;render();scrollTo(0,0);toast('Rapporto firmato');
+  S.rapporti[CUR.id]=JSON.parse(JSON.stringify(CUR));INTEG[CUR.id]=true;UI.sign=false;togliBozzaFirme();render();scrollTo(0,0);toast('Rapporto firmato');
 }
 
 /* ---------- PDF ---------- */
@@ -501,7 +510,7 @@ function refresh(){
   if(!GOT.r||!GOT.c){return}
   if(UI.open&&!CUR&&S.rapporti[UI.open]){openR(UI.open);return}
   if(UI.open&&!S.rapporti[UI.open]&&!CUR){UI.open=null}
-  if(busy()){tabs();return}
+  if(busy()||(UI.sign&&CUR)){tabs();return} // durante la firma non si ridisegna: le firme sul foglio resterebbero vuote
   render();
 }
 
