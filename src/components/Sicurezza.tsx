@@ -6,7 +6,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 type Dip = { id: string; nome: string; mansione: string | null; reparto: string | null; contratto: string | null; attivo: boolean; assunzione: string | null; fine: string | null; finecontr?: string | null };
 type Persona = { rischio?: string; gen?: string; dpi?: string; addestr?: string; preass?: string; period?: string; ultvis?: string; scadvis?: string; note?: string };
 type Corso = { dip: string; tipo: string; data?: string; scadenza?: string; ore?: string; note?: string; chiuso?: boolean };
-type Azienda = { nome: string; mesi?: number; ultimo?: string; prossima?: string; note?: string; incaricato?: string; procedura?: string; controlli?: string[] };
+type Azienda = { nome: string; mesi?: number; ultimo?: string; prossima?: string; note?: string; incaricato?: string; procedura?: string; controlli?: string[]; fisso?: boolean };
 type Voce = { voce: string; ok: boolean; nota?: string };
 type Foto = { path: string; nome?: string };
 type Verifica = { az: string; data: string; chi?: string; esito?: string; note?: string; firma?: string; foto?: Foto[]; controlli?: Voce[] };
@@ -52,6 +52,7 @@ const giorni = (s: string) => Math.round((new Date(s + "T12:00:00").getTime() - 
 type Stato = "scad" | "presto" | "ok" | "";
 const stato = (s?: string | null): Stato => (!s ? "" : s < oggi() ? "scad" : giorni(s) <= 60 ? "presto" : "ok");
 const SFONDO: Record<Stato, string> = { scad: "color-mix(in srgb,var(--danger) 22%,var(--surface))", presto: "color-mix(in srgb,#e8a400 28%,var(--surface))", ok: "color-mix(in srgb,var(--amm) 16%,var(--surface))", "": "" };
+const scadContr = (d: Dip) => d.finecontr || (d.fine && d.fine >= oggi() ? d.fine : null);
 const inForza = (d: Dip) => d.attivo && !(d.fine && d.fine < oggi());
 const norm = (s?: string | null) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2));
@@ -87,6 +88,9 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
   const [url, setUrl] = useState<Record<string, string>>({});
   const [edI, setEdI] = useState<Doc<Infortunio> | null>(null);
   const [ftipo, setFtipo] = useState("");
+  const [storico, setStorico] = useState(false);
+  const [annoI, setAnnoI] = useState("");
+  const dettRef = useRef<HTMLDivElement | null>(null);
 
   async function carica() {
     const [d, s] = await Promise.all([sb.rpc("sic_dipendenti"), sb.from("sic_docs").select("coll,id,dati")]);
@@ -174,6 +178,7 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
   const righe: Riga[] = [];
   attivi.forEach((d) => {
     const p = pers[d.id] || {};
+    if (!d.finecontr && d.fine) righe.push({ quando: d.fine, cosa: "Fine rapporto", chi: d.nome, dip: d.id });
     if (d.finecontr) righe.push({ quando: d.finecontr, cosa: "Scadenza contratto" + (d.contratto ? ` (${d.contratto.toLowerCase()})` : ""), chi: d.nome, dip: d.id });
     if (p.scadvis) righe.push({ quando: p.scadvis, cosa: "Visita medica" + (p.period ? ` (${p.period.toLowerCase()})` : ""), chi: d.nome, dip: d.id });
     Object.values(ultimo[d.id] || {}).forEach((c) => { if (c.scadenza && !c.chiuso) righe.push({ quando: c.scadenza, cosa: nomeTipo(c.tipo), chi: d.nome, dip: d.id }); });
@@ -190,6 +195,7 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
 
   function apriPersona(id: string) {
     setSel(id); setEdP({ ...(pers[id] || {}) }); setEdS({ ...(san[id] || {}) }); setEdC(null); setMsg(null);
+    setTimeout(() => dettRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   }
   function nuovoCorso(dipId: string, tipo = "sic") {
     setEdC({ id: "", dati: { dip: dipId, tipo, data: oggi(), scadenza: piuMesi(oggi(), 12 * (TIPI.find((t) => t.k === tipo)?.anni || 0)) } });
@@ -205,6 +211,66 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
 
   const cella = (s?: string | null, testo?: string, k?: string) => <td key={k} style={{ background: SFONDO[stato(s)], whiteSpace: "nowrap" }}>{testo ?? fd(s)}</td>;
   const tabs: [string, string][] = [["scad", `Scadenze${scadute.length ? ` (${scadute.length} scadute)` : ""}`], ["dip", "Dipendenti"], ["add", "Addetti"], ["corsi", "Corsi"], ["az", "Scadenze aziendali"], ...(modifica ? [["inf", "Infortuni"] as [string, string]] : [])];
+
+  const durata = (x: Infortunio) => x.giorni ?? (x.data && (x.prog2 || x.prog1) ? Math.max(0, Math.round((new Date((x.prog2 || x.prog1) + "T12:00:00").getTime() - new Date(x.data + "T12:00:00").getTime()) / 864e5) + 1) : 0);
+  const anniI = Object.values(inf.reduce((m, x) => {
+    const anno = (x.dati.data || "").slice(0, 4) || "senza data";
+    const a = (m[anno] ??= { anno, n: 0, gg: 0, pers: 0, chi: new Set<string>() });
+    a.n++; a.gg += durata(x.dati) || 0; a.chi.add(x.dati.dip || x.dati.nome || x.id); a.pers = a.chi.size;
+    return m;
+  }, {} as Record<string, { anno: string; n: number; gg: number; pers: number; chi: Set<string> }>)).sort((a, b) => b.anno.localeCompare(a.anno));
+  const infVis = inf.filter((x) => (annoI ? (x.dati.data || "").startsWith(annoI) || (annoI === "senza data" && !x.dati.data) : tutti || (x.dati.dip && byId[x.dati.dip] && inForza(byId[x.dati.dip]))));
+
+  async function esportaInfortuni() {
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Infortuni");
+    ws.columns = [{ header: "Data", width: 12 }, { header: "Anno", width: 7 }, { header: "Dipendente", width: 30 }, { header: "Luogo", width: 24 }, { header: "Cosa è successo", width: 60 }, { header: "Prima prognosi fino al", width: 14 }, { header: "Ultima prognosi fino al", width: 14 }, { header: "Giorni", width: 8 }];
+    ws.getRow(1).font = { bold: true };
+    infVis.slice().sort((a, b) => (a.dati.data || "").localeCompare(b.dati.data || "")).forEach(({ dati: x }) => ws.addRow([fd(x.data), (x.data || "").slice(0, 4), byId[x.dip || ""]?.nome || x.nome || "", x.luogo || "", x.desc || "", fd(x.prog1), fd(x.prog2), durata(x) || null]));
+    const r = wb.addWorksheet("Per anno");
+    r.columns = [{ header: "Anno", width: 10 }, { header: "Infortuni", width: 10 }, { header: "Giorni di assenza", width: 16 }, { header: "Persone coinvolte", width: 16 }];
+    r.getRow(1).font = { bold: true };
+    anniI.forEach((a) => r.addRow([a.anno, a.n, a.gg, a.pers]));
+    const buf = await wb.xlsx.writeBuffer();
+    const el = document.createElement("a");
+    el.href = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    el.download = `Infortuni${annoI ? "_" + annoI : ""}_${oggi()}.xlsx`; el.click();
+    setTimeout(() => URL.revokeObjectURL(el.href), 5000);
+  }
+
+  // Elenco degli addetti da consegnare alle aziende esterne che lo chiedono (DUVRI, appalti)
+  function stampaAddetti() {
+    const h = (x: unknown) => String(x ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+    const righe = RUOLI.filter((r) => r.k !== "car").map((r) => {
+      const lista = inc.filter((x) => x.dati.ruolo === r.k && (!x.dati.dip || (byId[x.dati.dip] && inForza(byId[x.dati.dip]))));
+      const nomi = lista.map((x) => {
+        const c = x.dati.dip && r.corso ? ultimo[x.dati.dip]?.[r.corso] : undefined;
+        const nome = x.dati.dip ? byId[x.dati.dip]?.nome : x.dati.esterno;
+        const form = r.corso && x.dati.dip ? (c?.data ? `formazione del ${fd(c.data)}${c.scadenza ? `, valida fino al ${fd(c.scadenza)}` : ""}` : "") : x.dati.esterno ? "incarico esterno" : "";
+        return `<div class="p"><b>${h(nome)}</b>${form ? `<span>${h(form)}</span>` : ""}</div>`;
+      }).join("");
+      return lista.length ? `<tr><th>${h(r.n)}</th><td>${nomi}</td></tr>` : "";
+    }).join("");
+    const w = window.open("", "_blank");
+    if (!w) { setMsg({ t: "Il browser ha bloccato la finestra di stampa: consenti i popup per il gestionale.", err: true }); return; }
+    w.document.write(`<!doctype html><html lang="it"><head><meta charset="utf-8"><title>Organigramma della sicurezza - Kimatic Srl</title><style>
+      @page{size:A4;margin:16mm}body{font:11pt/1.4 Arial,Helvetica,sans-serif;color:#1b1b1b;margin:0}
+      header{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #c2410c;padding-bottom:10px;margin-bottom:18px}
+      header img{height:46px}h1{font-size:17pt;margin:0;text-align:right}h1 small{display:block;font-size:10pt;font-weight:normal;color:#555}
+      table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:8px 10px;vertical-align:top;text-align:left}
+      th{width:34%;background:#fbeee6;font-size:10.5pt}.p{padding:2px 0}.p span{display:block;font-size:9pt;color:#555}
+      footer{margin-top:22px;font-size:8.5pt;color:#666;border-top:1px solid #ccc;padding-top:8px}
+      .no{margin:0 0 14px}@media print{.no{display:none}}
+    </style></head><body>
+      <div class="no"><button onclick="print()">Stampa / salva PDF</button></div>
+      <header><img src="${location.origin}/logo-kimatic.png" alt="Kimatic"><h1>Organigramma della sicurezza<small>Figure e addetti ai sensi del D.Lgs. 81/2008 · aggiornato al ${fd(oggi())}</small></h1></header>
+      <table>${righe}</table>
+      <footer>Kimatic S.r.l. · Via G. Matteotti 26, 40057 Cadriano di Granarolo dell'Emilia (BO) · P.IVA 03286631209</footer>
+      <script>window.onload=function(){setTimeout(function(){print()},300)}</script>
+    </body></html>`);
+    w.document.close();
+  }
 
   if (carico) return <div className="empty">Caricamento…</div>;
   const ds = sel ? byId[sel] : null;
@@ -242,10 +308,13 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
       )}
 
       {tab === "dip" && ds && (
-        <div className="box" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div className="row" style={{ justifyContent: "space-between" }}>
-            <h2 style={{ margin: 0 }}>{ds.nome}</h2>
-            <span className="tag" style={{ margin: 0 }}>{[ds.mansione, ds.reparto, ds.contratto, ds.assunzione && "assunto il " + fd(ds.assunzione), ds.finecontr && "contratto fino al " + fd(ds.finecontr), ds.fine && (ds.fine < oggi() ? "uscito il " : "esce il ") + fd(ds.fine)].filter(Boolean).join(" · ")}</span>
+        <div ref={dettRef} className="box" style={{ display: "flex", flexDirection: "column", gap: 12, borderLeft: "6px solid var(--sic)", scrollMarginTop: 12 }}>
+          <div className="row" style={{ justifyContent: "space-between", alignItems: "center", margin: "-4px -4px 0", padding: "10px 14px", borderRadius: 8, background: "color-mix(in srgb,var(--sic) 16%,var(--surface))" }}>
+            <h2 style={{ margin: 0, fontSize: 26, letterSpacing: 0.3, color: "var(--sic)" }}>{ds.nome}</h2>
+            <span className="row" style={{ gap: 8, alignItems: "center" }}>
+              <span className="tag" style={{ margin: 0 }}>{[ds.reparto, ds.assunzione && "assunto il " + fd(ds.assunzione), ds.fine && ds.fine < oggi() && "uscito il " + fd(ds.fine)].filter(Boolean).join(" · ")}</span>
+              {scadContr(ds) && <span style={{ padding: "4px 10px", borderRadius: 6, fontWeight: 600, background: SFONDO[stato(scadContr(ds))] }}>Scadenza contratto {fd(scadContr(ds))}</span>}
+            </span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(190px,1fr))", gap: 12 }}>
             <label style={lab}>Rischio<select value={edP.rischio || ""} disabled={!modifica} onChange={(e) => setEdP({ ...edP, rischio: e.target.value })}><option value="">—</option><option value="BASSO">Basso (4 h)</option><option value="ALTO">Alto (12 h)</option></select></label>
@@ -286,21 +355,19 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
       {tab === "dip" && (
         <div className="box">
           <div className="row" style={{ marginBottom: 12 }}>
-            <input type="text" placeholder="Cerca nome, mansione, reparto…" value={q} onChange={(e) => setQ(e.target.value)} style={{ minWidth: 260 }} />
+            <input type="text" placeholder="Cerca nome o reparto…" value={q} onChange={(e) => setQ(e.target.value)} style={{ minWidth: 260 }} />
             <label className="ck"><input type="checkbox" checked={tutti} onChange={(e) => setTutti(e.target.checked)} /> Mostra anche chi non è più in forza</label>
             <span className="tag" style={{ margin: 0 }}>{attivi.length} in forza</span>
           </div>
           <div className="mx"><table>
-            <thead><tr><th>Nome</th><th>Mansione</th><th>Contratto</th><th>Scad. contratto</th><th>Rischio</th><th>Visita</th>{COL.map((k) => <th key={k}>{BREVE[k]}</th>)}<th>DPI</th></tr></thead>
+            <thead><tr><th>Nome</th><th>Scad. contratto</th><th>Rischio</th><th>Visita</th>{COL.map((k) => <th key={k}>{BREVE[k]}</th>)}<th>DPI</th></tr></thead>
             <tbody>
               {vis.map((d) => {
                 const p = pers[d.id] || {}, u = ultimo[d.id] || {};
                 return (
-                  <tr key={d.id} onClick={() => apriPersona(d.id)} style={{ cursor: "pointer", opacity: inForza(d) ? 1 : 0.55, outline: sel === d.id ? "2px solid var(--sic)" : undefined }}>
-                    <td><b>{d.nome}</b>{!inForza(d) && <small>non più in forza</small>}</td>
-                    <td><small style={{ color: "inherit" }}>{d.mansione}</small></td>
-                    <td><small style={{ color: "inherit" }}>{d.contratto}</small></td>
-                    {cella(d.finecontr)}
+                  <tr key={d.id} onClick={() => apriPersona(d.id)} style={{ cursor: "pointer", opacity: inForza(d) ? 1 : 0.55, outline: sel === d.id ? "3px solid var(--sic)" : undefined }}>
+                    <td style={sel === d.id ? { background: "var(--sic)", color: "#fff" } : undefined}><b style={sel === d.id ? { fontSize: 15 } : undefined}>{sel === d.id ? "▶ " : ""}{d.nome}</b>{!inForza(d) && <small>non più in forza</small>}</td>
+                    {cella(scadContr(d))}
                     <td>{p.rischio ? p.rischio[0] + p.rischio.slice(1).toLowerCase() : ""}</td>
                     {cella(p.scadvis)}
                     {COL.map((k) => { const c = u[k]; return c?.chiuso ? <td key={k}><small title={c.note}>non rinnovato</small></td> : c ? cella(c.scadenza, c.scadenza ? fd(c.scadenza) : c.data ? "fatto " + fd(c.data) : c.note || "", k) : <td key={k}></td>; })}
@@ -319,16 +386,17 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
           <div className="row" style={{ marginBottom: 12 }}>
             <select value={ftipo} onChange={(e) => setFtipo(e.target.value)}><option value="">Tutti i corsi</option>{TIPI.map((t) => <option key={t.k} value={t.k}>{t.n}</option>)}</select>
             <label className="ck"><input type="checkbox" checked={tutti} onChange={(e) => setTutti(e.target.checked)} /> Anche chi non è più in forza</label>
+            <label className="ck"><input type="checkbox" checked={storico} onChange={(e) => setStorico(e.target.checked)} /> Mostra lo storico (corsi precedenti)</label>
           </div>
           {edC && formCorso()}
           <div className="mx"><table>
             <thead><tr><th>Dipendente</th><th>Corso</th><th>Data</th><th>Scadenza</th><th>Note</th></tr></thead>
             <tbody>
-              {corsi.filter((c) => (!ftipo || c.dati.tipo === ftipo) && byId[c.dati.dip] && (tutti || inForza(byId[c.dati.dip])))
+              {corsi.filter((c) => (!ftipo || c.dati.tipo === ftipo) && byId[c.dati.dip] && (tutti || inForza(byId[c.dati.dip])) && (storico || ultimo[c.dati.dip]?.[c.dati.tipo] === c.dati))
                 .sort((a, b) => (a.dati.scadenza || "9").localeCompare(b.dati.scadenza || "9"))
                 .map((c) => (
                   <tr key={c.id} style={{ cursor: modifica ? "pointer" : undefined }} onClick={() => modifica && setEdC(JSON.parse(JSON.stringify(c)))}>
-                    <td>{byId[c.dati.dip]?.nome}</td><td>{nomeTipo(c.dati.tipo)}</td><td>{fd(c.dati.data)}</td>
+                    <td>{byId[c.dati.dip]?.nome}</td><td>{nomeTipo(c.dati.tipo)}{ultimo[c.dati.dip]?.[c.dati.tipo] !== c.dati && <small> (storico)</small>}</td><td>{fd(c.dati.data)}</td>
                     {cella(ultimo[c.dati.dip]?.[c.dati.tipo] === c.dati && !c.dati.chiuso ? c.dati.scadenza : null, c.dati.chiuso ? "non rinnovato" : fd(c.dati.scadenza))}<td>{c.dati.note}</td>
                   </tr>
                 ))}
@@ -339,7 +407,10 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
 
       {tab === "add" && (
         <div className="box">
-          <p className="tag" style={{ marginTop: 0 }}>Chi ricopre gli incarichi della sicurezza. Accanto a ognuno c&apos;è la scadenza del corso che lo abilita: rossa se scaduto o mancante.</p>
+          <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+            <p className="tag" style={{ margin: 0 }}>Chi ricopre gli incarichi della sicurezza. Accanto a ognuno c&apos;è la scadenza del corso che lo abilita: rossa se scaduto o mancante.</p>
+            <button className="btn" onClick={stampaAddetti}>Stampa per aziende esterne</button>
+          </div>
           {edN && (
             <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 12, border: "1px solid var(--line)", borderRadius: 8, marginBottom: 16 }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 12 }}>
@@ -466,7 +537,7 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
               <div className="row">
                 {modifica && edA.dati.mesi && !edA.dati.procedura && <button className="btn sec" onClick={() => setEdA({ ...edA, dati: { ...edA.dati, ultimo: oggi(), prossima: piuMesi(oggi(), edA.dati.mesi || 0) } })}>Fatto oggi</button>}
                 <span style={{ flex: 1 }} />
-                {modifica && edA.id && <button className="btn danger" onClick={() => { if (confirm("Eliminare questa scadenza?")) { togli("azienda", edA.id, "Scadenza eliminata."); setEdA(null); } }}>Elimina</button>}
+                {modifica && edA.id && !edA.dati.fisso && <button className="btn danger" onClick={() => { if (confirm("Eliminare questa scadenza?")) { togli("azienda", edA.id, "Scadenza eliminata."); setEdA(null); } }}>Elimina</button>}
                 <button className="btn sec" onClick={() => setEdA(null)}>{modifica ? "Annulla" : "Chiudi"}</button>
                 {modifica && <button className="btn" onClick={async () => { if (!edA.dati.nome?.trim()) { setMsg({ t: "Scrivi cosa va controllato.", err: true }); return; } if (await scrivi("azienda", edA.id || uid(), edA.dati, "Scadenza salvata.")) setEdA(null); }}>Salva</button>}
               </div>
@@ -477,7 +548,7 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
             <tbody>
               {az.map((a) => (
                 <tr key={a.id} style={{ cursor: "pointer" }} onClick={() => setEdA(JSON.parse(JSON.stringify(a)))}>
-                  <td><b>{a.dati.nome}</b></td><td>{a.dati.mesi ? (a.dati.mesi === 1 ? "ogni mese" : `ogni ${a.dati.mesi} mesi`) : ""}</td><td>{a.dati.incaricato ? byId[a.dati.incaricato]?.nome : <small>da nominare</small>}</td><td>{fd(a.dati.ultimo)}</td>{cella(a.dati.prossima)}<td><small style={{ color: "inherit" }}>{a.dati.note}</small></td>
+                  <td><b>{a.dati.nome}</b>{a.dati.fisso && <small title="Scadenza fissa: non si può eliminare"> 🔒</small>}</td><td>{a.dati.mesi ? (a.dati.mesi === 1 ? "ogni mese" : `ogni ${a.dati.mesi} mesi`) : ""}</td><td>{a.dati.incaricato ? byId[a.dati.incaricato]?.nome : <small>da nominare</small>}</td><td>{fd(a.dati.ultimo)}</td>{cella(a.dati.prossima)}<td><small style={{ color: "inherit" }}>{a.dati.note}</small></td>
                 </tr>
               ))}
             </tbody>
@@ -491,7 +562,24 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
           <div className="row" style={{ marginBottom: 12 }}>
             <span className="tag" style={{ margin: 0 }}>Registro infortuni: dati sanitari, visibile solo a chi può modificare la Sicurezza.</span>
             <label className="ck"><input type="checkbox" checked={tutti} onChange={(e) => setTutti(e.target.checked)} /> Anche chi non è più in forza</label>
+            <select value={annoI} onChange={(e) => setAnnoI(e.target.value)}><option value="">Tutti gli anni</option>{anniI.map((a) => <option key={a.anno}>{a.anno}</option>)}</select>
+            <span style={{ flex: 1 }} />
+            <button className="btn sec" disabled={!infVis.length} onClick={esportaInfortuni}>Esporta Excel</button>
           </div>
+          {!!anniI.length && (
+            <div className="mx" style={{ marginBottom: 14 }}><table>
+              <thead><tr><th>Anno</th><th>Infortuni</th><th>Giorni di assenza</th><th>Media giorni</th><th>Persone coinvolte</th></tr></thead>
+              <tbody>
+                {anniI.map((a) => (
+                  <tr key={a.anno} style={{ cursor: "pointer", fontWeight: annoI === a.anno ? 700 : undefined }} onClick={() => setAnnoI(annoI === a.anno ? "" : a.anno)}>
+                    <td>{a.anno}</td><td>{a.n}</td><td>{a.gg}</td><td>{a.n ? (a.gg / a.n).toLocaleString("it-IT", { maximumFractionDigits: 1 }) : ""}</td><td>{a.pers}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot><tr><th>Totale</th><th>{anniI.reduce((t, a) => t + a.n, 0)}</th><th>{anniI.reduce((t, a) => t + a.gg, 0)}</th><th></th><th></th></tr></tfoot>
+            </table></div>
+          )}
+          <p className="tag" style={{ marginTop: 0 }}>Il riepilogo per anno conta tutti gli infortuni, anche di chi non è più in forza. Clic su un anno per filtrare l&apos;elenco.</p>
           {edI && (
             <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(190px,1fr))", gap: 12 }}>
@@ -514,12 +602,12 @@ export default function Sicurezza({ modifica }: { modifica: boolean }) {
           <div className="mx"><table>
             <thead><tr><th>Data</th><th>Dipendente</th><th>Luogo</th><th>Cosa è successo</th><th>Giorni</th></tr></thead>
             <tbody>
-              {inf.filter((x) => tutti || (x.dati.dip && byId[x.dati.dip] && inForza(byId[x.dati.dip]))).map((x) => (
+              {infVis.map((x) => (
                 <tr key={x.id} style={{ cursor: "pointer" }} onClick={() => setEdI(JSON.parse(JSON.stringify(x)))}>
                   <td>{fd(x.dati.data)}</td><td>{byId[x.dati.dip || ""]?.nome || x.dati.nome}</td><td>{x.dati.luogo}</td><td>{x.dati.desc}</td><td>{x.dati.giorni}</td>
                 </tr>
               ))}
-              {!inf.filter((x) => tutti || (x.dati.dip && byId[x.dati.dip] && inForza(byId[x.dati.dip]))).length && <tr><td colSpan={5} style={{ color: "var(--muted)" }}>Nessun infortunio registrato.</td></tr>}
+              {!infVis.length && <tr><td colSpan={5} style={{ color: "var(--muted)" }}>Nessun infortunio registrato.</td></tr>}
             </tbody>
           </table></div>
           {!edI && <div className="row" style={{ marginTop: 12 }}><button className="btn" onClick={() => setEdI({ id: "", dati: { data: oggi() } })}>Nuovo infortunio</button></div>}
