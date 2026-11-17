@@ -75,7 +75,7 @@ export function calcola(r, L, o) {
     ['Ore extra, sabato, domenica e festivi', h(B.ext), 'h', L.oreExtra],
     ['Ore di viaggio (fino a 8 ore/giorno)', h(B.vIn), 'h', L.viaggio],
     ['Ore di viaggio (oltre 8 ore/giorno)', h(B.vOl), 'h', L.viaggioOltre],
-    (furgone ? 'Rimborso km furgone' : 'Rimborso km auto') + (mz ? ' – ' + mz.testo : ''), o.km === false ? 0 : B.km, 'km', furgone ? L.kmFurgone : L.kmAuto],
+    [(furgone ? 'Rimborso km furgone' : 'Rimborso km auto') + (mz ? ' – ' + mz.testo : ''), o.km === false ? 0 : B.km, 'km', furgone ? L.kmFurgone : L.kmAuto],
     ['Indennità pasti (giorni × tecnici)', o.pasti === false ? 0 : B.pasti, 'n.', L.pasto],
     ...(conExtra ? [['Ore di assistenza da remoto', +o.oreRemote || 0, 'h', L.remoto], ['Ore di premontaggio/lavoro in Kimatic', +o.oreOfficina || 0, 'h', L.officina]] : []),
   ].map(([voce, qta, um, prezzo]) => ({ voce, qta, um, prezzo: +prezzo || 0, importo: eur(qta * (+prezzo || 0)) })).filter((x) => x.qta);
