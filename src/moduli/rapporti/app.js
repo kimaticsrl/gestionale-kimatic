@@ -226,7 +226,13 @@ function onField(e){
   if(el.type==='radio'&&!el.checked)return;
   setK(CUR,k,v);
   if(k==='cli.nome'&&e.type==='change'){const hit=Object.entries(S.clienti).find(([,c])=>c.nome.toLowerCase()===String(v).trim().toLowerCase());
-    if(hit){const[id,c]=hit;CUR.cli={id,nome:c.nome,indirizzo:CUR.cli.indirizzo||indCompleto(c),contatto:CUR.cli.contatto||c.contatto||''};const l=linguaCli(c);if(!CUR.lingua||CUR.lingua===CUR.linguaAuto||CUR.lingua==='IT'){CUR.lingua=l}CUR.linguaAuto=l}else CUR.cli.id='';queueSave();render();return}
+    // cliente cambiato: indirizzo, referente e macchina del cliente precedente non valgono più
+    const prima=CUR.cli.id||'',mDi=id=>{const c=S.clienti[id];return c?(c.commesse||[]).flatMap(x=>x.macchine||[]).some(m=>m.matr===CUR.matr):false};
+    const cambiato=hit?hit[0]!==prima:!!prima;
+    if(cambiato&&prima&&CUR.matr&&mDi(prima)){CUR.matr='';CUR.macDesc=''}
+    if(hit){const[id,c]=hit;CUR.cli={id,nome:c.nome,indirizzo:cambiato||!CUR.cli.indirizzo?indCompleto(c):CUR.cli.indirizzo,contatto:cambiato||!CUR.cli.contatto?(c.contatto||''):CUR.cli.contatto};const l=linguaCli(c);if(!CUR.lingua||CUR.lingua===CUR.linguaAuto||CUR.lingua==='IT'){CUR.lingua=l}CUR.linguaAuto=l}
+    else{CUR.cli.id='';if(cambiato){CUR.cli.indirizzo='';CUR.cli.contatto=''}}
+    queueSave();render();return}
   if(k==='lingua'||k==='mezzo'){queueSave();render();return}
   const mc=/^ric\.(\d+)\.cod$/.exec(k);if(mc){if(e.type==='input')suggerisciArticoli(v);else{queueSave();compilaParte(+mc[1],String(v));return}}
   if(k==='matr'&&e.type==='change'){const c=S.clienti[CUR.cli.id];const m=c&&(c.commesse||[]).flatMap(x=>x.macchine||[]).find(m=>m.matr===v);if(m&&!CUR.macDesc){CUR.macDesc=m.desc;const f=$('#f-mde');if(f)f.value=m.desc}}
