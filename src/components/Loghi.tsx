@@ -51,8 +51,9 @@ export default function Loghi() {
         {LOGHI.map((l) => (
           <div key={l.id} className="box" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <h2>{l.nome}</h2>
-            <div style={{ height: 140, display: "grid", placeItems: "center", background: "#fff", border: "1px solid var(--line)", borderRadius: 8, padding: 12 }}>
-              <img src={`/logo/${l.id}?v=${ver}`} alt={"Logo " + l.nome} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+            <div style={{ height: 140, display: "flex", alignItems: "center", justifyContent: "center", background: "#fff", border: "1px solid var(--line)", borderRadius: 8, padding: 12, overflow: "hidden", boxSizing: "border-box" }}>
+              {/* misure esplicite: dentro una griglia l'altezza in % non limitava l'immagine */}
+              <img src={`/logo/${l.id}?v=${ver}`} alt={"Logo " + l.nome} style={{ display: "block", width: "auto", height: "auto", maxWidth: "100%", maxHeight: 114, objectFit: "contain" }} />
             </div>
             <p className="tag" style={{ margin: 0 }}>Dove si usa: {l.dove}</p>
             <div className="row">
