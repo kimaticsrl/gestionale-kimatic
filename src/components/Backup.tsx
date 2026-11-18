@@ -24,12 +24,19 @@ export default function Backup() {
       for (const t of (tabelle ?? []) as string[]) {
         setStato(`Copio ${t}…`);
         const righe: unknown[] = [];
-        for (let da = 0; ; da += 1000) {
-          const { data, error } = await sb.rpc("backup_tabella", { p_tabella: t, p_da: da });
-          if (error) throw new Error(`${t}: ${error.message}`);
+        // a pagine: se una pagina è troppo pesante (documenti grandi) si riprova con meno righe
+        let n = 500;
+        for (let da = 0; ; ) {
+          const { data, error } = await sb.rpc("backup_tabella", { p_tabella: t, p_da: da, p_n: n });
+          if (error) {
+            if (/timeout|canceling statement/i.test(error.message) && n > 5) { n = Math.max(5, Math.floor(n / 4)); setStato(`Copio ${t} (${righe.length} righe)…`); continue; }
+            throw new Error(`${t}: ${error.message}`);
+          }
           const pagina = (data ?? []) as unknown[];
           righe.push(...pagina);
-          if (pagina.length < 1000) break;
+          if (pagina.length < n) break;
+          da += pagina.length;
+          if (righe.length >= 1000) setStato(`Copio ${t} (${righe.length} righe)…`);
         }
         riepilogo[t] = righe.length;
         zip.file(`dati/${t}.json`, JSON.stringify(righe, null, 1));
