@@ -57,3 +57,14 @@
 /* righe alternate (quelle senza colore della persona) per seguire meglio la riga */
 .mc table.tm tbody tr:nth-child(even):not([style]) td{background:color-mix(in srgb,var(--fg) 5%,var(--surface))}
 .mc table.tm tbody tr:not([style]):hover td{background:color-mix(in srgb,var(--accent) 10%,var(--surface))}
+/* righe compatte */
+.mc table.tm th{padding:4px 5px}
+.mc table.tm td{padding:2px 5px;line-height:1.25;vertical-align:middle}
+.mc table.tm td small{font-size:11.5px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px}
+.mc table.tm td input,.mc table.tm td select{font-size:12.5px;padding:2px 5px;margin:0;height:24px}
+.mc table.tm td.chi select{width:26px;min-width:26px;padding:0;color:transparent;cursor:pointer;border-radius:50%;height:22px;appearance:none;-webkit-appearance:none;background:var(--surface);border:1px dashed var(--line)}
+.mc table.tm td.chi select option{color:#17202a;background:#fff}
+.mc table.tm td.nt{min-width:200px}
+.mc table.tm td.nt input{width:100%}
+.mc table.tm td.nt small{display:block}
+.mc .pal{display:inline-block;width:14px;height:14px;border-radius:50%;border:1px solid rgba(0,0,0,.25)}

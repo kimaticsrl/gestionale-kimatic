@@ -10,7 +10,7 @@ export type Mancante = {
   codice: string; descr: string; qta: number | null; giac_mp: number | null; giac_mg: number | null; giac_grezzi: number | null;
   fornitore: string; cella: string; cdep: string; ultima_lav: string; ordini: Ordine[]; consegna: string | null;
   aperto: boolean; primo_il: string; visto_il: string; chiuso_il: string | null;
-  nota: string; responsabile: string | null; prevista: string | null; priorita: "" | "alta" | "bassa";
+  nota: string; nota_il: string | null; responsabile: string | null; prevista: string | null; priorita: "" | "alta" | "bassa";
 };
 type Commessa = { commessa: string; cliente: string; montaggio: string | null; note: string; nascosta: boolean };
 type MacchinaPiano = { code: string; desc: string; s: string | null; e: string | null; done: boolean; chi: string | null };
@@ -132,7 +132,8 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
 
   // ---------- salvataggi ----------
   async function salvaRiga(m: Mancante, campi: Partial<Pick<Mancante, "nota" | "responsabile" | "prevista" | "priorita">>) {
-    setRighe((L) => L.map((x) => (x.id === m.id ? { ...x, ...campi } : x)));
+    const ora = "nota" in campi ? { nota_il: campi.nota ? new Date().toISOString() : null } : {};
+    setRighe((L) => L.map((x) => (x.id === m.id ? { ...x, ...campi, ...ora } : x)));
     const { error } = await sb.from("mancanti").update(campi).eq("id", m.id);
     if (error) { setMsg("Non salvato: " + error.message); carica(); }
   }
@@ -198,7 +199,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
     const ExcelJS = (await import("exceljs")).default;
     const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet("Mancanti");
     ws.columns = [["Commessa", 12], ["Cliente", 20], ["Inizio montaggio", 12], ["Matricola", 15], ["Macchina", 30], ["OP", 16], ["Gruppo (OP)", 30], ["Codice", 16], ["Descrizione", 36], ["Q.tà", 7], ["Giacenza", 9],
-      ["Stato", 20], ["Fornitore", 24], ["Ordini", 26], ["Consegna ordine", 12], ["Cella lavorazione", 20], ["C/deposito", 18], ["Data prevista", 12], ["Chi lo segue", 18], ["Priorità", 8], ["Note", 36]]
+      ["Stato", 20], ["Fornitore", 24], ["Ordini", 26], ["Consegna ordine", 12], ["Cella lavorazione", 20], ["C/deposito", 18], ["Data prevista", 12], ["Chi lo segue", 18], ["Note", 36], ["Nota aggiornata il", 14]]
       .map(([header, width]) => ({ header: String(header), width: Number(width) }));
     ws.getRow(1).font = { bold: true };
     const nomeP = Object.fromEntries(persone.map((p) => [p.id, p.nome]));
@@ -206,13 +207,13 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
       const rit = ritardo(m, montaggioDi(m)), mo = montaggioDi(m);
       const row = ws.addRow([m.commessa, clienteDi(m.commessa), mo ? new Date(mo + "T12:00:00") : "", m.matricola, m.macchina, m.op, m.op_descr, m.codice, m.descr, m.qta, m.giac_mp,
         nomeStato(statoDi(m)), m.fornitore, m.ordini.map((o) => o.num).join(", "), m.consegna ? new Date(m.consegna + "T12:00:00") : "", m.cella, m.cdep,
-        m.prevista ? new Date(m.prevista + "T12:00:00") : "", nomeP[personaDi(m) || ""] || "", m.priorita, m.nota]);
+        m.prevista ? new Date(m.prevista + "T12:00:00") : "", nomeP[personaDi(m) || ""] || "", m.nota, m.nota_il ? new Date(m.nota_il) : ""]);
       const col = coloreDi(m);
       if (col) row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + col.slice(1).toUpperCase() } };
       if (col && scuro(col)) row.font = { color: { argb: "FFFFFFFF" } };
       if (rit) row.font = { ...(row.font || {}), bold: true, color: col && scuro(col) ? { argb: "FFFFFFFF" } : { argb: "FFB42318" } };
     }
-    ["C", "O", "R"].forEach((k) => (ws.getColumn(k).numFmt = "dd/mm/yyyy"));
+    ["C", "O", "R", "U"].forEach((k) => (ws.getColumn(k).numFmt = "dd/mm/yyyy"));
     ws.autoFilter = { from: "A1", to: "U1" }; ws.views = [{ state: "frozen", ySplit: 1 }];
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([await wb.xlsx.writeBuffer()], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
@@ -227,11 +228,11 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
   };
   const tabella = (L: Mancante[], o: { commessa?: boolean; macchina?: boolean } = {}) => (
     <div className="mx"><table className="tm">
-      <thead><tr>{o.commessa && <th>Commessa</th>}{o.macchina !== false && <th>Macchina / gruppo</th>}<th>Codice</th><th className="n">Q.tà</th><th className="n hide-s">Giac.</th><th>Stato</th><th>Fornitore / ordine</th><th>Attesa</th>{modifica || gestisce ? <th>Gestione</th> : <th>Note</th>}</tr></thead>
+      <thead><tr>{o.commessa && <th>Commessa</th>}{o.macchina !== false && <th>Macchina / gruppo</th>}<th>Codice</th><th className="n">Q.tà</th><th className="n hide-s">Giac.</th><th>Stato</th><th>Fornitore / ordine</th><th>Attesa</th><th>Segue</th><th>Prevista</th><th>Nota</th></tr></thead>
       <tbody>{L.map((m) => {
         const st = statoDi(m), rit = ritardo(m, montaggioDi(m)), ed = modifica || gestisce;
         return (
-          <tr key={m.id} className={(rit ? "rit " : "") + (m.priorita === "alta" ? "alta" : "") + (coloreDi(m) && scuro(coloreDi(m)!) ? " scura" : "")} style={coloreDi(m) ? { background: coloreDi(m) } : undefined}>
+          <tr key={m.id} className={(rit ? "rit " : "") + (coloreDi(m) && scuro(coloreDi(m)!) ? " scura" : "")} style={coloreDi(m) ? { background: coloreDi(m) } : undefined}>
             {o.commessa && <td><b>{m.commessa}</b><small>{clienteDi(m.commessa)}</small></td>}
             {o.macchina !== false && <td><span className="mono">{m.op}</span><small>{m.op_descr || m.macchina}</small></td>}
             <td><span className="mono">{m.codice}</span><small>{m.descr}</small></td>
@@ -240,12 +241,13 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
             <td><span className={"st s-" + st}>{nomeStato(st)}</span>{m.cella && <small>{m.cella}</small>}{m.cdep && <small>{m.cdep}</small>}</td>
             <td>{m.fornitore}{m.ordini.length > 0 && <small>{m.ordini.map((x) => `OA ${x.num}${x.consegna ? " · " + fd(x.consegna) : ""}${x.fornitore && x.fornitore !== m.fornitore ? " · " + x.fornitore : ""}`).join("; ")}</small>}</td>
             <td className="mono">{fd(attesa(m))}{rit && <small className="r">{rit === "scaduta" ? "data passata" : "dopo il montaggio"}</small>}</td>
-            <td className="gest">{ed ? <>
-              <input type="date" value={m.prevista || ""} title="Data prevista (se diversa dalla consegna dell'ordine)" aria-label="Data prevista" onChange={(e) => salvaRiga(m, { prevista: e.target.value || null })} />
-              <select value={m.responsabile || ""} aria-label="Chi lo segue" onChange={(e) => salvaRiga(m, { responsabile: e.target.value || null })}><option value="">{personaDi(m) ? "↳ " + nomeDi(personaDi(m)) : "chi lo segue…"}</option>{persone.map((p) => <option key={p.id} value={p.id}>{p.nome}{p.profilo === me ? " (tu)" : ""}</option>)}</select>
-              <select value={m.priorita} aria-label="Priorità" onChange={(e) => salvaRiga(m, { priorita: e.target.value as Mancante["priorita"] })}><option value="">priorità</option><option value="alta">alta</option><option value="bassa">bassa</option></select>
-              <input defaultValue={m.nota} placeholder="nota" aria-label="Nota" onBlur={(e) => e.target.value !== m.nota && salvaRiga(m, { nota: e.target.value })} />
-            </> : <>{m.nota}{m.prevista && <small>prevista {fd(m.prevista)}</small>}{personaDi(m) && <small>segue {nomeDi(personaDi(m))}</small>}</>}</td>
+            <td className="chi">{(() => { const p = personaDi(m), c = p ? colori[p] : undefined; return ed
+              ? <select value={m.responsabile || ""} aria-label="Chi lo segue" title={p ? nomeDi(p) + (m.responsabile ? "" : " (dall'assegnazione)") : "Chi lo segue"} onChange={(e) => salvaRiga(m, { responsabile: e.target.value || null })} style={c ? { background: c, borderColor: "rgba(0,0,0,.35)" } : undefined}>
+                  <option value="">{p && !m.responsabile ? "↳ " + nomeDi(p) : "—"}</option>{persone.map((x) => <option key={x.id} value={x.id}>{x.nome}</option>)}</select>
+              : <i className="pal" style={{ background: c || "transparent" }} title={nomeDi(p)} />; })()}</td>
+            <td>{ed ? <input type="date" value={m.prevista || ""} title="Data prevista (se diversa dalla consegna dell'ordine)" aria-label="Data prevista" onChange={(e) => salvaRiga(m, { prevista: e.target.value || null })} /> : <span className="mono">{fd(m.prevista)}</span>}</td>
+            <td className="nt">{ed ? <input defaultValue={m.nota} placeholder="nota" aria-label="Nota" onBlur={(e) => e.target.value !== m.nota && salvaRiga(m, { nota: e.target.value })} /> : m.nota}
+              {m.nota && m.nota_il && <small title={"Nota aggiornata il " + quando(m.nota_il)}>agg. {fd(m.nota_il.slice(0, 10))}</small>}</td>
           </tr>
         );
       })}</tbody>
