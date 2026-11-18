@@ -31,8 +31,9 @@ type Stato = (typeof STATI)[number][0];
 // celle di lavorazione interne a Kimatic (le altre «celle» di SAM sono terzisti)
 const CELLA_INTERNA = /^(AREA |TORN|FRES|CONTROLLO|PRODUZIONE KIMATIC|MONTAGGIO|MAGAZZINO|STAMPANT|PIEGATUR|SALDATUR|VERNICIAT|ASSEMBLA|COLLAUD)/i;
 export const cellaInterna = (c: string) => !!c && CELLA_INTERNA.test(c.trim());
-// costruttivi (20., 21., 90.) e gruppi (21.5…): si producono in Kimatic o da terzisti
-const costruttivo = (c: string) => /^(2[01]|90)\./.test(c);
+// costruttivi (20., 21., 90.), gruppi (21.5…) e sottoassiemi della macchina (10.–12.): si producono in Kimatic o da terzisti
+const costruttivo = (c: string) => /^(1[0-2]|2[01]|90)\./.test(c);
+const assieme = (c: string) => /^(21\.50[0-5]|1[0-2]\.)/.test(c);
 export const gruppo = (c: string) => /^21\.50[0-5]/.test(c);
 const oaFornitore = (m: Mancante) => m.ordini.some((o) => !/grezz/i.test(o.tipo || ""));
 // fase di un'OP già fatta (gli stati di SAM: chiusa, terminata, evasa, completata…)
@@ -209,7 +210,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
   const filtroAttivo = !!(q || filtroStato || soloRitardi || soloRipetuti || filtroComm || filtroForn || filtroPers || lista);
   const nomeLista = () => ["Mancanti", lista && LISTE[lista]?.l, filtroComm, filtroForn, filtroPers && (filtroPers === "-" ? "senza persona" : nomeDi(filtroPers)), filtroStato && nomeStato(filtroStato)].filter(Boolean).join(" - ");
   const segnoFigli = (m: Mancante) => {
-    if (!gruppo(m.codice)) return null;
+    if (!assieme(m.codice)) return null;
     const F = figliDi(m), o = opDi(m), d = distinte[m.matricola + "|" + m.codice];
     if (F.length) return <span className="dup fg" title={`Figli del gruppo ancora da prelevare (${F.length}):\n` + F.map((x) => `${x.codice} ${x.descr} · q.tà ${q2(x.qta)} · ${nomeStato(stDi(x))}`).join("\n")}><i>{F.length} figli mancanti</i></span>;
     const elenco = d ? `\n\nDistinta (Controllo di gestione, OP ${d.op}):\n` + d.righe.map((r) => `${r[0]} ${r[1]} · q.tà ${r[2] ?? ""}`).join("\n") : "";
@@ -309,7 +310,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
     const nomeP = Object.fromEntries(persone.map((p) => [p.id, p.nome]));
     const ordinati = lista === "sollecitare" ? [...L].sort((a, b) => (a.fornitore || "~").localeCompare(b.fornitore || "~") || (attesa(a) || "9999").localeCompare(attesa(b) || "9999")) : L;
     for (const m of ordinati) {
-      const rit = ritDi(m), mo = montaggioDi(m), o = opDi(m), f = faseDi(m), F = gruppo(m.codice) ? figliDi(m) : null;
+      const rit = ritDi(m), mo = montaggioDi(m), o = opDi(m), f = faseDi(m), F = assieme(m.codice) ? figliDi(m) : null;
       const row = ws.addRow([m.commessa, clienteDi(m.commessa), mo ? new Date(mo + "T12:00:00") : "", m.matricola, m.macchina, m.op, m.op_descr, m.codice, m.descr, m.qta, m.giac_mp,
         nomeStato(stDi(m)), m.fornitore, m.ordini.map((o) => o.num).join(", "), m.consegna ? new Date(m.consegna + "T12:00:00") : "", cellaOra(m), m.cdep,
         m.prevista ? new Date(m.prevista + "T12:00:00") : "", nomeP[personaDi(m) || ""] || "", m.nota, m.nota_il ? new Date(m.nota_il) : "",
