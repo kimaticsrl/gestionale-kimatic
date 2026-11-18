@@ -122,8 +122,15 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
   const clienteDi = (c: string) => piano[norm(c)]?.cliente || comm[c]?.cliente || "";
   const nelPiano = (c: string) => !!piano[norm(c)] && !piano[norm(c)].chiusa;
   // chi segue il codice: scelto sulla riga, altrimenti dalle assegnazioni (cella, poi fornitore)
+  // per le celle vale anche una parte del nome (es. «TORNI» per tutti i torni), la più lunga che corrisponde
+  const cellaDi = (cella: string) => {
+    if (!cella) return null;
+    const C = cella.toUpperCase();
+    return assegn.find((a) => a.tipo === "cella" && a.valore === cella)?.persona
+      || assegn.filter((a) => a.tipo === "cella" && C.includes(a.valore.toUpperCase())).sort((a, b) => b.valore.length - a.valore.length)[0]?.persona || null;
+  };
   const personaDi = (m: Mancante) => m.responsabile
-    || (m.cella && assegn.find((a) => a.tipo === "cella" && a.valore === m.cella)?.persona)
+    || cellaDi(m.cella)
     || assegn.find((a) => a.tipo === "fornitore" && (a.valore === m.fornitore || m.ordini.some((o) => o.fornitore === a.valore)))?.persona || null;
   const coloreDi = (m: Mancante) => (statoDi(m) === "magazzino" ? colori.giacenti : (() => { const p = personaDi(m); return p ? colori[p] : undefined; })());
   const nomeDi = (id: string | null) => persone.find((p) => p.id === id)?.nome || "";
@@ -369,9 +376,17 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
         </section>
         <section className="box" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <h2 style={{ margin: 0 }}>Celle di lavorazione <small className="nota">{celle.length}</small></h2>
-          {!celle.length ? <p className="nota">Le celle arriveranno da SAM appena aggiungiamo la vista con cella di lavorazione e conto deposito.</p>
-            : <div className="mx"><table className="tm"><thead><tr><th>Cella</th><th className="n">Mancanti</th><th>Chi la segue</th></tr></thead>
-              <tbody>{celle.map(([v, n]) => <tr key={v}><td>{v}</td><td className="n mono">{n}</td><td>{sel("cella", v)}</td></tr>)}</tbody></table></div>}
+          <p className="nota">Puoi assegnare una cella intera oppure una parte del nome: «TORNI» vale per tutti i torni (CNC e tradizionali), «FRES» per frese e fresatrici, «TAGLIO» per l&apos;area taglio. Le regole valgono anche per le celle che arriveranno dopo.</p>
+          {(() => {
+            const regole = assegn.filter((a) => a.tipo === "cella" && !celle.some(([v]) => v === a.valore)).sort((a, b) => a.valore.localeCompare(b.valore));
+            return <div className="mx"><table className="tm"><thead><tr><th>Cella o parte del nome</th><th className="n">Mancanti</th><th>Chi la segue</th></tr></thead>
+              <tbody>
+                {regole.map((a) => { const n = aperti.filter((m) => visibileComm(m.commessa) && m.cella.toUpperCase().includes(a.valore.toUpperCase())).length;
+                  return <tr key={"r" + a.valore}><td>contiene «{a.valore}»</td><td className="n mono">{n}</td><td>{sel("cella", a.valore)}</td></tr>; })}
+                {celle.map(([v, n]) => <tr key={v}><td>{v}{!assegn.some((a) => a.tipo === "cella" && a.valore === v) && cellaDi(v) && <small>da regola: {nomeDi(cellaDi(v))}</small>}</td><td className="n mono">{n}</td><td>{sel("cella", v)}</td></tr>)}
+                {modifica && <tr><td colSpan={3}><input placeholder="+ cella o parte del nome (es. TORNI), poi Invio" style={{ width: 300 }} onKeyDown={(e) => { const t = e.target as HTMLInputElement; if (e.key === "Enter" && t.value.trim()) { const v = t.value.trim().toUpperCase(); if (!assegn.some((a) => a.tipo === "cella" && a.valore === v)) setAssegn((L) => [...L, { tipo: "cella", valore: v, persona: "" }]); t.value = ""; } }} /></td></tr>}
+              </tbody></table></div>;
+          })()}
         </section>
       </div>
     );
