@@ -9,6 +9,7 @@ export type Gestione = {
   invio_data?: string; invio_rif?: string; risposta?: string; risposta_data?: string; azione_fornitore?: string; scadenza_risposta?: string;
   ore?: string; costo_ora?: string; costo_materiale?: string; costo_trasporto?: string; addebito?: string; nota_credito?: string;
   verifica?: string; chiusa_il?: string; chiusa_da?: string;
+  in_carico?: string; // id dell'utente che ha in gestione la NC
 };
 export type Riga = { codice: string; descrizione: string; um: string; q_ricevuta: string; q_nc: string };
 export type Fornitore = { codice: string; nome: string; dati: { indirizzo?: string; citta?: string; provincia?: string; piva?: string; telefono?: string; contatto?: string } };
@@ -57,6 +58,7 @@ export default function NonConformita({ me, nome, gestisce, modifica }: Props) {
   const [lista, setLista] = useState<NC[]>([]);
   const [menu, setMenu] = useState<{ x: number; y: number; nc: NC } | null>(null);
   const [nomi, setNomi] = useState<Record<string, string>>({});
+  const [attivi, setAttivi] = useState<string[]>([]);
   const [carico, setCarico] = useState(true);
   const [filtro, setFiltro] = useState("attive");
   const [q, setQ] = useState("");
@@ -92,7 +94,11 @@ export default function NonConformita({ me, nome, gestisce, modifica }: Props) {
       setAnagForn(tutti);
     })();
     sb.from("articoli").select("codice", { count: "exact", head: true }).then(({ count }) => setTotArticoli(count ?? 0));
-    sb.from("profili").select("id,nome,email").then(({ data }) => setNomi(Object.fromEntries((data ?? []).map((p: { id: string; nome: string | null; email: string }) => [p.id, p.nome || p.email]))));
+    sb.from("profili").select("id,nome,email,attivo").then(({ data }) => {
+      const L = (data ?? []) as { id: string; nome: string | null; email: string; attivo: boolean }[];
+      setNomi(Object.fromEntries(L.map((p) => [p.id, p.nome || p.email])));
+      setAttivi(L.filter((p) => p.attivo && p.nome !== "Utente generico").map((p) => p.id));
+    });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // anteprime delle foto della NC aperta
@@ -108,13 +114,14 @@ export default function NonConformita({ me, nome, gestisce, modifica }: Props) {
   const fornitori = [...new Set([...anagForn.map((f) => f.nome), ...lista.map((x) => x.dati.fornitore?.trim()).filter(Boolean) as string[]])].sort((a, b) => a.localeCompare(b));
   const fornDi = (d: DatiNC) => anagForn.find((f) => f.codice === d.fornitore_codice) || anagForn.find((f) => f.nome.toLowerCase() === (d.fornitore || "").trim().toLowerCase());
   const visibili = lista.filter((x) => {
+    if (filtro === "mie") return x.dati.gestione?.in_carico === me && !["chiusa", "annullata"].includes(x.stato);
     if (filtro === "attive" && ["chiusa", "annullata"].includes(x.stato)) return false;
     if (filtro !== "attive" && filtro !== "tutte" && x.stato !== filtro) return false;
     if (anno && String(x.anno) !== anno) return false;
     const t = q.trim().toLowerCase();
     return !t || [x.numero, x.dati.fornitore, x.dati.commessa, x.dati.ddt, x.dati.ordine, x.dati.descrizione, ...righeDi(x.dati).flatMap((r) => [r.codice, r.descrizione])].join(" ").toLowerCase().includes(t);
   });
-  const conta = (f: string) => lista.filter((x) => (f === "attive" ? !["chiusa", "annullata"].includes(x.stato) : f === "tutte" ? true : x.stato === f)).length;
+  const conta = (f: string) => lista.filter((x) => (f === "mie" ? x.dati.gestione?.in_carico === me && !["chiusa", "annullata"].includes(x.stato) : f === "attive" ? !["chiusa", "annullata"].includes(x.stato) : f === "tutte" ? true : x.stato === f)).length;
 
   // chi può modificare cosa
   const mia = (x: NC) => x.creato_da === me;
@@ -180,9 +187,10 @@ export default function NonConformita({ me, nome, gestisce, modifica }: Props) {
     const g = { ...(x.dati.gestione || {}) };
     if (stato === "chiusa" && !g.chiusa_il) { g.chiusa_il = oggi(); g.chiusa_da = me; }
     if (stato !== "chiusa") { delete g.chiusa_il; delete g.chiusa_da; }
+    if (stato !== "aperta" && !g.in_carico) g.in_carico = me; // chi la mette in gestione la prende in carico
     const { error } = await sb.from("nc").update({ stato, dati: { ...x.dati, gestione: g } }).eq("id", x.id);
     setMsg(error ? "Stato non cambiato: " + error.message : `${x.numero}: stato cambiato in «${nomeStato(stato)}».`);
-    if (!error && stato === "chiusa") fetch("/api/notifiche", { method: "POST" }).catch(() => {});
+    if (!error) fetch("/api/notifiche", { method: "POST" }).catch(() => {});
     if (!error) await carica();
   }
   async function salva(chiudi = false) {
@@ -196,6 +204,7 @@ export default function NonConformita({ me, nome, gestisce, modifica }: Props) {
       const g = { ...(dati.gestione || {}) };
       if (stato === "chiusa" && !g.chiusa_il) { g.chiusa_il = oggi(); g.chiusa_da = me; }
       if (stato !== "chiusa") { delete g.chiusa_il; delete g.chiusa_da; }
+      if (stato !== "aperta" && !g.in_carico) g.in_carico = me;
       dati.gestione = g;
     } else { stato = ed.id ? ed.stato : "aperta"; } // la parte di gestione resta com'era
     const numero = ed.numero.trim().toUpperCase();
@@ -213,7 +222,7 @@ export default function NonConformita({ me, nome, gestisce, modifica }: Props) {
       return;
     }
     const salvata = r.data as NC;
-    if (!ed.id || stato === "chiusa") fetch("/api/notifiche", { method: "POST" }).catch(() => {}); // notifiche in coda
+    if (!ed.id || stato === "chiusa" || gestisce) fetch("/api/notifiche", { method: "POST" }).catch(() => {}); // notifiche in coda (anche l'assegnazione)
     setMsg(`Non conformità ${salvata.numero} salvata.`);
     await carica();
     if (chiudi) setEd(null); else setEd(JSON.parse(JSON.stringify(salvata)));
@@ -392,6 +401,11 @@ export default function NonConformita({ me, nome, gestisce, modifica }: Props) {
             <div className="fl">
               <label className="f">Stato<select value={ed.stato} disabled={!gestisce} onChange={(e) => setEd({ ...ed, stato: e.target.value })}>
                 {STATI.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
+              <label className="f">In gestione a<select value={g.in_carico || ""} disabled={!gestisce} onChange={(e) => setG("in_carico", e.target.value || undefined)}>
+                <option value="">— nessuno —</option>
+                {attivi.map((id) => [id, nomi[id]] as const).sort((a, b) => a[1].localeCompare(b[1])).map(([id, nm]) => <option key={id} value={id}>{nm}{id === me ? " (tu)" : ""}</option>)}
+                {g.in_carico && !attivi.includes(g.in_carico) && <option value={g.in_carico}>{nomi[g.in_carico] || "utente"} (non più attivo)</option>}</select>
+                {gestisce && <small className="nota">riceve una mail quando gli viene assegnata</small>}</label>
               <label className="f">Trattamento deciso<select value={g.trattamento || ""} disabled={!gestisce} onChange={(e) => setG("trattamento", e.target.value)}>
                 <option value="">—</option>{TRATTAMENTI.map((t) => <option key={t}>{t}</option>)}</select></label>
               <label className="f" style={{ justifyContent: "flex-end" }}><span className="ck"><input type="checkbox" style={{ width: "auto" }} checked={!!g.segregato} disabled={!gestisce} onChange={(e) => setG("segregato", e.target.checked)} /> Materiale segregato / bloccato</span></label>
@@ -451,7 +465,7 @@ export default function NonConformita({ me, nome, gestisce, modifica }: Props) {
       {msg && <div className="msg" role="status">{msg}</div>}
       <div className="box" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <div className="stati" role="group" aria-label="Filtra per stato">
-          {[["attive", "Da chiudere"], ...STATI, ["tutte", "Tutte"]].map(([k, l]) => (
+          {[["attive", "Da chiudere"], ...(conta("mie") || filtro === "mie" ? [["mie", "In gestione a me"]] : []), ...STATI, ["tutte", "Tutte"]].map(([k, l]) => (
             <button key={k} type="button" aria-pressed={filtro === k} onClick={() => setFiltro(k)}>{l} <span style={{ opacity: .6 }}>{conta(k)}</span></button>
           ))}
         </div>
@@ -474,7 +488,7 @@ export default function NonConformita({ me, nome, gestisce, modifica }: Props) {
                   {(() => { const rr = righeDi(x.dati), r0 = rr[0]; return <>
                     <td className="hide-s">{r0?.codice}{rr.length > 1 && <b> +{rr.length - 1}</b>}<small>{r0?.descrizione}</small></td>
                     <td className="hide-s">{x.dati.tipo}<small>{rr.length === 1 && r0.q_nc ? `${r0.q_nc} ${r0.um || ""} su ${r0.q_ricevuta || "?"}` : rr.length > 1 ? `${rr.length} articoli` : ""}</small></td></>; })()}
-                  <td><span className={"st st-" + x.stato}>{nomeStato(x.stato)}</span>{x.dati.gestione?.trattamento && <small>{x.dati.gestione.trattamento}</small>}</td>
+                  <td><span className={"st st-" + x.stato}>{nomeStato(x.stato)}</span>{x.dati.gestione?.in_carico && <small>a {x.dati.gestione.in_carico === me ? "te" : nomi[x.dati.gestione.in_carico] || "—"}</small>}{x.dati.gestione?.trattamento && <small>{x.dati.gestione.trattamento}</small>}</td>
                   <td className="hide-s">{compilatore(x)}{mia(x) && <small>tu</small>}</td>
                 </tr>
               ))}
