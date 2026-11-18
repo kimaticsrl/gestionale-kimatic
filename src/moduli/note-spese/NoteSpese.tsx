@@ -361,9 +361,10 @@ export default function NoteSpese({ me, nome, gestisce, modifica }: Props) {
             </div>
           )}
           <label className="f w">Note<textarea value={es.note || ""} disabled={roS} onChange={(e) => setEs({ ...es, note: e.target.value })} /></label>
-          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14 }}>
+          {/* se addebitarla al cliente lo decide l'Amministrazione (proposta in base alla categoria) */}
+          {gestisce && <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14 }}>
             <input type="checkbox" checked={!!es.fatt} disabled={roS} onChange={(e) => setEs({ ...es, fatt: e.target.checked })} /> Da addebitare al cliente
-          </label>
+          </label>}
           {!roS && <div className="azioni">
             <button className="btn" disabled={lavoro} onClick={salvaSpesa}>{lavoro ? "Attendi…" : "Salva la spesa"}</button>
             {(ed.dati.spese || []).some((s) => s.id === es.id) && <button className="btn sec" disabled={lavoro} onClick={togliSpesa}>Elimina la spesa</button>}
@@ -431,7 +432,7 @@ export default function NoteSpese({ me, nome, gestisce, modifica }: Props) {
                     <span className="thumb">{f0 ? (foto[f0] ? <img src={foto[f0]} alt="" /> : "…") : "senza foto"}</span>
                     <span style={{ minWidth: 0 }}>
                       <b>{nomeCat(s.cat)}</b>{s.esercente && " – " + s.esercente}<br />
-                      <span className="nota">{[fd(s.data), mz && "⛽ " + mz, s.fatt && "da addebitare"].filter(Boolean).join(" · ")}</span><br />
+                      <span className="nota">{[fd(s.data), mz && "⛽ " + mz, gestisce && s.fatt && "da addebitare"].filter(Boolean).join(" · ")}</span><br />
                       {p ? <span className="tag-pers">{s.metodo === "contanti" ? "Contanti" : "Carta personale"} · da rimborsare</span> : <span className="nota">{nomeMetodo(s.metodo, ed.dati.carta)}</span>}{cartaDiversa(s, ed.dati.carta) && <> <span className="tag-pers">carta scontrino ••{s.cartaLetta}</span></>}
                     </span>
                     <span className="imp">{imp(s.importo, s.valuta)}{s.valuta !== "EUR" && <small>{e1 != null ? "≈ " + imp(e1) : "senza cambio"}</small>}</span>
@@ -455,7 +456,7 @@ export default function NoteSpese({ me, nome, gestisce, modifica }: Props) {
               <span className="big"><b>Totale in euro</b></span><span className="v big">{imp(t.euro)}</span>
               <span className={t.rimborsare ? "pers" : ""}>Da rimborsare (carta personale / contanti)</span><span className={"v" + (t.rimborsare ? " pers" : "")}>{imp(t.rimborsare)}</span>
               <span>Pagato con carta aziendale</span><span className="v">{imp(t.aziendale)}</span>
-              <span>Da addebitare al cliente</span><span className="v">{imp(t.fatturabile)}</span>
+              {gestisce && <><span>Da addebitare al cliente</span><span className="v">{imp(t.fatturabile)}</span></>}
             </div>
             {valuteDi(spese).some((v) => v !== "EUR") && (
               <p className="nota">
