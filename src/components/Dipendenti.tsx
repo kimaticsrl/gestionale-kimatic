@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
-type Dati = { inq?: string; finecontr?: string; indirizzo?: string; cellaz?: string; carta?: string; nome?: string; cc?: string; mansione?: string; contratto?: string; liv?: string; ral?: number | null; assunzione?: string; scadenza?: string; nascita?: string; luogo?: string; sesso?: string; cf?: string; email?: string; telefono?: string; pid?: string; note?: string };
+type Dati = { inq?: string; finecontr?: string; indirizzo?: string; cellaz?: string; emailaz?: string; carta?: string; nome?: string; cc?: string; mansione?: string; contratto?: string; liv?: string; ral?: number | null; assunzione?: string; scadenza?: string; nascita?: string; luogo?: string; sesso?: string; cf?: string; email?: string; telefono?: string; pid?: string; note?: string };
 type Dip = { id: string; dati: Dati; attivo: boolean };
 type Persona = { id: string; name: string };
 type Pers = { n?: string; cc?: string; liv?: string; ral?: number; att?: number; pid?: string };
@@ -48,7 +48,7 @@ export default function Dipendenti({ modifica }: { modifica: boolean }) {
   useEffect(() => { carica(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const nomePiano = (pid?: string) => persone.find((p) => p.id === pid)?.name || "";
-  const vis = lista.filter((x) => (tutti || inForzaD(x)) && (!q || norm([x.dati.nome, x.dati.cc, x.dati.mansione, x.dati.email, nomePiano(x.dati.pid)].join(" ")).includes(norm(q))));
+  const vis = lista.filter((x) => (tutti || inForzaD(x)) && (!q || norm([x.dati.nome, x.dati.cc, x.dati.mansione, x.dati.email, x.dati.emailaz, nomePiano(x.dati.pid)].join(" ")).includes(norm(q))));
   const VAL: Record<string, (x: Dip) => string | number> = {
     nome: (x) => norm(x.dati.nome), cc: (x) => norm(x.dati.cc), mansione: (x) => norm(x.dati.mansione), contratto: (x) => norm(x.dati.contratto),
     liv: (x) => norm(x.dati.liv).padStart(4, "0"), ral: (x) => Number(x.dati.ral) || 0, assunzione: (x) => x.dati.assunzione || "", piano: (x) => norm(nomePiano(x.dati.pid)),
@@ -128,9 +128,9 @@ export default function Dipendenti({ modifica }: { modifica: boolean }) {
   }
 
   function csv() {
-    const H = ["Nome e cognome", "Reparto / centro di costo", "Mansione", "Inquadramento", "Contratto", "Livello", "RAL", "Assunzione", "Scadenza contratto", "Fine rapporto", "Data di nascita", "Luogo di nascita", "Sesso", "Codice fiscale", "E-mail", "Telefono", "Cellulare aziendale", "Indirizzo", "Persona nel Piano", "In forza", "Note"];
+    const H = ["Nome e cognome", "Reparto / centro di costo", "Mansione", "Inquadramento", "Contratto", "Livello", "RAL", "Assunzione", "Scadenza contratto", "Fine rapporto", "Data di nascita", "Luogo di nascita", "Sesso", "Codice fiscale", "E-mail personale", "Telefono personale", "Telefono aziendale", "E-mail aziendale", "Indirizzo", "Persona nel Piano", "In forza", "Note"];
     const c = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const L = vis.map((x) => { const d = x.dati; return [d.nome, d.cc, d.mansione, d.inq, d.contratto, d.liv, d.ral != null ? String(d.ral).replace(".", ",") : "", fd(d.assunzione), fd(d.finecontr), fd(d.scadenza), fd(d.nascita), d.luogo, d.sesso, d.cf, d.email, d.telefono, d.cellaz, d.indirizzo, nomePiano(d.pid), inForzaD(x) ? "sì" : "no", d.note].map(c).join(";"); });
+    const L = vis.map((x) => { const d = x.dati; return [d.nome, d.cc, d.mansione, d.inq, d.contratto, d.liv, d.ral != null ? String(d.ral).replace(".", ",") : "", fd(d.assunzione), fd(d.finecontr), fd(d.scadenza), fd(d.nascita), d.luogo, d.sesso, d.cf, d.email, d.telefono, d.cellaz, d.emailaz, d.indirizzo, nomePiano(d.pid), inForzaD(x) ? "sì" : "no", d.note].map(c).join(";"); });
     const url = URL.createObjectURL(new Blob(["﻿" + [H.map(c).join(";"), ...L].join("\r\n")], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a"); a.href = url; a.download = `Anagrafica_dipendenti_${new Date().toLocaleDateString("sv-SE")}.csv`; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 3000);
@@ -182,9 +182,10 @@ export default function Dipendenti({ modifica }: { modifica: boolean }) {
               <select value={ed.dati.sesso || ""} disabled={!modifica} onChange={(e) => set("sesso", e.target.value)}><option value="">—</option><option value="M">M</option><option value="F">F</option></select>
             </label>
             {campo("cf", "Codice fiscale")}
-            {campo("email", "E-mail", "email")}
-            {campo("telefono", "Telefono")}
-            {campo("cellaz", "Cellulare aziendale")}
+            {campo("emailaz", "E-mail aziendale", "email")}
+            {campo("email", "E-mail personale", "email")}
+            {campo("cellaz", "Telefono aziendale", "tel")}
+            {campo("telefono", "Telefono personale", "tel")}
             {campo("carta", "Carta aziendale (ultime 4 cifre)")}
             {campo("indirizzo", "Indirizzo")}
             <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13 }}>Persona nel Piano produzione
