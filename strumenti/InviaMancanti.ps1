@@ -12,7 +12,7 @@
      powershell -ExecutionPolicy Bypass -File InviaMancanti.ps1
   Registro degli invii: %APPDATA%\KimaticMancanti\invio.log
 #>
-param([switch]$Configura, [switch]$Installa, [switch]$Disinstalla)
+param([switch]$Configura, [switch]$Installa, [switch]$Disinstalla, [switch]$Esplora)
 
 $ErrorActionPreference = 'Stop'
 $Cartella = Join-Path $env:APPDATA 'KimaticMancanti'
@@ -88,6 +88,21 @@ try {
       exit $LASTEXITCODE
     }
     throw
+  }
+  if ($Esplora) {
+    # elenco delle viste/tabelle di SAM con colonne su celle, lavorazioni, conto deposito, fasi
+    $q = "SELECT TABLE_SCHEMA + '.' + TABLE_NAME AS T, COLUMN_NAME AS C FROM INFORMATION_SCHEMA.COLUMNS WHERE COLUMN_NAME LIKE '%CELL%' OR COLUMN_NAME LIKE '%DEP%' OR COLUMN_NAME LIKE '%LAV%' OR COLUMN_NAME LIKE '%FASE%' OR TABLE_NAME LIKE '%MANCANT%' OR TABLE_NAME LIKE '%PRELEV%' OR TABLE_NAME LIKE '%FASI%' ORDER BY 1, 2"
+    $c2 = $conn.CreateCommand(); $c2.CommandText = $q; $c2.CommandTimeout = 120
+    $r2 = $c2.ExecuteReader(); $tab = [ordered]@{}
+    while ($r2.Read()) { $t = [string]$r2.GetValue(0); if (-not $tab.Contains($t)) { $tab[$t] = New-Object System.Collections.Generic.List[string] }; $tab[$t].Add([string]$r2.GetValue(1)) }
+    $r2.Close(); $conn.Close()
+    $out = Join-Path ([Environment]::GetFolderPath('Desktop')) 'viste_SAM.txt'
+    $righeOut = foreach ($k in $tab.Keys) { '{0}: {1}' -f $k, ($tab[$k] -join ', ') }
+    $righeOut | Set-Content -Path $out -Encoding UTF8
+    $righeOut | ForEach-Object { Write-Host $_ }
+    Write-Host ''
+    Write-Host "Elenco salvato anche in $out"
+    exit 0
   }
   $cmd = $conn.CreateCommand(); $cmd.CommandText = $Query; $cmd.CommandTimeout = 300
   $rd = $cmd.ExecuteReader()
