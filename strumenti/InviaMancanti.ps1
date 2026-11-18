@@ -43,7 +43,9 @@ if ($Configura) {
     if ($t -notmatch '^[0-9a-f]{48}$') { Write-Host ('Chiave non valida ({0} caratteri letti): riprova.' -f $t.Length) -ForegroundColor Yellow }
   } while ($t -notmatch '^[0-9a-f]{48}$')
   $tok = ConvertTo-SecureString $t -AsPlainText -Force
-  [pscustomobject]@{ Dsn = $dsn; Cred = $cred; Token = $tok } | Export-Clixml -Path $FileConf
+  $utente = ''; $pw = $null
+  if ($cred -and $cred.UserName) { $utente = $cred.UserName.TrimStart('\'); $pw = $cred.Password }
+  [pscustomobject]@{ Dsn = $dsn; Utente = $utente; Pw = $pw; Token = $tok } | Export-Clixml -Path $FileConf
   Scrivi 'Configurazione salvata.'
   exit 0
 }
@@ -69,7 +71,10 @@ try {
   if (-not (Test-Path $FileConf)) { throw 'Configurazione mancante: lancia prima lo script con -Configura.' }
   $conf = Import-Clixml -Path $FileConf
   $cs = "DSN=$($conf.Dsn);"
-  if ($conf.Cred) { $cs += "UID=$($conf.Cred.UserName);PWD=$($conf.Cred.GetNetworkCredential().Password);" }
+  function Testo($sec) { if (-not $sec) { return '' }; if ($sec -is [string]) { return $sec }; [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)) }
+  $utente = $conf.Utente; $pw = $conf.Pw
+  if (-not $utente -and $conf.Cred -and $conf.Cred.UserName) { $utente = $conf.Cred.UserName; $pw = $conf.Cred.Password }  # configurazione vecchia
+  if ($utente) { $cs += "UID=$utente;PWD=$(Testo $pw);" }
 
   $righe = New-Object System.Collections.Generic.List[object]
   $conn = New-Object System.Data.Odbc.OdbcConnection($cs)
@@ -108,7 +113,7 @@ try {
   $corpo = $ms.ToArray()
 
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-  $tok = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($conf.Token))
+  $tok = Testo $conf.Token
   $r = Invoke-RestMethod -Uri $Url -Method Post -Body $corpo -ContentType 'application/json' -Headers @{ Authorization = "Bearer $tok"; 'Content-Encoding' = 'gzip' } -TimeoutSec 120
   Scrivi ("Inviate {0} righe di SAM: {1} mancanti, {2} nuovi, {3} prelevati." -f $righe.Count, $r.righe, $r.nuovi, $r.chiusi)
   exit 0
