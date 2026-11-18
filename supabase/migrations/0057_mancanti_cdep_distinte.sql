@@ -19,9 +19,13 @@ insert into public.mancanti_assegnazioni (tipo, valore, persona)
 select 'cdep', '*', id from public.mancanti_persone where nome = 'Marcello Ferrari'
 on conflict do nothing;
 
-update public.mancanti set cella = '' where cella ~* '^\s*\(vuoto\)\s*$';
-update public.mancanti set cdep = '' where cdep ~* '^\s*\(vuoto\)\s*$';
-update public.mancanti set ultima_lav = '' where ultima_lav ~* '^\s*\(vuoto\)\s*$';
+do $$ begin
+  perform set_config('mancanti.import', 'si', true);   -- altrimenti il trigger blocca i campi di SAM
+  update public.mancanti set cella = '' where cella ~* '^\s*\(vuoto\)\s*$';
+  update public.mancanti set cdep = '' where cdep ~* '^\s*\(vuoto\)\s*$';
+  update public.mancanti set ultima_lav = '' where ultima_lav ~* '^\s*\(vuoto\)\s*$';
+  update public.mancanti set fornitore = '' where fornitore ~* '^\s*\(vuoto\)\s*$';
+end $$;
 
 create or replace function public.mancanti_distinte()
 returns jsonb language sql stable security definer set search_path = public as $$
