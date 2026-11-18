@@ -64,7 +64,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
   const [righe, setRighe] = useState<Mancante[]>([]);
   const [comm, setComm] = useState<Record<string, Commessa>>({});
   const [ult, setUlt] = useState<Import | null>(null);
-  const [persone, setPersone] = useState<{ id: string; nome: string }[]>([]);
+  const [persone, setPersone] = useState<{ id: string; nome: string; colore: string | null; profilo: string | null; ordine: number }[]>([]);
   const [carico, setCarico] = useState(true);
   const [vista, setVista] = useState<"commesse" | "fornitori" | "reparti" | "prelevati" | "assegnazioni">("commesse");
   const [aperta, setAperta] = useState<string>("");          // commessa / fornitore / reparto aperto
@@ -94,9 +94,12 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
       sb.from("mancanti_assegnazioni").select("*"),
       sb.from("mancanti_colori").select("*"),
     ]);
+    const { data: PP } = await sb.from("mancanti_persone").select("*").order("ordine").order("nome");
+    setPersone((PP ?? []) as typeof persone);
     setPiano(Object.fromEntries(((P ?? []) as CommessaPiano[]).map((c) => [norm(c.commessa), c])));
     setAssegn((A ?? []) as Assegnazione[]);
-    setColori(Object.fromEntries(((K ?? []) as { chiave: string; colore: string }[]).map((k) => [k.chiave, k.colore])));
+    setColori(Object.fromEntries([...((K ?? []) as { chiave: string; colore: string }[]).map((k) => [k.chiave, k.colore]),
+      ...((PP ?? []) as { id: string; colore: string | null }[]).filter((x) => x.colore).map((x) => [x.id, x.colore as string])]));
     setRighe(tutte);
     setComm(Object.fromEntries(((C ?? []) as Commessa[]).map((c) => [c.commessa, c])));
     setUlt(((I ?? []) as Import[])[0] ?? null);
@@ -104,7 +107,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
   }
   useEffect(() => {
     carica();
-    sb.from("profili").select("id,nome,attivo").then(({ data }) => setPersone(((data ?? []) as { id: string; nome: string; attivo: boolean }[]).filter((p) => p.attivo && p.nome && p.nome !== "Utente generico").map((p) => ({ id: p.id, nome: p.nome })).sort((a, b) => a.nome.localeCompare(b.nome))));
+    // l'elenco delle persone si carica con il resto (mancanti_persone)
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // inizio montaggio (fase 3B del Piano produzione): della macchina o del gruppo, altrimenti il primo della commessa
@@ -148,8 +151,25 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
   }
   async function colora(chiave: string, colore: string) {
     setColori((c) => ({ ...c, [chiave]: colore }));
-    const { error } = await sb.from("mancanti_colori").upsert({ chiave, colore });
+    const { error } = chiave === "giacenti"
+      ? await sb.from("mancanti_colori").upsert({ chiave, colore })
+      : await sb.from("mancanti_persone").update({ colore }).eq("id", chiave);
     if (error) setMsg("Non salvato: " + error.message);
+  }
+  async function nuovaPersona(nome: string) {
+    const n = nome.trim(); if (!n) return;
+    const { data, error } = await sb.from("mancanti_persone").insert({ nome: n, ordine: persone.length + 1, colore: "#fde68a" }).select().single();
+    if (error) { setMsg(/duplicate/.test(error.message) ? `«${n}» c'è già.` : "Non salvato: " + error.message); return; }
+    setPersone((L) => [...L, data as (typeof persone)[number]]); setColori((c) => ({ ...c, [data.id]: data.colore }));
+  }
+  async function togliPersona(id: string) {
+    const p = persone.find((x) => x.id === id); if (!p) return;
+    const usata = assegn.filter((a) => a.persona === id).length + righe.filter((m) => m.responsabile === id).length;
+    if (!confirm(`Tolgo «${p.nome}» dall'elenco?${usata ? ` Le sue ${usata} assegnazioni restano senza persona.` : ""}`)) return;
+    const { error } = await sb.from("mancanti_persone").delete().eq("id", id);
+    if (error) { setMsg("Non tolta: " + error.message); return; }
+    setPersone((L) => L.filter((x) => x.id !== id)); setAssegn((L) => L.filter((a) => a.persona !== id));
+    setRighe((L) => L.map((m) => (m.responsabile === id ? { ...m, responsabile: null } : m)));
   }
   async function caricaFile(f: File | undefined) {
     if (!f) return;
@@ -222,7 +242,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
             <td className="mono">{fd(attesa(m))}{rit && <small className="r">{rit === "scaduta" ? "data passata" : "dopo il montaggio"}</small>}</td>
             <td className="gest">{ed ? <>
               <input type="date" value={m.prevista || ""} title="Data prevista (se diversa dalla consegna dell'ordine)" aria-label="Data prevista" onChange={(e) => salvaRiga(m, { prevista: e.target.value || null })} />
-              <select value={m.responsabile || ""} aria-label="Chi lo segue" onChange={(e) => salvaRiga(m, { responsabile: e.target.value || null })}><option value="">{personaDi(m) ? "↳ " + nomeDi(personaDi(m)) : "chi lo segue…"}</option>{persone.map((p) => <option key={p.id} value={p.id}>{p.nome}{p.id === me ? " (tu)" : ""}</option>)}</select>
+              <select value={m.responsabile || ""} aria-label="Chi lo segue" onChange={(e) => salvaRiga(m, { responsabile: e.target.value || null })}><option value="">{personaDi(m) ? "↳ " + nomeDi(personaDi(m)) : "chi lo segue…"}</option>{persone.map((p) => <option key={p.id} value={p.id}>{p.nome}{p.profilo === me ? " (tu)" : ""}</option>)}</select>
               <select value={m.priorita} aria-label="Priorità" onChange={(e) => salvaRiga(m, { priorita: e.target.value as Mancante["priorita"] })}><option value="">priorità</option><option value="alta">alta</option><option value="bassa">bassa</option></select>
               <input defaultValue={m.nota} placeholder="nota" aria-label="Nota" onBlur={(e) => e.target.value !== m.nota && salvaRiga(m, { nota: e.target.value })} />
             </> : <>{m.nota}{m.prevista && <small>prevista {fd(m.prevista)}</small>}{personaDi(m) && <small>segue {nomeDi(personaDi(m))}</small>}</>}</td>
@@ -304,7 +324,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
     const conta = (k: (m: Mancante) => string[]) => { const c = new Map<string, number>(); aperti.filter((m) => visibileComm(m.commessa)).forEach((m) => k(m).filter(Boolean).forEach((v) => c.set(v, (c.get(v) || 0) + 1))); return [...c.entries()].sort((a, b) => b[1] - a[1]); };
     const forn = conta((m) => [...new Set([m.fornitore, ...m.ordini.map((o) => o.fornitore)])]).filter(([v]) => !q || v.toLowerCase().includes(q.toLowerCase()));
     const celle = conta((m) => [m.cella]).filter(([v]) => !q || v.toLowerCase().includes(q.toLowerCase()));
-    const conColore = persone.filter((p) => colori[p.id] || assegn.some((a) => a.persona === p.id));
+    const conColore = persone;
     const sel = (tipo: Assegnazione["tipo"], v: string) => {
       const a = assegn.find((x) => x.tipo === tipo && x.valore === v)?.persona || "";
       return <select value={a} disabled={!modifica} onChange={(e) => assegna(tipo, v, e.target.value)} style={a && colori[a] ? { background: colori[a], color: scuro(colori[a]) ? "#fff" : undefined } : undefined}>
@@ -314,11 +334,11 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
       <div className="carte">
         <section className="box" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <h2 style={{ margin: 0 }}>Colori</h2>
-          <p className="nota">Ogni codice prende il colore della persona che lo segue: quella scelta sulla riga, altrimenti quella assegnata alla cella di lavorazione, altrimenti quella del fornitore. I codici giacenti a magazzino hanno sempre il loro colore.</p>
+          <p className="nota">Sono le persone (o i gruppi, come «Magazzino») che si possono scegliere come «chi lo segue». Ogni codice prende il colore della persona che lo segue: quella scelta sulla riga, altrimenti quella assegnata alla cella di lavorazione, altrimenti quella del fornitore. I codici giacenti a magazzino hanno sempre il loro colore.</p>
           <div className="colori">
             <label><input type="color" value={colori.giacenti || "#d6f2d3"} disabled={!modifica} onChange={(e) => colora("giacenti", e.target.value)} /> Giacenti disponibili</label>
-            {conColore.map((p) => <label key={p.id}><input type="color" value={colori[p.id] || "#ffffff"} disabled={!modifica} onChange={(e) => colora(p.id, e.target.value)} /> {p.nome}</label>)}
-            {modifica && <select value="" onChange={(e) => e.target.value && colora(e.target.value, "#fde68a")} aria-label="Aggiungi una persona"><option value="">+ aggiungi una persona…</option>{persone.filter((p) => !conColore.includes(p)).map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}</select>}
+            {conColore.map((p) => <label key={p.id}><input type="color" value={colori[p.id] || "#ffffff"} disabled={!modifica} onChange={(e) => colora(p.id, e.target.value)} /> {p.nome}{modifica && <button type="button" className="x" title={"Togli " + p.nome} onClick={(e) => { e.preventDefault(); togliPersona(p.id); }}>✕</button>}</label>)}
+            {modifica && <input placeholder="+ aggiungi persona o gruppo (Invio)" style={{ width: 230 }} onKeyDown={(e) => { if (e.key === "Enter") { nuovaPersona((e.target as HTMLInputElement).value); (e.target as HTMLInputElement).value = ""; } }} />}
           </div>
         </section>
         <section className="box" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
