@@ -1,14 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { gunzipSync } from "node:zlib";
 import { createClient } from "@supabase/supabase-js";
-import { daVista, daEstrazione } from "@/moduli/mancanti/sam";
+import { daVista, daEstrazione, daCelle } from "@/moduli/mancanti/sam";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /* Invio automatico dei mancanti dal PC dell'ufficio (programma «InviaMancanti»).
    POST con «Authorization: Bearer <MANCANTI_TOKEN>», corpo JSON (anche gzip):
-   { formato: "vista" | "estrazione", file?: string, righe: [ {colonne di SAM} ] }
+   { formato: "vista" | "estrazione" | "celle", file?: string, righe: [ {colonne di SAM} ] }
    Il caricamento a mano dal modulo non passa da qui (legge il file nel browser). */
 export async function POST(req: NextRequest) {
   const token = process.env.MANCANTI_TOKEN;
@@ -21,10 +21,10 @@ export async function POST(req: NextRequest) {
     corpo = JSON.parse(buf.toString("utf8").replace(/^﻿/, ""));
   } catch { return NextResponse.json({ errore: "contenuto non leggibile" }, { status: 400 }); }
   const righe = Array.isArray(corpo.righe) ? corpo.righe : [];
-  const L = corpo.formato === "estrazione" ? daEstrazione(righe) : daVista(righe);
+  const L = corpo.formato === "estrazione" ? daEstrazione(righe) : corpo.formato === "celle" ? daCelle(righe) : daVista(righe);
   if (!L.length) return NextResponse.json({ errore: "nessuna riga di mancanti" }, { status: 400 });
   const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SECRET_KEY, { auth: { persistSession: false } });
-  const { data, error } = await sb.rpc("importa_mancanti", { p_righe: L, p_origine: "Invio automatico", p_file: corpo.file || "" });
+  const { data, error } = await sb.rpc("importa_mancanti", { p_righe: L, p_origine: corpo.formato === "celle" ? "Invio automatico (celle)" : "Invio automatico", p_file: corpo.file || "" });
   if (error) return NextResponse.json({ errore: error.message }, { status: 500 });
   return NextResponse.json(data);
 }

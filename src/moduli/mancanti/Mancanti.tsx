@@ -90,7 +90,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
     }
     const [{ data: C }, { data: I }, { data: P }, { data: A }, { data: K }] = await Promise.all([
       sb.from("mancanti_commesse").select("*"),
-      sb.from("mancanti_import").select("*").order("il", { ascending: false }).limit(1),
+      sb.from("mancanti_import").select("*").neq("origine", "Invio automatico (celle)").order("il", { ascending: false }).limit(1),
       sb.rpc("mancanti_piano"),
       sb.from("mancanti_assegnazioni").select("*"),
       sb.from("mancanti_colori").select("*"),
@@ -345,7 +345,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
             </section>
           );
         })}
-        {!G.length && <p className="nota">{vista === "reparti" ? "Nessun mancante in lavorazione interna o in conto deposito con questi filtri. (Le celle di lavorazione arrivano solo con l'estrazione Excel dei mancanti, non dalla vista automatica di SAM.)" : "Nessun mancante con questi filtri."}</p>}
+        {!G.length && <p className="nota">{vista === "reparti" ? "Nessun mancante in lavorazione interna o in conto deposito con questi filtri. (Le celle di lavorazione arrivano con l'invio automatico dal PC (vista KI_ANALISI_COMMESSE_MANCANTI).)" : "Nessun mancante con questi filtri."}</p>}
       </div>
     );
   } else if (vista === "assegnazioni") {

@@ -69,10 +69,26 @@ export function daEstrazione(righe: Record<string, unknown>[]): RigaImport[] {
   }));
 }
 
+/** Vista SAM KI_ANALISI_COMMESSE_MANCANTI (quella del file Mancanti_2025): celle, ultima lavorazione chiusa, conto deposito.
+ *  L'ultima lavorazione chiusa si tiene solo se è della cella in cui il pezzo si trova adesso. */
+export function daCelle(righe: Record<string, unknown>[]): RigaImport[] {
+  return daEstrazione(righe.map((r) => {
+    const cella = t(r["CELLA LAV DISPONIBILE"]), chiusa = t(r["CELLA_LAV_CHIUSA"]);
+    return {
+      ...r,
+      "Q.TA": r["QTA RES DA PRELEVARE"] ?? r["Q.TA"],
+      "GIAC MP+MV": r["GIACENZA MAG PRINC E VERTICALI"] ?? r["GIAC MP+MV"],
+      "FORNITORE OP": r["FORNITORE"] ?? r["FORNITORE OP"],
+      "ULTIMA LAV CHIUSA": !chiusa || !cella || chiusa === cella ? r["ULTIMA LAV CHIUSA"] : "",
+    };
+  }));
+}
+
 /** Righe con intestazione (già lette da Excel o CSV): riconosce da solo il formato. */
 export function daTabella(intestazione: string[], righe: unknown[][]): RigaImport[] {
   const H = intestazione.map((h) => t(h));
   const vista = H.includes("Componente") || H.includes("COMPONENTE");
+  const celle = H.some((h) => /^(CELLA_LAV_CHIUSA|QTA RES DA PRELEVARE)$/i.test(h));
   const oggetti = righe.map((r) => Object.fromEntries(H.map((h, i) => [vista ? h : h.toUpperCase(), r[i]])));
-  return vista ? daVista(oggetti) : daEstrazione(oggetti);
+  return vista ? daVista(oggetti) : celle ? daCelle(oggetti) : daEstrazione(oggetti);
 }

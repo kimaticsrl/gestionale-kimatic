@@ -22,6 +22,8 @@ $FileConf = Join-Path $Cartella 'config.xml'
 $Log      = Join-Path $Cartella 'invio.log'
 $Url      = 'https://gestionale-kimatic.vercel.app/api/mancanti'
 $Query    = 'SELECT DISTINCT * FROM GSTPIVOT.dbo.EXT_KIMATIC_MATERIALI_DA_PRELEVARE'
+# celle di lavorazione, ultima lavorazione chiusa e conto deposito (la vista del file Mancanti_2025)
+$QueryCelle = 'SELECT DISTINCT COMMESSA, [CODICE MACCHINA], [DESCRIZIONE MACCHINA], [CODICE OP], [DESCRIZIONE OP], [CODICE ARTICOLO], [DESCRIZIONE ARTICOLO], [QTA RES DA PRELEVARE], [GIACENZA MAG PRINC E VERTICALI], FORNITORE, [CELLA LAV DISPONIBILE], CELLA_LAV_CHIUSA, [ULTIMA LAV CHIUSA], [IN C/DEP PRESSO] FROM dbo.KI_ANALISI_COMMESSE_MANCANTI'
 $NomeTask = 'Kimatic - invio mancanti al gestionale'
 New-Item -ItemType Directory -Force $Cartella | Out-Null
 
@@ -88,7 +90,6 @@ try {
   if (-not $utente -and $conf.Cred -and $conf.Cred.UserName) { $utente = $conf.Cred.UserName; $pw = $conf.Cred.Password }  # configurazione vecchia
   if ($utente) { $cs += "UID=$utente;PWD=$(Testo $pw);" }
 
-  $righe = New-Object System.Collections.Generic.List[object]
   $conn = New-Object System.Data.Odbc.OdbcConnection($cs)
   try {
     $conn.Open()
@@ -117,33 +118,48 @@ try {
     Write-Host "Elenco salvato anche in $out"
     exit 0
   }
-  $cmd = $conn.CreateCommand(); $cmd.CommandText = $Query; $cmd.CommandTimeout = 300
-  $rd = $cmd.ExecuteReader()
-  $nomi = 0..($rd.FieldCount - 1) | ForEach-Object { $rd.GetName($_) }
-  while ($rd.Read()) {
-    $o = [ordered]@{}
-    for ($i = 0; $i -lt $rd.FieldCount; $i++) {
-      $v = $rd.GetValue($i)
-      if ($v -is [DBNull]) { $v = $null }
-      elseif ($v -is [datetime]) { $v = $v.ToString('yyyy-MM-dd') }
-      elseif ($v -is [string]) { $v = $v.Trim() }
-      $o[$nomi[$i]] = $v
+  function Leggi([string]$sql) {
+    $L = New-Object System.Collections.Generic.List[object]
+    $cmd = $conn.CreateCommand(); $cmd.CommandText = $sql; $cmd.CommandTimeout = 300
+    $rd = $cmd.ExecuteReader()
+    $nomi = 0..($rd.FieldCount - 1) | ForEach-Object { $rd.GetName($_) }
+    while ($rd.Read()) {
+      $o = [ordered]@{}
+      for ($i = 0; $i -lt $rd.FieldCount; $i++) {
+        $v = $rd.GetValue($i)
+        if ($v -is [DBNull]) { $v = $null }
+        elseif ($v -is [datetime]) { $v = $v.ToString('yyyy-MM-dd') }
+        elseif ($v -is [string]) { $v = $v.Trim() }
+        $o[$nomi[$i]] = $v
+      }
+      $L.Add([pscustomobject]$o)
     }
-    $righe.Add([pscustomobject]$o)
+    $rd.Close()
+    return ,$L
   }
-  $rd.Close(); $conn.Close()
+  $righe = Leggi $Query
+  $celle = $null; $erroreCelle = ''
+  try { $celle = Leggi $QueryCelle } catch { $erroreCelle = $_.Exception.Message }
+  $conn.Close()
   if ($righe.Count -eq 0) { throw 'SAM non ha restituito righe.' }
-
-  $json = @{ formato = 'vista'; file = 'SAM ' + (Get-Date -Format 'dd/MM/yyyy HH:mm'); righe = $righe } | ConvertTo-Json -Depth 4 -Compress
-  $ms = New-Object System.IO.MemoryStream
-  $gz = New-Object System.IO.Compression.GZipStream($ms, [System.IO.Compression.CompressionMode]::Compress)
-  $b = [System.Text.Encoding]::UTF8.GetBytes($json); $gz.Write($b, 0, $b.Length); $gz.Close()
-  $corpo = $ms.ToArray()
 
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
   $tok = Testo $conf.Token
-  $r = Invoke-RestMethod -Uri $Url -Method Post -Body $corpo -ContentType 'application/json' -Headers @{ Authorization = "Bearer $tok"; 'Content-Encoding' = 'gzip' } -TimeoutSec 120
+  function Manda([string]$formato, $L) {
+    $json = @{ formato = $formato; file = 'SAM ' + (Get-Date -Format 'dd/MM/yyyy HH:mm'); righe = $L } | ConvertTo-Json -Depth 4 -Compress
+    $ms = New-Object System.IO.MemoryStream
+    $gz = New-Object System.IO.Compression.GZipStream($ms, [System.IO.Compression.CompressionMode]::Compress)
+    $b = [System.Text.Encoding]::UTF8.GetBytes($json); $gz.Write($b, 0, $b.Length); $gz.Close()
+    Invoke-RestMethod -Uri $Url -Method Post -Body $ms.ToArray() -ContentType 'application/json' -Headers @{ Authorization = "Bearer $tok"; 'Content-Encoding' = 'gzip' } -TimeoutSec 120
+  }
+  $r = Manda 'vista' $righe
   Scrivi ("Inviate {0} righe di SAM: {1} mancanti, {2} nuovi, {3} prelevati." -f $righe.Count, $r.righe, $r.nuovi, $r.chiusi)
+  # poi celle e conto deposito: se non riesce, i mancanti restano comunque aggiornati
+  if ($erroreCelle) { Scrivi ('Celle di lavorazione non lette: ' + $erroreCelle) }
+  elseif ($celle -and $celle.Count -gt 0) {
+    try { $r2 = Manda 'celle' $celle; Scrivi ("Celle di lavorazione e conto deposito aggiornati: {0} righe." -f $r2.righe) }
+    catch { $m2 = $_.Exception.Message; if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $m2 += ' - ' + $_.ErrorDetails.Message }; Scrivi ('Celle di lavorazione non inviate: ' + $m2) }
+  }
   if ($Manuale) { Write-Host ''; Write-Host 'Fatto: ricarica la pagina Mancanti montaggi nel gestionale.' -ForegroundColor Green; Start-Sleep -Seconds 6 }
   exit 0
 } catch {
