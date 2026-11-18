@@ -47,6 +47,8 @@ function ritardo(m: Mancante, montaggio?: string | null): "" | "scaduta" | "oltr
   if (montaggio && (!a || a > montaggio) && statoDi(m) !== "cdep") return "oltre";
   return "";
 }
+// «247/2026» → «2026/000247»: prima l'anno, poi il numero
+const ordComm = (c: string) => { const [n, a] = c.split("/"); return `${a || ""}/${(n || "").padStart(6, "0")}`; };
 const pezzi = (v: string) => v.split(/\s+/).filter(Boolean);
 const trova = (m: Mancante, q: string) => !q || pezzi(q.toLowerCase()).every((p) => [m.codice, m.descr, m.macchina, m.matricola, m.op, m.op_descr, m.fornitore, m.cella, m.cdep, m.nota, m.commessa, ...m.ordini.map((o) => o.num + " " + o.fornitore)].join(" ").toLowerCase().includes(p));
 
@@ -185,7 +187,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
 
   // ---------- viste ----------
   const commesse = [...new Set(aperti.map((m) => m.commessa))].filter(visibileComm)
-    .sort((a, b) => (comm[a]?.montaggio || "9999").localeCompare(comm[b]?.montaggio || "9999") || b.localeCompare(a, undefined, { numeric: true }));
+    .sort((a, b) => (comm[a]?.montaggio || "9999").localeCompare(comm[b]?.montaggio || "9999") || ordComm(b).localeCompare(ordComm(a)));
   const raggruppa = (L: Mancante[], k: (m: Mancante) => string) => { const g = new Map<string, Mancante[]>(); L.forEach((m) => g.set(k(m), [...(g.get(k(m)) || []), m])); return [...g.entries()]; };
 
   let corpo: React.ReactNode;
