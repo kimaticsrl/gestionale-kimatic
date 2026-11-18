@@ -54,3 +54,6 @@
 .mc table.tm tr[style]:not(.scura) td,.mc table.tm tr[style]:not(.scura) td small{color:#17202a}
 .mc .colori .x{border:0;background:none;color:var(--muted);cursor:pointer;font-size:12px;padding:0 2px}
 .mc .colori .x:hover{color:var(--sco)}
+/* righe alternate (quelle senza colore della persona) per seguire meglio la riga */
+.mc table.tm tbody tr:nth-child(even):not([style]) td{background:color-mix(in srgb,var(--fg) 5%,var(--surface))}
+.mc table.tm tbody tr:not([style]):hover td{background:color-mix(in srgb,var(--accent) 10%,var(--surface))}
