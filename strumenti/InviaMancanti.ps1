@@ -37,7 +37,12 @@ if ($Configura) {
   Write-Host 'Se la connessione ODBC ha gia'' utente e password salvati, premi Annulla.'
   $cred = $null
   try { $cred = Get-Credential -Message 'Database SAM (sola lettura)' } catch { }
-  $tok = Read-Host 'Chiave di invio del gestionale (MANCANTI_TOKEN)' -AsSecureString
+  # la chiave: 48 caratteri tra 0-9 e a-f; si chiede finche' non e' giusta (Ctrl+V a volte incolla un carattere di controllo)
+  do {
+    $t = (Read-Host 'Chiave di invio del gestionale (MANCANTI_TOKEN) - incollala con il tasto destro del mouse').Trim()
+    if ($t -notmatch '^[0-9a-f]{48}$') { Write-Host ('Chiave non valida ({0} caratteri letti): riprova.' -f $t.Length) -ForegroundColor Yellow }
+  } while ($t -notmatch '^[0-9a-f]{48}$')
+  $tok = ConvertTo-SecureString $t -AsPlainText -Force
   [pscustomobject]@{ Dsn = $dsn; Cred = $cred; Token = $tok } | Export-Clixml -Path $FileConf
   Scrivi 'Configurazione salvata.'
   exit 0
