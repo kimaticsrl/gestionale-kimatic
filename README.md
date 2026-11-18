@@ -63,6 +63,15 @@ Lettura automatica degli scontrini (`/api/scontrino`, Claude): con `ANTHROPIC_AP
 foto si compilano importo, valuta, data, esercente e categoria; le ultime cifre della carta lette sullo
 scontrino si confrontano con la carta aziendale.
 
+## Mancanti montaggi
+
+Modulo **Mancanti montaggi** (migrazione 0048): i codici ancora da prelevare delle commesse, per commessa,
+fornitore e reparto, con note, data prevista, responsabile e priorità che restano tra un aggiornamento e
+l'altro; i codici che spariscono dall'estrazione risultano prelevati. Fonte: la vista di SAM
+`GSTPIVOT.dbo.EXT_KIMATIC_MATERIALI_DA_PRELEVARE`, mandata dal PC dell'ufficio con
+`strumenti/InviaMancanti.ps1` (Utilità di pianificazione: all'accesso e alle 13:00) a `/api/mancanti`
+(variabile su Vercel `MANCANTI_TOKEN`), oppure il file Excel caricato a mano dal modulo.
+
 ## Prima installazione
 
 1. Supabase → SQL Editor: eseguire in ordine i file in `supabase/migrations/`.

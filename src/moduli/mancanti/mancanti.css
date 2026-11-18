@@ -1,0 +1,46 @@
+/* Modulo Mancanti montaggi */
+.mc{--mag:#2f6b4f;--cdep:#0e7490;--cel:#9a5b12;--ord:#1d5b86;--sco:#a3352b}
+@media (prefers-color-scheme:dark){.mc{--mag:#6dbb94;--cdep:#5cc4d6;--cel:#e0a25a;--ord:#6aa9d6;--sco:#e07a6f}}
+.mc input,.mc select{font:inherit;font-size:14px;color:var(--fg);padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);min-width:0}
+.mc input[type=checkbox]{width:auto}
+.mc .stati{display:flex;flex-wrap:wrap;gap:6px}
+.mc .stati button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;cursor:pointer;font-size:13px;color:var(--fg)}
+.mc .stati button[aria-pressed=true]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.mc .nota{font-size:13px;color:var(--muted);margin:0}
+.mc .mono{font-family:var(--f-mono);font-size:12.5px}
+.mc .r{color:var(--sco);font-weight:600}
+.mc .carte{display:flex;flex-direction:column;gap:10px}
+.mc .carta{padding:0;overflow:hidden}
+.mc .carta.nasc{opacity:.6}
+.mc .testa{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;flex-wrap:wrap}
+.mc .testa:hover{background:var(--bg)}
+.mc .testa h2{margin:0;font-size:17px}
+.mc .testa h2 span{font-weight:500;color:var(--muted)}
+.mc .testa .num{text-align:right;font-size:14px;display:flex;flex-direction:column;align-items:flex-end}
+.mc .barra{display:flex;height:6px;background:var(--bg)}
+.mc .barra span{display:block;height:100%}
+.mc .b-magazzino{background:var(--mag)}.mc .b-cdep{background:var(--cdep)}.mc .b-cella{background:var(--cel)}.mc .b-ordinato{background:var(--ord)}.mc .b-scoperto{background:var(--sco)}
+.mc .b-rit{background:transparent;border:2px solid var(--sco)}
+.mc .leg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--muted)}
+.mc .leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.mc .dett{padding:12px 14px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:12px}
+.mc label.f{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--muted);min-width:150px}
+.mc label.f.w{flex:1 1 260px}
+.mc .gruppo h3{margin:4px 0 6px;font-size:14px}
+.mc table.tm{width:100%;border-collapse:collapse;font-size:13.5px}
+.mc table.tm th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:6px;border-bottom:1px solid var(--line);white-space:nowrap}
+.mc table.tm td{padding:6px;border-bottom:1px solid var(--line);vertical-align:top}
+.mc table.tm td small{display:block;color:var(--muted);font-size:12px}
+.mc table.tm .n{text-align:right}
+.mc table.tm tr.rit td:first-child{box-shadow:inset 3px 0 0 var(--sco)}
+.mc table.tm tr.alta td{background:color-mix(in srgb,var(--sco) 6%,transparent)}
+.mc .st{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.mc .s-magazzino{background:color-mix(in srgb,var(--mag) 20%,transparent)}
+.mc .s-cdep{background:color-mix(in srgb,var(--cdep) 20%,transparent)}
+.mc .s-cella{background:color-mix(in srgb,var(--cel) 22%,transparent)}
+.mc .s-ordinato{background:color-mix(in srgb,var(--ord) 18%,transparent)}
+.mc .s-scoperto{background:color-mix(in srgb,var(--sco) 20%,transparent)}
+.mc td.gest{min-width:220px}
+.mc td.gest input,.mc td.gest select{font-size:12.5px;padding:4px 6px;margin:0 4px 4px 0;max-width:150px}
+.mc td.gest input:not([type]){width:100%;max-width:none}
+@media (max-width:640px){.mc .hide-s{display:none}}
