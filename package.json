@@ -16,6 +16,7 @@
     "jszip": "^3.10.1",
     "next": "^15.5.29",
     "nodemailer": "^10.6.0",
+    "pdf-lib": "^1.17.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "server-only": "^0.0.1"

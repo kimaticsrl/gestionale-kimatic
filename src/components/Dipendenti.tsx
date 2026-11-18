@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
-type Dati = { inq?: string; finecontr?: string; indirizzo?: string; cellaz?: string; nome?: string; cc?: string; mansione?: string; contratto?: string; liv?: string; ral?: number | null; assunzione?: string; scadenza?: string; nascita?: string; luogo?: string; sesso?: string; cf?: string; email?: string; telefono?: string; pid?: string; note?: string };
+type Dati = { inq?: string; finecontr?: string; indirizzo?: string; cellaz?: string; carta?: string; nome?: string; cc?: string; mansione?: string; contratto?: string; liv?: string; ral?: number | null; assunzione?: string; scadenza?: string; nascita?: string; luogo?: string; sesso?: string; cf?: string; email?: string; telefono?: string; pid?: string; note?: string };
 type Dip = { id: string; dati: Dati; attivo: boolean };
 type Persona = { id: string; name: string };
 type Pers = { n?: string; cc?: string; liv?: string; ral?: number; att?: number; pid?: string };
@@ -185,6 +185,7 @@ export default function Dipendenti({ modifica }: { modifica: boolean }) {
             {campo("email", "E-mail", "email")}
             {campo("telefono", "Telefono")}
             {campo("cellaz", "Cellulare aziendale")}
+            {campo("carta", "Carta aziendale (ultime 4 cifre)")}
             {campo("indirizzo", "Indirizzo")}
             <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13 }}>Persona nel Piano produzione
               <select value={ed.dati.pid || ""} disabled={!modifica} onChange={(e) => set("pid", e.target.value)}><option value="">— non collegata —</option>{persone.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>

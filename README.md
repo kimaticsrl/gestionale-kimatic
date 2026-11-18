@@ -49,6 +49,17 @@ riceve si sceglie nella pagina **Notifiche** (amministratori). Le spedisce `/api
 Gmail del gestionale: subito dopo l'evento e ogni mattina (Vercel Cron, `vercel.json`).
 Variabili su Vercel: `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `SUPABASE_SECRET_KEY`, `CRON_SECRET`.
 
+## Note spese
+
+Modulo **Note spese** (migrazione 0046, al posto di N2F). Ogni nota è legata a un rapporto d'intervento
+(la trasferta): il trasfertista fotografa gli scontrini e compila le spese (anche in valuta), poi chiude
+la nota → notifica «Nota spese chiusa» → l'Amministrazione la verifica o la rimanda indietro (mail
+all'autore). Di default si paga con la carta aziendale (ultime cifre nell'Anagrafica dipendenti, campo
+«carta»); carta personale e contanti sono evidenziati come «da rimborsare». Per il carburante si indica
+il mezzo aziendale. I totali in euro usano il cambio BCE del giorno della firma del rapporto
+(`/api/cambi`, salvati nella tabella `cambi`). Nel «Da fatturare» dei rapporti c'è la colonna Note spese
+con il PDF, e l'export Excel ha le righe delle note e il foglio «Note spese».
+
 ## Prima installazione
 
 1. Supabase → SQL Editor: eseguire in ordine i file in `supabase/migrations/`.

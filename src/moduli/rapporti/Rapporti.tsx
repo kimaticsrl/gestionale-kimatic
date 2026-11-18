@@ -46,6 +46,15 @@ export default function Rapporti({ me, nome, modifica, gestisce, clienti }: Prop
           if (error) throw error;
           return data as string;
         },
+        // note spese delle trasferte (per il «Da fatturare»: chi gestisce le note spese le vede tutte)
+        async noteSpese() {
+          const { noteSpesePerRapporti } = await import("@/moduli/note-spese/perRapporti");
+          return noteSpesePerRapporti(sb);
+        },
+        async pdfNoteSpese(id: string) {
+          const { pdfNoteSpeseRapporto } = await import("@/moduli/note-spese/perRapporti");
+          return pdfNoteSpeseRapporto(sb, id);
+        },
         jsPDF: async () => (await import("jspdf")).jsPDF,
         downloads: {
           async save({ filename, data }: { filename: string; data: Blob }) {

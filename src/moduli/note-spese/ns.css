@@ -1,0 +1,50 @@
+/* Modulo Note spese */
+.ns{--pers:#c2410c}
+@media (prefers-color-scheme:dark){.ns{--pers:#f08a4b}}
+.ns .fl{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px 12px}
+.ns label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);font-weight:500;min-width:0}
+.ns label.f.w{grid-column:1/-1}
+.ns input,.ns select,.ns textarea{font:inherit;font-size:15px;color:var(--fg);padding:8px 9px;border:1px solid var(--line);border-radius:6px;background:var(--surface);width:100%;min-width:0}
+.ns input[type=checkbox]{width:auto}
+.ns textarea{min-height:60px;resize:vertical}
+.ns input:disabled,.ns select:disabled,.ns textarea:disabled{background:var(--bg);opacity:1}
+.ns .stati{display:flex;flex-wrap:wrap;gap:6px}
+.ns .stati button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;cursor:pointer;font-size:13px;color:var(--fg)}
+.ns .stati button[aria-pressed=true]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.ns .st{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.ns .st-bozza{background:color-mix(in srgb,var(--pro) 22%,transparent)}
+.ns .st-chiusa{background:color-mix(in srgb,var(--com) 22%,transparent)}
+.ns .st-verificata{background:color-mix(in srgb,var(--ok) 22%,transparent)}
+.ns .pers{color:var(--pers);font-weight:600}
+.ns .tag-pers{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600;background:color-mix(in srgb,var(--pers) 16%,transparent);color:var(--pers);white-space:nowrap}
+.ns .avviso{border:1px solid color-mix(in srgb,var(--pers) 55%,var(--line));background:color-mix(in srgb,var(--pers) 10%,var(--surface));border-radius:8px;padding:10px 12px;font-size:14px}
+.ns .nota{font-size:13px;color:var(--muted);margin:0}
+.ns .mono{font-family:var(--f-mono)}
+.ns .lista{display:flex;flex-direction:column;gap:8px}
+.ns .riga{display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);cursor:pointer;text-align:left;font:inherit;color:inherit;width:100%}
+.ns .riga:hover{border-color:var(--muted)}
+.ns .riga b{font-size:15px}
+.ns .riga .dx{text-align:right;font-family:var(--f-mono);font-weight:600;white-space:nowrap}
+.ns .spese{display:flex;flex-direction:column;gap:8px}
+.ns .spesa{display:grid;grid-template-columns:64px 1fr auto;gap:10px;align-items:center;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);cursor:pointer;text-align:left;font:inherit;color:inherit;width:100%}
+.ns .spesa.p{border-color:color-mix(in srgb,var(--pers) 60%,var(--line));background:color-mix(in srgb,var(--pers) 6%,var(--surface))}
+.ns .thumb{width:64px;height:64px;border-radius:6px;overflow:hidden;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--muted);border:1px solid var(--line)}
+.ns .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.ns .spesa .imp{text-align:right;font-family:var(--f-mono);font-weight:600;white-space:nowrap}
+.ns .spesa .imp small{display:block;font-weight:400;color:var(--muted)}
+.ns .foto{display:flex;flex-wrap:wrap;gap:8px}
+.ns .foto figure{margin:0;position:relative;width:110px;height:140px;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--bg)}
+.ns .foto img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in}
+.ns .foto button{position:absolute;top:3px;right:3px;border:0;border-radius:4px;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;font-size:12px;padding:2px 7px}
+.ns .scatta{display:flex;align-items:center;justify-content:center;width:110px;height:140px;border:2px dashed var(--line);border-radius:6px;cursor:pointer;color:var(--muted);font-size:13px;text-align:center;padding:6px}
+.ns .tot{display:grid;grid-template-columns:1fr auto;gap:4px 16px;font-size:14px}
+.ns .tot .v{text-align:right;font-family:var(--f-mono);font-weight:600}
+.ns .tot .big{font-size:17px}
+.ns .azioni{display:flex;flex-wrap:wrap;gap:8px}
+.ns .metodi{display:flex;flex-wrap:wrap;gap:6px}
+.ns .metodi button{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:8px 12px;cursor:pointer;font:inherit;font-size:14px;color:var(--fg)}
+.ns .metodi button[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft);font-weight:600}
+.ns .metodi button.p[aria-pressed=true]{border-color:var(--pers);background:color-mix(in srgb,var(--pers) 14%,var(--surface));color:var(--pers)}
+.ns .zoom{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:16px;cursor:zoom-out}
+.ns .zoom img{max-width:100%;max-height:100%;object-fit:contain}
+@media (max-width:640px){.ns .hide-s{display:none}}

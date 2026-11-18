@@ -295,6 +295,7 @@ ROOT.addEventListener('click',async e=>{
     case'listini':UI.lst=!UI.lst;UI.add=null;render();break;
     case'xlsadd':await esportaAddebiti();break;
     case'addpdf':await doAddPdf(S.rapporti[d.id]);break;
+    case'nspdf':await doNsPdf(d.id);break;
     case'annfatt':if(!confirmTwice(b,'Tocca di nuovo per rimetterlo tra i da fatturare'))return;try{await db.doc('fatture/'+d.id).delete();toast('Rimesso tra i da fatturare')}catch(err){toast('Operazione non riuscita')}break;
     case'newcli':UI.cliEdit={id:'',nome:'',indirizzo:'',contatto:'',email:'',telefono:'',piva:'',lingua:'',note:''};render();break;
     case'editcli':{const c=S.clienti[UI.cli];UI.cliEdit=Object.assign({id:UI.cli},{nome:'',indirizzo:'',contatto:'',email:'',telefono:'',piva:'',lingua:'',note:''},c);render();break}
@@ -408,12 +409,23 @@ async function doOrePdf(r){
 }
 
 /* ---------- da fatturare ---------- */
+/* note spese delle trasferte (modulo Note spese): totali in € al cambio del giorno della firma */
+let NS=null,NSload=false,NSts=0;
+function caricaNS(){if(!CTX.noteSpese||NSload||(NS&&Date.now()-NSts<60000))return;NSload=true;CTX.noteSpese().then(x=>{NS=x||{};NSts=Date.now();NSload=false;if(UI.tab==='fat')render()}).catch(()=>{NS=NS||{};NSts=Date.now();NSload=false})}
+function cellaNS(r){if(!CTX.noteSpese)return'';const x=NS&&NS[r.id];
+  if(!NS)return'<td class="n note">…</td>';if(!x)return'<td class="n note">—</td>';
+  const avv=[x.daChiudere&&x.daChiudere+' da chiudere',x.daVerificare&&x.daVerificare+' da verificare'].filter(Boolean).join(', ');
+  return `<td class="n num"><b>${euro(x.euro)}</b>${x.rimborsare?`<br><span class="note" style="color:#c2410c">rimb. ${euro(x.rimborsare)}</span>`:''}${avv?`<br><span class="pill">${esc(avv)}</span>`:''}${x.n?`<br><button type="button" class="sm" data-act="nspdf" data-id="${esc(r.id)}" style="margin-top:4px">PDF</button>`:''}</td>`}
+async function doNsPdf(id){if(!DL||!CTX.pdfNoteSpese)return;toast('Preparo il PDF delle note spese…');
+  try{const x=await CTX.pdfNoteSpese(id);if(!x){toast('Nessuna nota spese chiusa per questo rapporto');return}await DL.save({filename:x.nome,data:x.blob})}
+  catch(e){if(e&&e.code==='declined')return;toast('Non riesco a creare il PDF: '+(e&&e.message||'errore'))}}
 function vFatt(){
+  caricaNS();
   const L=Object.values(S.rapporti).filter(r=>r.firma&&r.firma.ts).sort((a,b)=>b.firma.ts.localeCompare(a.firma.ts));
   const da=L.filter(r=>!S.fatture[r.id]),fa=L.filter(r=>S.fatture[r.id]);
   L.forEach(checkInteg);
-  const row=(r,done)=>{const t=RI.totals(r),f=S.fatture[r.id];return `<tr><td><b>${esc(r.cli.nome)}</b><br><span class="mono" style="font-size:12px;color:var(--mut)">${esc(r.num)}</span></td><td>${r.tipo==='inst'?'Installazione':'Manutenzione'}<br><span class="note">${esc(range(r))}${mezzoDi(r,S.addebiti[r.id])?' · '+esc(mezzoDi(r,S.addebiti[r.id]).testo):''}</span></td><td class="n num">${RI.hrs(t.ordU)}</td><td class="n num">${RI.hrs(t.extU)}</td><td class="n num">${RI.hrs(t.ordG+t.extG)}</td><td class="n num">${RI.hrs(t.viaggioU)}</td><td class="n num">${t.km}</td><td class="n num">${t.ricambi}</td><td class="n num"><b>${euro(addebitoDi(r).totale)}</b></td><td>${INTEG[r.id]===false?'<span class="pill bad">Modificato dopo la firma</span>':RI.fd(r.firma.ts.slice(0,10))}</td><td><div class="row"><button type="button" class="sm" data-act="pdfid" data-id="${esc(r.id)}">PDF</button><button type="button" class="sm" data-act="orepdfid" data-id="${esc(r.id)}">Report ore</button><button type="button" class="sm${UI.add===r.id?' pri':''}" data-add="${esc(r.id)}">Importo</button><button type="button" class="sm" data-act="addpdf" data-id="${esc(r.id)}">Riepilogo addebiti</button><button type="button" class="sm" data-openr="${esc(r.id)}">Apri</button>${done?`<span class="note">${f.nf?'Fatt. '+esc(f.nf):''} ${f.df?RI.fd(f.df):''}</span><button type="button" class="sm" data-act="annfatt" data-id="${esc(r.id)}">Annulla</button>`:`<button type="button" class="sm pri" data-fatt="${esc(r.id)}">Segna fatturato</button>`}</div></td></tr>`};
-  const hd='<thead><tr><th>Cliente</th><th>Intervento</th><th class="n">Ore ord.</th><th class="n">Ore extra</th><th class="n">In garanzia</th><th class="n">Viaggio</th><th class="n">Km</th><th class="n">Parti</th><th class="n">Da addebitare €</th><th>Firmato</th><th></th></tr></thead>';
+  const row=(r,done)=>{const t=RI.totals(r),f=S.fatture[r.id];return `<tr><td><b>${esc(r.cli.nome)}</b><br><span class="mono" style="font-size:12px;color:var(--mut)">${esc(r.num)}</span></td><td>${r.tipo==='inst'?'Installazione':'Manutenzione'}<br><span class="note">${esc(range(r))}${mezzoDi(r,S.addebiti[r.id])?' · '+esc(mezzoDi(r,S.addebiti[r.id]).testo):''}</span></td><td class="n num">${RI.hrs(t.ordU)}</td><td class="n num">${RI.hrs(t.extU)}</td><td class="n num">${RI.hrs(t.ordG+t.extG)}</td><td class="n num">${RI.hrs(t.viaggioU)}</td><td class="n num">${t.km}</td><td class="n num">${t.ricambi}</td><td class="n num"><b>${euro(addebitoDi(r).totale)}</b></td>${cellaNS(r)}<td>${INTEG[r.id]===false?'<span class="pill bad">Modificato dopo la firma</span>':RI.fd(r.firma.ts.slice(0,10))}</td><td><div class="row"><button type="button" class="sm" data-act="pdfid" data-id="${esc(r.id)}">PDF</button><button type="button" class="sm" data-act="orepdfid" data-id="${esc(r.id)}">Report ore</button><button type="button" class="sm${UI.add===r.id?' pri':''}" data-add="${esc(r.id)}">Importo</button><button type="button" class="sm" data-act="addpdf" data-id="${esc(r.id)}">Riepilogo addebiti</button><button type="button" class="sm" data-openr="${esc(r.id)}">Apri</button>${done?`<span class="note">${f.nf?'Fatt. '+esc(f.nf):''} ${f.df?RI.fd(f.df):''}</span><button type="button" class="sm" data-act="annfatt" data-id="${esc(r.id)}">Annulla</button>`:`<button type="button" class="sm pri" data-fatt="${esc(r.id)}">Segna fatturato</button>`}</div></td></tr>`};
+  const hd=`<thead><tr><th>Cliente</th><th>Intervento</th><th class="n">Ore ord.</th><th class="n">Ore extra</th><th class="n">In garanzia</th><th class="n">Viaggio</th><th class="n">Km</th><th class="n">Parti</th><th class="n">Da addebitare €</th>${CTX.noteSpese?'<th class="n">Note spese €</th>':''}<th>Firmato</th><th></th></tr></thead>`;
   const form=UI.fatt?`<div class="confirm"><b>Fatturazione di ${esc((S.rapporti[UI.fatt.id]||{}).num)}</b><div class="g"><label>Numero fattura<input id="ff-n" data-fk="nf" value="${esc(UI.fatt.nf)}"></label><label>Data fattura<input id="ff-d" type="date" data-fk="df" value="${esc(UI.fatt.df)}"></label><label class="w2">Note<input id="ff-no" data-fk="note" value="${esc(UI.fatt.note)}"></label></div><div class="row"><button type="button" class="pri" data-act="savefatt">Segna fatturato</button><button type="button" data-act="nofatt">Annulla</button></div></div>`:'';
   return `<div class="top"><h2>Da fatturare</h2><span class="note">Ore in ore uomo (ore × nr. tecnici). Le ore oltre le 8 giornaliere sono extra.</span><span class="sp"></span>${da.length?'<button type="button" data-act="xlsadd">Esporta importi (Excel)</button>':''}<button type="button" data-act="listini">Listini</button></div>${form}${UI.lst?vListini():''}${UI.add&&S.rapporti[UI.add]?vAddebito(S.rapporti[UI.add]):''}
   <section class="panel"><h2>In attesa di fattura <small>${da.length}</small></h2>${da.length?`<div class="tw"><table>${hd}<tbody>${da.map(r=>row(r,false)).join('')}</tbody></table></div>`:'<p class="note" style="margin:0">Nessun rapporto firmato in attesa. Quando un tecnico fa firmare il cliente, il rapporto compare qui.</p>'}</section>
@@ -480,6 +492,7 @@ async function esportaAddebiti(){
   if(!DL){toast('Il download dei file non è disponibile in questa vista');return}
   const L=Object.values(S.rapporti).filter(r=>r.firma&&r.firma.ts&&!S.fatture[r.id]).sort((a,b)=>(a.cli.nome||'').localeCompare(b.cli.nome||'','it'));
   try{const ExcelJS=(await import('exceljs')).default;const wb=new ExcelJS.Workbook();
+    const NSx=CTX.noteSpese?(await CTX.noteSpese().catch(()=>null))||{}:{};
     const ws=wb.addWorksheet('Da fatturare');
     ws.columns=[{header:'Cliente',width:34},{header:'Rapporto',width:16},{header:'Periodo',width:24},{header:'Listino',width:12},{header:'Mezzo',width:24},{header:'Voce',width:46},{header:'Quantità',width:10},{header:'U.m.',width:6},{header:'Prezzo €',width:11},{header:'Importo €',width:12},{header:'Note',width:40}];
     ws.getRow(1).font={bold:true};
@@ -490,7 +503,18 @@ async function esportaAddebiti(){
       A.garanzia.righe.forEach(x=>{const g=ws.addRow([...base,'Garanzia – '+x.voce,x.qta,x.um,x.prezzo,null,'valore non addebitato: '+euro(x.importo)+' €']);g.font={color:{argb:'FF2E7D4F'}}});
       A.garanzia.parti.forEach(x=>{const g=ws.addRow([...base,'Garanzia – parte: '+[x.cod,x.des].filter(Boolean).join(' – '),+String(x.q).replace(',','.')||x.q,'n.',null,null,'non addebitata']);g.font={color:{argb:'FF2E7D4F'}}});
       if(A.garanzia.righe.length){const g=ws.addRow([...base,'VALORE IN GARANZIA (NON ADDEBITATO)',null,'',null,null,euro(A.garanzia.totale)+' €']);g.font={bold:true,color:{argb:'FF2E7D4F'}}}
+      const ns=NSx[r.id];
+      if(ns&&ns.n){const c=ns.cambio,info=[c&&(c.provvisorio?'cambio provvisorio':'cambio BCE del '+RI.fd(c.data_bce)),ns.daChiudere&&ns.daChiudere+' note da chiudere',ns.daVerificare&&ns.daVerificare+' note da verificare'].filter(Boolean).join('; ');
+        ns.righe.forEach(x=>{const w=ws.addRow([...base,'Nota spese '+x.nota+': '+[x.categoria,x.esercente,x.mezzo].filter(Boolean).join(' – ')+(x.valuta!=='EUR'?' ('+euro(x.importo)+' '+x.valuta+')':''),null,'',null,x.euro,[x.fatt?'da addebitare al cliente':'non da addebitare',x.rimborsare?x.metodo+' – DA RIMBORSARE':x.metodo].join('; ')]);if(x.rimborsare)w.font={color:{argb:'FFC2410C'}}});
+        const t=ws.addRow([...base,'TOTALE NOTE SPESE (di cui da addebitare '+euro(ns.fatturabile)+' €)',null,'',null,ns.euro,info]);t.font={bold:true}}
       ws.addRow([])}
+    // tutte le spese delle note dei rapporti esportati, una per riga
+    const wn=wb.addWorksheet('Note spese');
+    wn.columns=[{header:'Cliente',width:30},{header:'Rapporto',width:16},{header:'Nota spese',width:14},{header:'Stato nota',width:14},{header:'Compilata da',width:22},{header:'Data',width:11},{header:'Categoria',width:24},{header:'Esercente',width:24},{header:'Mezzo',width:20},{header:'Pagata con',width:24},{header:'Da rimborsare',width:13},{header:'Importo',width:12},{header:'Valuta',width:8},{header:'Cambio (1 € =)',width:13},{header:'Importo €',width:12},{header:'Da addebitare',width:13},{header:'Note',width:30}];
+    wn.getRow(1).font={bold:true};
+    for(const r of L){const ns=NSx[r.id];if(!ns)continue;
+      ns.righe.forEach(x=>{const w=wn.addRow([r.cli.nome||'',r.num,x.nota,x.stato,x.autore,x.data?new Date(x.data+'T12:00:00'):'',x.categoria,x.esercente,x.mezzo,x.metodo,x.rimborsare?'sì':'',x.importo,x.valuta,x.tasso,x.euro,x.fatt?'sì':'',x.note]);if(x.rimborsare)w.font={color:{argb:'FFC2410C'}}})}
+    wn.getColumn(6).numFmt='dd/mm/yyyy';['L','N','O'].forEach(c=>wn.getColumn(c).numFmt='#,##0.00');wn.getColumn('N').numFmt='#,##0.0000';
     ['H','I'].forEach(c=>ws.getColumn(c).numFmt='#,##0.00');
     const buf=await wb.xlsx.writeBuffer();
     await DL.save({filename:'Da fatturare '+today()+'.xlsx',data:new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})})}
