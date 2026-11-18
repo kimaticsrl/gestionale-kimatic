@@ -72,6 +72,14 @@ l'altro; i codici che spariscono dall'estrazione risultano prelevati. Fonte: la 
 `strumenti/InviaMancanti.ps1` (Utilità di pianificazione: all'accesso e alle 13:00) a `/api/mancanti`
 (variabile su Vercel `MANCANTI_TOKEN`), oppure il file Excel caricato a mano dal modulo.
 
+Lo stesso invio manda anche `dbo.KI_ANALISI_COMMESSE_MANCANTI` (celle, ultima lavorazione chiusa, conto
+deposito: aggiornano solo le righe esistenti, migrazione 0056) e le fasi delle OP di produzione dei codici
+mancanti da `sA1.CS_OP_FASI_LAVORAZIONI` (tabella `mancanti_op`, migrazione 0058). Le note restano
+sull'articolo (0054); il conto deposito, le celle (anche per parte del nome) e i fornitori si assegnano a una
+persona (0057, tipo `cdep`); i gruppi 21.5… senza figli nel file mostrano la distinta del Controllo di
+gestione se c'è (`mancanti_distinte()`). Filtri per commessa, fornitore e persona, liste pronte ed Excel di
+quello che si vede.
+
 ## Prima installazione
 
 1. Supabase → SQL Editor: eseguire in ordine i file in `supabase/migrations/`.

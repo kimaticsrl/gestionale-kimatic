@@ -24,6 +24,8 @@ $Url      = 'https://gestionale-kimatic.vercel.app/api/mancanti'
 $Query    = 'SELECT DISTINCT * FROM GSTPIVOT.dbo.EXT_KIMATIC_MATERIALI_DA_PRELEVARE'
 # celle di lavorazione, ultima lavorazione chiusa e conto deposito (la vista del file Mancanti_2025)
 $QueryCelle = 'SELECT DISTINCT COMMESSA, [CODICE MACCHINA], [DESCRIZIONE MACCHINA], [CODICE OP], [DESCRIZIONE OP], [CODICE ARTICOLO], [DESCRIZIONE ARTICOLO], [QTA RES DA PRELEVARE], [GIACENZA MAG PRINC E VERTICALI], FORNITORE, [CELLA LAV DISPONIBILE], CELLA_LAV_CHIUSA, [ULTIMA LAV CHIUSA], [IN C/DEP PRESSO] FROM dbo.KI_ANALISI_COMMESSE_MANCANTI'
+# ordini di produzione (con le fasi) dei codici mancanti e dei gruppi: produzione interna e figli dei 21.5...
+$QueryOp = 'SELECT DISTINCT f.CodArtOP, f.NumOP, f.AnnoOP, f.StatoOP, f.NumComm, f.AnnoComm, f.QtaOrdine, f.QtaProd, f.SeqFaf, f.DesLav, f.DesCella, f.StatoFase, f.DataScaFas FROM sA1.CS_OP_FASI_LAVORAZIONI f WHERE f.AnnoOP >= YEAR(GETDATE()) - 1 AND f.CodArtOP IN (SELECT Componente FROM GSTPIVOT.dbo.EXT_KIMATIC_MATERIALI_DA_PRELEVARE UNION SELECT Articolo_OP FROM GSTPIVOT.dbo.EXT_KIMATIC_MATERIALI_DA_PRELEVARE)'
 $NomeTask = 'Kimatic - invio mancanti al gestionale'
 New-Item -ItemType Directory -Force $Cartella | Out-Null
 
@@ -140,6 +142,8 @@ try {
   $righe = Leggi $Query
   $celle = $null; $erroreCelle = ''
   try { $celle = Leggi $QueryCelle } catch { $erroreCelle = $_.Exception.Message }
+  $opSam = $null; $erroreOp = ''
+  try { $opSam = Leggi $QueryOp } catch { $erroreOp = $_.Exception.Message }
   $conn.Close()
   if ($righe.Count -eq 0) { throw 'SAM non ha restituito righe.' }
 
@@ -159,6 +163,11 @@ try {
   elseif ($celle -and $celle.Count -gt 0) {
     try { $r2 = Manda 'celle' $celle; Scrivi ("Celle di lavorazione e conto deposito aggiornati: {0} righe." -f $r2.righe) }
     catch { $m2 = $_.Exception.Message; if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $m2 += ' - ' + $_.ErrorDetails.Message }; Scrivi ('Celle di lavorazione non inviate: ' + $m2) }
+  }
+  if ($erroreOp) { Scrivi ('OP di produzione non lette: ' + $erroreOp) }
+  elseif ($opSam -and $opSam.Count -gt 0) {
+    try { $r3 = Manda 'op' $opSam; Scrivi ("OP di produzione aggiornate: {0}." -f $r3.righe) }
+    catch { $m3 = $_.Exception.Message; if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $m3 += ' - ' + $_.ErrorDetails.Message }; Scrivi ('OP di produzione non inviate: ' + $m3) }
   }
   if ($Manuale) { Write-Host ''; Write-Host 'Fatto: ricarica la pagina Mancanti montaggi nel gestionale.' -ForegroundColor Green; Start-Sleep -Seconds 6 }
   exit 0

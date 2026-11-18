@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
-import { daTabella, type Ordine } from "./sam";
+import { daTabella, type Ordine, type OpSam } from "./sam";
 import "./mancanti.css";
 
 type Props = { me: string; gestisce: boolean; modifica: boolean };
@@ -15,22 +15,35 @@ export type Mancante = {
 type Commessa = { commessa: string; cliente: string; montaggio: string | null; note: string; nascosta: boolean };
 type MacchinaPiano = { code: string; desc: string; s: string | null; e: string | null; done: boolean; chi: string | null };
 type CommessaPiano = { commessa: string; cliente: string; chiusa: boolean; macchine: MacchinaPiano[] };
-type Assegnazione = { tipo: "fornitore" | "cella"; valore: string; persona: string };
+type Assegnazione = { tipo: "fornitore" | "cella" | "cdep"; valore: string; persona: string };
 type Import = { il: string; origine: string; file: string; commesse: string[]; righe: number; nuovi: number; chiusi: number };
 
 // stato di un mancante, dal più vicino al montaggio al più lontano
 const STATI = [
   ["magazzino", "Pronto a magazzino", "c'è giacenza: si può prelevare"],
   ["cdep", "In conto deposito", "presso un fornitore in conto deposito"],
-  ["cella", "In lavorazione interna", "in una cella di lavorazione Kimatic"],
-  ["ordinato", "Ordinato", "c'è un ordine o un fornitore"],
-  ["scoperto", "Scoperto", "né giacenza, né ordine, né lavorazione"],
+  ["cella", "Produzione interna", "costruttivo o gruppo fatto in Kimatic: in una cella interna, con un'OP di produzione o senza ordine d'acquisto"],
+  ["esterna", "Lavorazione esterna", "presso un terzista per una lavorazione"],
+  ["ordinato", "Ordinato", "c'è un ordine d'acquisto al fornitore"],
+  ["scoperto", "Da ordinare", "commerciale senza giacenza né ordine"],
 ] as const;
 type Stato = (typeof STATI)[number][0];
-export function statoDi(m: Mancante): Stato {
+// celle di lavorazione interne a Kimatic (le altre «celle» di SAM sono terzisti)
+const CELLA_INTERNA = /^(AREA |TORN|FRES|CONTROLLO|PRODUZIONE KIMATIC|MONTAGGIO|MAGAZZINO|STAMPANT|PIEGATUR|SALDATUR|VERNICIAT|ASSEMBLA|COLLAUD)/i;
+export const cellaInterna = (c: string) => !!c && CELLA_INTERNA.test(c.trim());
+// costruttivi (20., 21., 90.) e gruppi (21.5…): si producono in Kimatic o da terzisti
+const costruttivo = (c: string) => /^(2[01]|90)\./.test(c);
+export const gruppo = (c: string) => /^21\.50[0-5]/.test(c);
+const oaFornitore = (m: Mancante) => m.ordini.some((o) => !/grezz/i.test(o.tipo || ""));
+// fase di un'OP già fatta (gli stati di SAM: chiusa, terminata, evasa, completata…)
+const FASE_CHIUSA = /^(c|ch|t|e)$|chius|termin|evas|complet|finit/i;
+export function statoDi(m: Mancante, haOp = false, cellaOp = ""): Stato {
   if (m.qta != null && m.giac_mp != null && m.giac_mp >= m.qta && m.qta > 0) return "magazzino";
   if (m.cdep) return "cdep";
-  if (m.cella) return "cella";
+  const cella = m.cella || cellaOp;
+  if (cella) return cellaInterna(cella) ? "cella" : "esterna";
+  if (oaFornitore(m)) return "ordinato";
+  if (haOp || costruttivo(m.codice)) return "cella";
   if (m.ordini.length || m.fornitore) return "ordinato";
   return "scoperto";
 }
@@ -43,11 +56,11 @@ const q2 = (v: number | null) => (v == null ? "" : v.toLocaleString("it-IT", { m
 /** Data attesa: prima la data prevista scritta a mano, poi la consegna dell'ordine. */
 const attesa = (m: Mancante) => m.prevista || m.consegna;
 /** In ritardo: data attesa passata, o oltre l'inizio montaggio della commessa. */
-function ritardo(m: Mancante, montaggio?: string | null): "" | "scaduta" | "oltre" {
-  if (!m.aperto || statoDi(m) === "magazzino") return "";
+function ritardo(m: Mancante, montaggio: string | null | undefined, st: Stato): "" | "scaduta" | "oltre" {
+  if (!m.aperto || st === "magazzino") return "";
   const a = attesa(m);
   if (a && a < oggi()) return "scaduta";
-  if (montaggio && (!a || a > montaggio) && statoDi(m) !== "cdep") return "oltre";
+  if (montaggio && (!a || a > montaggio) && st !== "cdep") return "oltre";
   return "";
 }
 // «080/2026» → «80/2026» (come in SAM)
@@ -78,6 +91,12 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
   const [piano, setPiano] = useState<Record<string, CommessaPiano>>({});
   const [assegn, setAssegn] = useState<Assegnazione[]>([]);
   const [colori, setColori] = useState<Record<string, string>>({});
+  const [ops, setOps] = useState<Map<string, OpSam[]>>(new Map());
+  const [distinte, setDistinte] = useState<Record<string, { op: string; righe: [string, string, number | null][] }>>({});
+  const [filtroComm, setFiltroComm] = useState("");
+  const [filtroForn, setFiltroForn] = useState("");
+  const [filtroPers, setFiltroPers] = useState("");
+  const [lista, setLista] = useState("");
 
   async function carica() {
     const tutte: Mancante[] = [];
@@ -90,12 +109,23 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
     }
     const [{ data: C }, { data: I }, { data: P }, { data: A }, { data: K }] = await Promise.all([
       sb.from("mancanti_commesse").select("*"),
-      sb.from("mancanti_import").select("*").neq("origine", "Invio automatico (celle)").order("il", { ascending: false }).limit(1),
+      sb.from("mancanti_import").select("*").not("origine", "like", "Invio automatico (%").order("il", { ascending: false }).limit(1),
       sb.rpc("mancanti_piano"),
       sb.from("mancanti_assegnazioni").select("*"),
       sb.from("mancanti_colori").select("*"),
     ]);
     const { data: PP } = await sb.from("mancanti_persone").select("*").order("ordine").order("nome");
+    // OP di produzione di SAM (con le fasi) e distinte del Controllo di gestione per i gruppi senza figli nel file
+    const O = new Map<string, OpSam[]>();
+    for (let da = 0; ; da += 1000) {
+      const { data, error } = await sb.from("mancanti_op").select("codice,op,commessa,stato,qta,prod,fasi").order("codice").range(da, da + 999);
+      if (error || !data) break;
+      for (const x of data as OpSam[]) O.set(x.codice, [...(O.get(x.codice) || []), x]);
+      if (data.length < 1000) break;
+    }
+    setOps(O);
+    const { data: D } = await sb.rpc("mancanti_distinte");
+    setDistinte((D ?? {}) as typeof distinte);
     setPersone((PP ?? []) as typeof persone);
     setPiano(Object.fromEntries(((P ?? []) as CommessaPiano[]).map((c) => [norm(c.commessa), c])));
     setAssegn((A ?? []) as Assegnazione[]);
@@ -119,6 +149,12 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
   };
   const macchinaDi = (m: Mancante) => { const P = piano[norm(m.commessa)]; return P?.macchine.find((x) => x.code && x.code === m.op) || P?.macchine.find((x) => x.code && x.code === m.matricola) || null; };
   const montaggioDi = (m: Mancante) => { const x = macchinaDi(m); return (x && !x.done && x.s) || montaggioComm(m.commessa); };
+  // OP di produzione del codice (prima quella della stessa commessa) e fase in corso
+  const opDi = (m: Mancante) => { const L = ops.get(m.codice); return L ? (L.find((o) => norm(o.commessa) === norm(m.commessa)) || L[0]) : null; };
+  const faseDi = (m: Mancante) => { const o = opDi(m); return o ? (o.fasi.find((f) => !FASE_CHIUSA.test(f.stato)) || null) : null; };
+  const cellaOra = (m: Mancante) => m.cella || faseDi(m)?.cella || "";
+  const stDi = (m: Mancante) => statoDi(m, ops.has(m.codice), faseDi(m)?.cella || "");
+  const ritDi = (m: Mancante) => ritardo(m, montaggioDi(m), stDi(m));
   const clienteDi = (c: string) => piano[norm(c)]?.cliente || comm[c]?.cliente || "";
   const nelPiano = (c: string) => !!piano[norm(c)] && !piano[norm(c)].chiusa;
   // chi segue il codice: scelto sulla riga, altrimenti dalle assegnazioni (cella, poi fornitore)
@@ -129,10 +165,12 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
     return assegn.find((a) => a.tipo === "cella" && a.valore === cella)?.persona
       || assegn.filter((a) => a.tipo === "cella" && C.includes(a.valore.toUpperCase())).sort((a, b) => b.valore.length - a.valore.length)[0]?.persona || null;
   };
+  const cdepDi = (cdep: string) => (cdep ? (assegn.find((a) => a.tipo === "cdep" && a.valore === cdep) || assegn.find((a) => a.tipo === "cdep" && a.valore === "*"))?.persona || null : null);
   const personaDi = (m: Mancante) => m.responsabile
-    || cellaDi(m.cella)
+    || cdepDi(m.cdep)
+    || cellaDi(cellaOra(m))
     || assegn.find((a) => a.tipo === "fornitore" && (a.valore === m.fornitore || m.ordini.some((o) => o.fornitore === a.valore)))?.persona || null;
-  const coloreDi = (m: Mancante) => (statoDi(m) === "magazzino" ? colori.giacenti : (() => { const p = personaDi(m); return p ? colori[p] : undefined; })());
+  const coloreDi = (m: Mancante) => (stDi(m) === "magazzino" ? colori.giacenti : (() => { const p = personaDi(m); return p ? colori[p] : undefined; })());
   const nomeDi = (id: string | null) => persone.find((p) => p.id === id)?.nome || "";
   const aperti = righe.filter((m) => m.aperto);
   const visibileComm = (c: string) => nascoste || (nelPiano(c) && !comm[c]?.nascosta);
@@ -143,7 +181,47 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
     return M;
   }, [righe]);
   const ripetuto = (m: Mancante) => (perCodice.get(m.codice)?.length || 0) > 1;
-  const filtrati = aperti.filter((m) => visibileComm(m.commessa) && trova(m, q) && (!filtroStato || statoDi(m) === filtroStato) && (!soloRitardi || ritardo(m, montaggioDi(m))) && (!soloRipetuti || ripetuto(m)));
+  // figli dei gruppi: righe della stessa commessa che hanno come OP il codice del gruppo
+  const figli = useMemo(() => {
+    const M = new Map<string, Mancante[]>();
+    for (const m of righe) if (m.aperto) { const k = m.commessa + "|" + m.op; M.set(k, [...(M.get(k) || []), m]); }
+    return M;
+  }, [righe]);
+  const figliDi = (m: Mancante) => figli.get(m.commessa + "|" + m.codice) || [];
+  const fornitoriDi = (m: Mancante) => [...new Set([m.fornitore, ...m.ordini.map((o) => o.fornitore)].filter(Boolean))];
+  const LISTE: Record<string, { l: string; f: (m: Mancante) => boolean }> = {
+    prelevabili: { l: "Prelevabili da magazzino", f: (m) => stDi(m) === "magazzino" },
+    sollecitare: { l: "Da sollecitare ai fornitori (in ritardo)", f: (m) => (stDi(m) === "ordinato" || stDi(m) === "esterna") && !!ritDi(m) },
+    ordinati: { l: "Ordinati, in arrivo", f: (m) => stDi(m) === "ordinato" },
+    daordinare: { l: "Da ordinare", f: (m) => stDi(m) === "scoperto" },
+    interna: { l: "Produzione interna", f: (m) => stDi(m) === "cella" },
+    taglio: { l: "Al taglio", f: (m) => /TAGLIO/i.test(cellaOra(m)) },
+    tornio: { l: "Al tornio", f: (m) => /TORN/i.test(cellaOra(m)) },
+    fresa: { l: "Alla fresa", f: (m) => /FRES/i.test(cellaOra(m)) },
+    esterna: { l: "Presso terzisti (lavorazione esterna)", f: (m) => stDi(m) === "esterna" },
+    cdep: { l: "In conto deposito", f: (m) => stDi(m) === "cdep" },
+    gruppi: { l: "Gruppi 21.5… senza figli nel file", f: (m) => gruppo(m.codice) && !figliDi(m).length },
+  };
+  const base = aperti.filter((m) => visibileComm(m.commessa));
+  const filtrati = base.filter((m) => trova(m, q) && (!filtroStato || stDi(m) === filtroStato) && (!soloRitardi || ritDi(m)) && (!soloRipetuti || ripetuto(m))
+    && (!filtroComm || m.commessa === filtroComm) && (!filtroForn || fornitoriDi(m).includes(filtroForn))
+    && (!filtroPers || (filtroPers === "-" ? !personaDi(m) : personaDi(m) === filtroPers)) && (!lista || !LISTE[lista] || LISTE[lista].f(m)));
+  const filtroAttivo = !!(q || filtroStato || soloRitardi || soloRipetuti || filtroComm || filtroForn || filtroPers || lista);
+  const nomeLista = () => ["Mancanti", lista && LISTE[lista]?.l, filtroComm, filtroForn, filtroPers && (filtroPers === "-" ? "senza persona" : nomeDi(filtroPers)), filtroStato && nomeStato(filtroStato)].filter(Boolean).join(" - ");
+  const segnoFigli = (m: Mancante) => {
+    if (!gruppo(m.codice)) return null;
+    const F = figliDi(m), o = opDi(m), d = distinte[m.matricola + "|" + m.codice];
+    if (F.length) return <span className="dup fg" title={`Figli del gruppo ancora da prelevare (${F.length}):\n` + F.map((x) => `${x.codice} ${x.descr} · q.tà ${q2(x.qta)} · ${nomeStato(stDi(x))}`).join("\n")}><i>{F.length} figli mancanti</i></span>;
+    const elenco = d ? `\n\nDistinta (Controllo di gestione, OP ${d.op}):\n` + d.righe.map((r) => `${r[0]} ${r[1]} · q.tà ${r[2] ?? ""}`).join("\n") : "";
+    return o
+      ? <span className="dup ok" title={`OP ${o.op}${o.stato ? " (" + o.stato + ")" : ""}: nessun figlio da prelevare, quindi i componenti sono già stati prelevati.` + elenco}><i>figli prelevati</i></span>
+      : <span className="dup no" title={"Nel file di SAM non ci sono figli di questo gruppo e non risulta un'OP di produzione: i componenti sono già tutti prelevati oppure l'OP del gruppo non è ancora stata lanciata." + (elenco || "\n\nDistinta non trovata nel Controllo di gestione.")}><i>{d ? `figli: ${d.righe.length} in distinta` : "figli non nel file"}</i></span>;
+  };
+  const segnoOp = (m: Mancante) => {
+    const o = opDi(m); if (!o) return null;
+    const f = faseDi(m);
+    return <small title={`OP ${o.op}${o.commessa ? " · commessa " + o.commessa : ""}${o.stato ? " · " + o.stato : ""}\n` + o.fasi.map((x) => `${x === f ? "▸ " : "   "}${x.seq ?? ""} ${x.lav}${x.cella ? " · " + x.cella : ""}${x.stato ? " · " + x.stato : ""}${x.scad ? " · " + fd(x.scad) : ""}`).join("\n")}>OP {o.op}{f ? ` · ${f.lav.toLowerCase()}` : ""}</small>;
+  };
   const segnoRipetuto = (m: Mancante) => {
     const L = perCodice.get(m.codice) || [];
     if (L.length < 2) return null;
@@ -225,29 +303,31 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
     const ExcelJS = (await import("exceljs")).default;
     const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet("Mancanti");
     ws.columns = [["Commessa", 12], ["Cliente", 20], ["Inizio montaggio", 12], ["Matricola", 15], ["Macchina", 30], ["OP", 16], ["Gruppo (OP)", 30], ["Codice", 16], ["Descrizione", 36], ["Q.tà", 7], ["Giacenza", 9],
-      ["Stato", 20], ["Fornitore", 24], ["Ordini", 26], ["Consegna ordine", 12], ["Cella lavorazione", 20], ["C/deposito", 18], ["Data prevista", 12], ["Chi lo segue", 18], ["Note", 36], ["Nota aggiornata il", 14]]
+      ["Stato", 20], ["Fornitore", 24], ["Ordini", 26], ["Consegna ordine", 12], ["Cella lavorazione", 20], ["C/deposito", 18], ["Data prevista", 12], ["Chi lo segue", 18], ["Note", 36], ["Nota aggiornata il", 14], ["OP produzione / fase", 26], ["Figli del gruppo", 22]]
       .map(([header, width]) => ({ header: String(header), width: Number(width) }));
     ws.getRow(1).font = { bold: true };
     const nomeP = Object.fromEntries(persone.map((p) => [p.id, p.nome]));
-    for (const m of L) {
-      const rit = ritardo(m, montaggioDi(m)), mo = montaggioDi(m);
+    const ordinati = lista === "sollecitare" ? [...L].sort((a, b) => (a.fornitore || "~").localeCompare(b.fornitore || "~") || (attesa(a) || "9999").localeCompare(attesa(b) || "9999")) : L;
+    for (const m of ordinati) {
+      const rit = ritDi(m), mo = montaggioDi(m), o = opDi(m), f = faseDi(m), F = gruppo(m.codice) ? figliDi(m) : null;
       const row = ws.addRow([m.commessa, clienteDi(m.commessa), mo ? new Date(mo + "T12:00:00") : "", m.matricola, m.macchina, m.op, m.op_descr, m.codice, m.descr, m.qta, m.giac_mp,
-        nomeStato(statoDi(m)), m.fornitore, m.ordini.map((o) => o.num).join(", "), m.consegna ? new Date(m.consegna + "T12:00:00") : "", m.cella, m.cdep,
-        m.prevista ? new Date(m.prevista + "T12:00:00") : "", nomeP[personaDi(m) || ""] || "", m.nota, m.nota_il ? new Date(m.nota_il) : ""]);
+        nomeStato(stDi(m)), m.fornitore, m.ordini.map((o) => o.num).join(", "), m.consegna ? new Date(m.consegna + "T12:00:00") : "", cellaOra(m), m.cdep,
+        m.prevista ? new Date(m.prevista + "T12:00:00") : "", nomeP[personaDi(m) || ""] || "", m.nota, m.nota_il ? new Date(m.nota_il) : "",
+        o ? `OP ${o.op}${f ? " · " + f.lav : ""}` : "", F ? (F.length ? `${F.length} figli mancanti` : o ? "figli prelevati" : "figli non nel file") : ""]);
       const col = coloreDi(m);
       if (col) row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + col.slice(1).toUpperCase() } };
       if (col && scuro(col)) row.font = { color: { argb: "FFFFFFFF" } };
       if (rit) row.font = { ...(row.font || {}), bold: true, color: col && scuro(col) ? { argb: "FFFFFFFF" } : { argb: "FFB42318" } };
     }
     ["C", "O", "R", "U"].forEach((k) => (ws.getColumn(k).numFmt = "dd/mm/yyyy"));
-    ws.autoFilter = { from: "A1", to: "U1" }; ws.views = [{ state: "frozen", ySplit: 1 }];
+    ws.autoFilter = { from: "A1", to: "W1" }; ws.views = [{ state: "frozen", ySplit: 1 }];
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([await wb.xlsx.writeBuffer()], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
     a.download = `${nome} ${oggi()}.xlsx`.replace(/[\\/:*?"<>|]+/g, " "); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 3000);
   }
 
   // ---------- pezzi di interfaccia ----------
-  const conteggi = (L: Mancante[]) => Object.fromEntries(STATI.map(([k]) => [k, L.filter((m) => statoDi(m) === k).length])) as Record<Stato, number>;
+  const conteggi = (L: Mancante[]) => Object.fromEntries(STATI.map(([k]) => [k, L.filter((m) => stDi(m) === k).length])) as Record<Stato, number>;
   const barra = (L: Mancante[]) => {
     const c = conteggi(L), n = L.length || 1;
     return <div className="barra" aria-hidden>{STATI.map(([k]) => c[k] ? <span key={k} className={"b-" + k} style={{ width: `${(c[k] / n) * 100}%` }} title={`${nomeStato(k)}: ${c[k]}`} /> : null)}</div>;
@@ -256,15 +336,15 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
     <div className="mx"><table className="tm">
       <thead><tr>{o.commessa && <th>Commessa</th>}{o.macchina !== false && <th>Macchina / gruppo</th>}<th>Codice</th><th className="n">Q.tà</th><th className="n hide-s">Giac.</th><th>Stato</th><th>Fornitore / ordine</th><th>Attesa</th><th>Segue</th><th>Prevista</th><th>Nota</th></tr></thead>
       <tbody>{L.map((m) => {
-        const st = statoDi(m), rit = ritardo(m, montaggioDi(m)), ed = modifica || gestisce;
+        const st = stDi(m), rit = ritDi(m), ed = modifica || gestisce;
         return (
           <tr key={m.id} className={(rit ? "rit " : "") + (coloreDi(m) && scuro(coloreDi(m)!) ? " scura" : "")} style={coloreDi(m) ? { background: coloreDi(m) } : undefined}>
             {o.commessa && <td><b>{m.commessa}</b><small>{clienteDi(m.commessa)}</small></td>}
             {o.macchina !== false && <td className="l1" title={m.op_descr || m.macchina}><span className="mono">{m.op}</span><small>{m.op_descr || m.macchina}</small></td>}
-            <td className="l1" title={m.descr}><span className="mono">{m.codice}</span>{segnoRipetuto(m)}<small>{m.descr}</small></td>
+            <td className="l1" title={m.descr}><span className="mono">{m.codice}</span>{segnoFigli(m)}{segnoRipetuto(m)}<small>{m.descr}</small></td>
             <td className="n mono">{q2(m.qta)}</td>
             <td className="n mono hide-s">{q2(m.giac_mp)}</td>
-            <td className="l1" title={[m.cella, m.ultima_lav && "ultima fase chiusa: " + m.ultima_lav, m.cdep].filter(Boolean).join("\n")}><span className={"st s-" + st}>{nomeStato(st)}</span>{m.cella && <small>{m.cella}{m.ultima_lav ? " · chiusa: " + m.ultima_lav.toLowerCase() : ""}</small>}{m.cdep && <small>{m.cdep}</small>}</td>
+            <td className="l1" title={[cellaOra(m), m.ultima_lav && "ultima fase chiusa: " + m.ultima_lav, m.cdep].filter(Boolean).join("\n")}><span className={"st s-" + st}>{nomeStato(st)}</span>{cellaOra(m) && <small>{cellaOra(m)}{m.ultima_lav ? " · chiusa: " + m.ultima_lav.toLowerCase() : ""}</small>}{m.cdep && <small>{m.cdep}</small>}{segnoOp(m)}</td>
             <td className="l1" title={m.ordini.map((x) => `OA ${x.num}${x.consegna ? " · " + fd(x.consegna) : ""}${x.fornitore ? " · " + x.fornitore : ""}`).join("\n")}>{m.fornitore}{m.ordini.length > 0 && <small>{m.ordini.map((x) => `OA ${x.num}${x.consegna ? " · " + fd(x.consegna) : ""}${x.fornitore && x.fornitore !== m.fornitore ? " · " + x.fornitore : ""}`).join("; ")}</small>}</td>
             <td className="mono l1">{fd(attesa(m))}{rit && <small className="r">{rit === "scaduta" ? "data passata" : "dopo il montaggio"}</small>}</td>
             <td className="chi">{(() => { const p = personaDi(m), c = p ? colori[p] : undefined; return ed
@@ -282,7 +362,8 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
 
   // ---------- viste ----------
   const commesse = [...new Set(aperti.map((m) => m.commessa))].filter(visibileComm)
-    .sort((a, b) => (comm[a]?.montaggio || "9999").localeCompare(comm[b]?.montaggio || "9999") || ordComm(b).localeCompare(ordComm(a)));
+    .filter((c) => !filtroComm || c === filtroComm)
+    .sort((a, b) => (montaggioComm(a) || "9999").localeCompare(montaggioComm(b) || "9999") || ordComm(b).localeCompare(ordComm(a)));
   const raggruppa = (L: Mancante[], k: (m: Mancante) => string) => { const g = new Map<string, Mancante[]>(); L.forEach((m) => g.set(k(m), [...(g.get(k(m)) || []), m])); return [...g.entries()]; };
 
   let corpo: React.ReactNode;
@@ -291,10 +372,10 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
       <div className="carte">
         {commesse.map((c) => {
           const L = filtrati.filter((m) => m.commessa === c), tutti = aperti.filter((m) => m.commessa === c), C = comm[c];
-          if (!L.length && (q || filtroStato || soloRitardi)) return null;
-          const rit = tutti.filter((m) => ritardo(m, montaggioDi(m))).length, prel = righe.filter((m) => !m.aperto && m.commessa === c).length;
+          if (!L.length && filtroAttivo) return null;
+          const rit = tutti.filter((m) => ritDi(m)).length, prel = righe.filter((m) => !m.aperto && m.commessa === c).length;
           const macchine = [...new Set(tutti.map((m) => m.macchina || m.matricola))];
-          const ap = aperta === c;
+          const ap = aperta === c || filtroComm === c;
           return (
             <section key={c} className={"box carta" + (ap ? " aperta" : "") + (C?.nascosta ? " nasc" : "")}>
               <div className="testa" onClick={() => setAperta(ap ? "" : c)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") setAperta(ap ? "" : c); }} aria-expanded={ap}>
@@ -329,12 +410,12 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
       </div>
     );
   } else if (vista === "fornitori" || vista === "reparti") {
-    const chiave = vista === "fornitori" ? (m: Mancante) => m.fornitore || (statoDi(m) === "scoperto" ? "— senza fornitore né ordine —" : "") : (m: Mancante) => m.cella || m.cdep || (statoDi(m) === "magazzino" ? "Da prelevare a magazzino" : "");
+    const chiave = vista === "fornitori" ? (m: Mancante) => m.fornitore || (stDi(m) === "scoperto" ? "— senza fornitore né ordine —" : "") : (m: Mancante) => cellaOra(m) || m.cdep || (stDi(m) === "magazzino" ? "Da prelevare a magazzino" : stDi(m) === "cella" ? "Produzione interna, cella non indicata" : "");
     const G = raggruppa(filtrati.filter((m) => chiave(m)), chiave).sort((a, b) => b[1].length - a[1].length);
     corpo = (
       <div className="carte">
         {G.map(([k, L]) => {
-          const ap = aperta === k, rit = L.filter((m) => ritardo(m, montaggioDi(m))).length, cc = [...new Set(L.map((m) => m.commessa))];
+          const ap = aperta === k, rit = L.filter((m) => ritDi(m)).length, cc = [...new Set(L.map((m) => m.commessa))];
           return (
             <section key={k} className={"box carta" + (ap ? " aperta" : "")}>
               <div className="testa" onClick={() => setAperta(ap ? "" : k)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") setAperta(ap ? "" : k); }} aria-expanded={ap}>
@@ -351,7 +432,8 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
   } else if (vista === "assegnazioni") {
     const conta = (k: (m: Mancante) => string[]) => { const c = new Map<string, number>(); aperti.filter((m) => visibileComm(m.commessa)).forEach((m) => k(m).filter(Boolean).forEach((v) => c.set(v, (c.get(v) || 0) + 1))); return [...c.entries()].sort((a, b) => b[1] - a[1]); };
     const forn = conta((m) => [...new Set([m.fornitore, ...m.ordini.map((o) => o.fornitore)])]).filter(([v]) => !q || v.toLowerCase().includes(q.toLowerCase()));
-    const celle = conta((m) => [m.cella]).filter(([v]) => !q || v.toLowerCase().includes(q.toLowerCase()));
+    const depositi = conta((m) => [m.cdep]);
+    const celle = conta((m) => [cellaOra(m)]).filter(([v]) => !q || v.toLowerCase().includes(q.toLowerCase()));
     const conColore = persone;
     const sel = (tipo: Assegnazione["tipo"], v: string) => {
       const a = assegn.find((x) => x.tipo === tipo && x.valore === v)?.persona || "";
@@ -362,7 +444,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
       <div className="carte">
         <section className="box" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <h2 style={{ margin: 0 }}>Colori</h2>
-          <p className="nota">Sono le persone (o i gruppi, come «Magazzino») che si possono scegliere come «chi lo segue». Ogni codice prende il colore della persona che lo segue: quella scelta sulla riga, altrimenti quella assegnata alla cella di lavorazione, altrimenti quella del fornitore. I codici giacenti a magazzino hanno sempre il loro colore.</p>
+          <p className="nota">Sono le persone (o i gruppi, come «Magazzino») che si possono scegliere come «chi lo segue». Ogni codice prende il colore della persona che lo segue: quella scelta sulla riga, altrimenti quella del conto deposito, poi quella della cella di lavorazione, poi quella del fornitore. I codici giacenti a magazzino hanno sempre il loro colore.</p>
           <div className="colori">
             <label><input type="color" value={colori.giacenti || "#d6f2d3"} disabled={!modifica} onChange={(e) => colora("giacenti", e.target.value)} /> Giacenti disponibili</label>
             {conColore.map((p) => <label key={p.id}><input type="color" value={colori[p.id] || "#ffffff"} disabled={!modifica} onChange={(e) => colora(p.id, e.target.value)} /> {p.nome}{modifica && <button type="button" className="x" title={"Togli " + p.nome} onClick={(e) => { e.preventDefault(); togliPersona(p.id); }}>✕</button>}</label>)}
@@ -375,6 +457,14 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
             <tbody>{forn.map(([v, n]) => <tr key={v}><td>{v}</td><td className="n mono">{n}</td><td>{sel("fornitore", v)}</td></tr>)}</tbody></table></div>
         </section>
         <section className="box" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <h2 style={{ margin: 0 }}>Conto deposito <small className="nota">{depositi.length}</small></h2>
+          <div className="mx"><table className="tm"><thead><tr><th>Deposito</th><th className="n">Mancanti</th><th>Chi lo segue</th></tr></thead>
+            <tbody>
+              <tr><td><b>Tutto il conto deposito</b><small>vale per ogni deposito senza una persona sua</small></td><td className="n mono">{aperti.filter((m) => visibileComm(m.commessa) && m.cdep).length}</td><td>{sel("cdep", "*")}</td></tr>
+              {depositi.map(([v, n]) => <tr key={v}><td>{v}</td><td className="n mono">{n}</td><td>{sel("cdep", v)}</td></tr>)}
+            </tbody></table></div>
+        </section>
+        <section className="box" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <h2 style={{ margin: 0 }}>Celle di lavorazione <small className="nota">{celle.length}</small></h2>
           <p className="nota">Puoi assegnare una cella intera oppure una parte del nome: «TORNI» vale per tutti i torni (CNC e tradizionali), «FRES» per frese e fresatrici, «TAGLIO» per l&apos;area taglio. Le regole valgono anche per le celle che arriveranno dopo.</p>
           {(() => {
@@ -383,7 +473,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
               <tbody>
                 {regole.map((a) => { const n = aperti.filter((m) => visibileComm(m.commessa) && m.cella.toUpperCase().includes(a.valore.toUpperCase())).length;
                   return <tr key={"r" + a.valore}><td>contiene «{a.valore}»</td><td className="n mono">{n}</td><td>{sel("cella", a.valore)}</td></tr>; })}
-                {celle.map(([v, n]) => <tr key={v}><td>{v}{!assegn.some((a) => a.tipo === "cella" && a.valore === v) && cellaDi(v) && <small>da regola: {nomeDi(cellaDi(v))}</small>}</td><td className="n mono">{n}</td><td>{sel("cella", v)}</td></tr>)}
+                {celle.map(([v, n]) => <tr key={v}><td>{v}{!cellaInterna(v) && <small>terzista</small>}{!assegn.some((a) => a.tipo === "cella" && a.valore === v) && cellaDi(v) && <small>da regola: {nomeDi(cellaDi(v))}</small>}</td><td className="n mono">{n}</td><td>{sel("cella", v)}</td></tr>)}
                 {modifica && <tr><td colSpan={3}><input placeholder="+ cella o parte del nome (es. TORNI), poi Invio" style={{ width: 300 }} onKeyDown={(e) => { const t = e.target as HTMLInputElement; if (e.key === "Enter" && t.value.trim()) { const v = t.value.trim().toUpperCase(); if (!assegn.some((a) => a.tipo === "cella" && a.valore === v)) setAssegn((L) => [...L, { tipo: "cella", valore: v, persona: "" }]); t.value = ""; } }} /></td></tr>}
               </tbody></table></div>;
           })()}
@@ -407,7 +497,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
         <div><h1>Mancanti montaggi</h1>
           <p className="sub">{ult ? <>Aggiornato {quando(ult.il)} · {ult.origine || "—"} · {ult.righe} righe, {ult.nuovi} nuove, {ult.chiusi} prelevate{Date.now() - new Date(ult.il).getTime() > 26 * 3600e3 && <b style={{ color: "#b91c1c" }}> · più di un giorno fa: l&apos;invio automatico dal PC non sta girando</b>}</> : "Nessun aggiornamento ancora: carica l'estrazione di SAM o attiva l'invio automatico."}</p></div>
         <div className="row" style={{ gap: 8 }}>
-          <button className="btn sec" onClick={() => esporta(filtrati, "Mancanti")} disabled={!filtrati.length}>Excel</button>
+          <button className="btn sec" onClick={() => esporta(filtrati, nomeLista())} disabled={!filtrati.length} title="Scarica in Excel quello che vedi con i filtri scelti">Excel ({filtrati.length})</button>
           {modifica && <label className="btn" aria-disabled={lavoro}>{lavoro ? "Carico…" : "Carica file SAM"}<input type="file" accept=".xlsx" hidden disabled={lavoro} onChange={(e) => { caricaFile(e.target.files?.[0]); e.target.value = ""; }} /></label>}
         </div>
       </header>
@@ -416,9 +506,16 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
         <div className="stati" role="tablist" aria-label="Vista">
           {([["commesse", "Per commessa"], ["fornitori", "Per fornitore"], ["reparti", "Per reparto"], ["prelevati", "Prelevati"], ["assegnazioni", "Assegnazioni e colori"]] as const).map(([k, l]) => <button key={k} role="tab" aria-selected={vista === k} aria-pressed={vista === k} onClick={() => { setVista(k); setAperta(""); }}>{l}</button>)}
         </div>
+        <div className="row filtri" style={{ gap: 8, flexWrap: "wrap" }}>
+          <select value={lista} onChange={(e) => setLista(e.target.value)} aria-label="Lista" className={lista ? "on" : ""}><option value="">Liste pronte…</option>{Object.entries(LISTE).map(([k, x]) => <option key={k} value={k}>{x.l} ({base.filter(x.f).length})</option>)}</select>
+          <select value={filtroComm} onChange={(e) => { setFiltroComm(e.target.value); setAperta(""); }} aria-label="Commessa" className={filtroComm ? "on" : ""}><option value="">Tutte le commesse</option>{[...new Set(base.map((m) => m.commessa))].sort((a, b) => (montaggioComm(a) || "9999").localeCompare(montaggioComm(b) || "9999") || ordComm(b).localeCompare(ordComm(a))).map((c) => <option key={c} value={c}>{c}{clienteDi(c) ? " · " + clienteDi(c) : ""}{montaggioComm(c) ? " · mont. " + fd(montaggioComm(c)) : ""}</option>)}</select>
+          <select value={filtroForn} onChange={(e) => setFiltroForn(e.target.value)} aria-label="Fornitore" className={filtroForn ? "on" : ""} style={{ maxWidth: 240 }}><option value="">Tutti i fornitori</option>{(() => { const c = new Map<string, number>(); base.forEach((m) => fornitoriDi(m).forEach((f) => c.set(f, (c.get(f) || 0) + 1))); return [...c.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([f, n]) => <option key={f} value={f}>{f} ({n})</option>); })()}</select>
+          <select value={filtroPers} onChange={(e) => setFiltroPers(e.target.value)} aria-label="Chi lo segue" className={filtroPers ? "on" : ""}><option value="">Seguiti da tutti</option>{persone.map((p) => <option key={p.id} value={p.id}>{p.nome} ({base.filter((m) => personaDi(m) === p.id).length})</option>)}<option value="-">— nessuno ({base.filter((m) => !personaDi(m)).length})</option></select>
+          {filtroAttivo && <button type="button" className="btn sec" onClick={() => { setQ(""); setFiltroStato(""); setSoloRitardi(false); setSoloRipetuti(false); setFiltroComm(""); setFiltroForn(""); setFiltroPers(""); setLista(""); }}>Togli filtri</button>}
+        </div>
         <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
           <input type="search" placeholder="Cerca codice, descrizione, fornitore, OA, nota…" value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: "1 1 260px" }} aria-label="Cerca" />
-          <select value={filtroStato} onChange={(e) => setFiltroStato(e.target.value)} aria-label="Stato"><option value="">Tutti gli stati</option>{STATI.map(([k, l]) => <option key={k} value={k}>{l} ({aperti.filter((m) => visibileComm(m.commessa) && statoDi(m) === k).length})</option>)}</select>
+          <select value={filtroStato} onChange={(e) => setFiltroStato(e.target.value)} aria-label="Stato"><option value="">Tutti gli stati</option>{STATI.map(([k, l]) => <option key={k} value={k}>{l} ({aperti.filter((m) => visibileComm(m.commessa) && stDi(m) === k).length})</option>)}</select>
           <label className="ck"><input type="checkbox" checked={soloRitardi} onChange={(e) => setSoloRitardi(e.target.checked)} /> Solo in ritardo</label>
           <label className="ck" title="Codici mancanti su più righe della stessa commessa o su più commesse"><input type="checkbox" checked={soloRipetuti} onChange={(e) => setSoloRipetuti(e.target.checked)} /> Solo codici ripetuti</label>
           <label className="ck"><input type="checkbox" checked={nascoste} onChange={(e) => setNascoste(e.target.checked)} /> Anche commesse fuori dal Piano produzione o tolte dal quadro</label>

@@ -7,7 +7,7 @@ export type RigaImport = {
   fornitore: string; cella: string; cdep: string; ultima_lav: string; ordini: Ordine[]; consegna: string | null;
 };
 
-const t = (v: unknown) => (v == null ? "" : String(v).trim());
+const t = (v: unknown) => { const x = v == null ? "" : String(v).trim(); return /^\(vuoto\)$/i.test(x) ? "" : x; };
 const nr = (v: unknown) => { if (v == null || v === "") return null; const n = Number(String(v).replace(",", ".")); return isFinite(n) ? n : null; };
 const anno = (num: unknown, a: unknown) => (t(num) ? `${t(num)}${t(a) ? "/" + t(a) : ""}` : "");
 // date di SAM: «2025-09-03T00:00:00», Date, numero seriale Excel; 1899-12-30 = nessuna data
@@ -91,4 +91,24 @@ export function daTabella(intestazione: string[], righe: unknown[][]): RigaImpor
   const celle = H.some((h) => /^(CELLA_LAV_CHIUSA|QTA RES DA PRELEVARE)$/i.test(h));
   const oggetti = righe.map((r) => Object.fromEntries(H.map((h, i) => [vista ? h : h.toUpperCase(), r[i]])));
   return vista ? daVista(oggetti) : celle ? daCelle(oggetti) : daEstrazione(oggetti);
+}
+
+/** OP di SAM con le loro fasi (vista sA1.CS_OP_FASI_LAVORAZIONI, una riga per fase). */
+export type Fase = { seq: number | null; lav: string; cella: string; stato: string; scad: string | null };
+export type OpSam = { codice: string; op: string; commessa: string; stato: string; qta: number | null; prod: number | null; fasi: Fase[] };
+export function daOp(righe: Record<string, unknown>[]): OpSam[] {
+  const m = new Map<string, OpSam>();
+  for (const r of righe) {
+    const g = (k: string) => r[k] ?? r[k.toUpperCase()] ?? r[k.toLowerCase()];
+    const codice = t(g("CodArtOP")), op = anno(g("NumOP"), g("AnnoOP"));
+    if (!codice || !op) continue;
+    const k = codice + "|" + op;
+    let x = m.get(k);
+    if (!x) { x = { codice, op, commessa: anno(g("NumComm"), g("AnnoComm")), stato: t(g("StatoOP")), qta: nr(g("QtaOrdine")), prod: nr(g("QtaProd")), fasi: [] }; m.set(k, x); }
+    const seq = nr(g("SeqFaf")), lav = t(g("DesLav"));
+    if ((seq != null || lav) && !x.fasi.some((f) => f.seq === seq && f.lav === lav))
+      x.fasi.push({ seq, lav, cella: t(g("DesCella")), stato: t(g("StatoFase")), scad: data(g("DataScaFas")) });
+  }
+  for (const x of m.values()) x.fasi.sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
+  return [...m.values()];
 }

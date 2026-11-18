@@ -1,6 +1,6 @@
 /* Modulo Mancanti montaggi */
-.mc{--mag:#2f6b4f;--cdep:#0e7490;--cel:#9a5b12;--ord:#1d5b86;--sco:#a3352b}
-@media (prefers-color-scheme:dark){.mc{--mag:#6dbb94;--cdep:#5cc4d6;--cel:#e0a25a;--ord:#6aa9d6;--sco:#e07a6f}}
+.mc{--mag:#2f6b4f;--cdep:#0e7490;--cel:#9a5b12;--est:#7c3aed;--ord:#1d5b86;--sco:#a3352b}
+@media (prefers-color-scheme:dark){.mc{--mag:#6dbb94;--cdep:#5cc4d6;--cel:#e0a25a;--est:#b794f6;--ord:#6aa9d6;--sco:#e07a6f}}
 .mc input,.mc select{font:inherit;font-size:14px;color:var(--fg);padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);min-width:0}
 .mc input[type=checkbox]{width:auto}
 .mc .stati{display:flex;flex-wrap:wrap;gap:6px}
@@ -77,3 +77,9 @@
 .mc .dup{display:inline-flex;gap:3px;margin-left:5px;vertical-align:1px;cursor:help}
 .mc .dup i{font-style:normal;font-size:10.5px;line-height:1;padding:2px 5px;border-radius:8px;background:#fff;border:1px solid #c2410c;color:#c2410c;white-space:nowrap}
 .mc .dup i.ac{border-color:#6d28d9;color:#6d28d9}
+.mc .b-esterna{background:var(--est)}
+.mc .s-esterna{background:color-mix(in srgb,var(--est) 18%,transparent)}
+.mc .dup.fg i{border-color:#1d5b86;color:#1d5b86}
+.mc .dup.ok i{border-color:#2f6b4f;color:#2f6b4f}
+.mc .dup.no i{border-color:#a3352b;color:#fff;background:#a3352b}
+.mc .filtri select.on{border-color:var(--fg);box-shadow:0 0 0 1px var(--fg);font-weight:600}
