@@ -238,7 +238,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
             <td className="l1" title={m.descr}><span className="mono">{m.codice}</span><small>{m.descr}</small></td>
             <td className="n mono">{q2(m.qta)}</td>
             <td className="n mono hide-s">{q2(m.giac_mp)}</td>
-            <td><span className={"st s-" + st}>{nomeStato(st)}</span>{m.cella && <small>{m.cella}</small>}{m.cdep && <small>{m.cdep}</small>}</td>
+            <td className="l1" title={[m.cella, m.ultima_lav && "ultima fase chiusa: " + m.ultima_lav, m.cdep].filter(Boolean).join("\n")}><span className={"st s-" + st}>{nomeStato(st)}</span>{m.cella && <small>{m.cella}{m.ultima_lav ? " · chiusa: " + m.ultima_lav.toLowerCase() : ""}</small>}{m.cdep && <small>{m.cdep}</small>}</td>
             <td className="l1" title={m.ordini.map((x) => `OA ${x.num}${x.consegna ? " · " + fd(x.consegna) : ""}${x.fornitore ? " · " + x.fornitore : ""}`).join("\n")}>{m.fornitore}{m.ordini.length > 0 && <small>{m.ordini.map((x) => `OA ${x.num}${x.consegna ? " · " + fd(x.consegna) : ""}${x.fornitore && x.fornitore !== m.fornitore ? " · " + x.fornitore : ""}`).join("; ")}</small>}</td>
             <td className="mono l1">{fd(attesa(m))}{rit && <small className="r">{rit === "scaduta" ? "data passata" : "dopo il montaggio"}</small>}</td>
             <td className="chi">{(() => { const p = personaDi(m), c = p ? colori[p] : undefined; return ed
