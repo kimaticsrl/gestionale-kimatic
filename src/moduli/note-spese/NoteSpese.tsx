@@ -20,7 +20,8 @@ const etichettaRap = (r?: Rap | null) => (r ? [r.numero || "Rapporto senza numer
 // Foto dello scontrino ridimensionata (lato lungo 1800 px: si legge ancora bene)
 async function comprimi(f: File): Promise<Blob> {
   if (!f.type.startsWith("image/")) return f;
-  const img = await createImageBitmap(f);
+  let img: ImageBitmap;
+  try { img = await createImageBitmap(f); } catch { return f; } // formato che il browser non sa ridimensionare: si carica com'è
   const k = Math.min(1, 1800 / Math.max(img.width, img.height));
   const c = document.createElement("canvas"); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
   c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
@@ -147,11 +148,16 @@ export default function NoteSpese({ me, nome, gestisce, modifica }: Props) {
     }
   }
   async function aggiungiFoto(files: FileList | null) {
-    if (!ed || !es || !files?.length) return;
+    // i file si copiano subito: il campo di scelta viene svuotato appena dopo (e con lui l'elenco)
+    const scelti = Array.from(files || []);
+    if (!ed || !es || !scelti.length) return;
+    const daCompilare = !(es.importo > 0);
     setLavoro(true); setMsg("");
     const nuove: string[] = [];
-    for (const f of Array.from(files)) {
+    let primaImmagine: Blob | null = null;
+    for (const f of scelti) {
       const blob = await comprimi(f);
+      if (!primaImmagine && blob.type.startsWith("image/")) primaImmagine = blob;
       const path = `${ed.id}/${es.id}-${rid()}.${blob.type === "image/jpeg" ? "jpg" : (f.name.split(".").pop() || "bin").toLowerCase()}`;
       const { error } = await sb.storage.from("note-spese").upload(path, blob, { contentType: blob.type || f.type });
       if (error) { setMsg("Foto non caricata: " + error.message); continue; }
@@ -160,7 +166,7 @@ export default function NoteSpese({ me, nome, gestisce, modifica }: Props) {
     setLavoro(false);
     setEs((s) => s && { ...s, foto: [...(s.foto || []), ...nuove] });
     // prima foto di una spesa ancora da compilare: lettura automatica
-    if (lettura && nuove.length && !(es.importo > 0)) leggiScontrino(await comprimi(Array.from(files)[0]));
+    if (lettura && daCompilare && primaImmagine) leggiScontrino(primaImmagine);
   }
   async function leggiScontrino(blob: Blob) {
     setLeggo(true); setLetto(""); setMsg("");
