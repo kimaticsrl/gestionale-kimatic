@@ -72,3 +72,8 @@
 .mc table.tm td.l1{white-space:nowrap;max-width:360px;overflow:hidden;text-overflow:ellipsis}
 .mc table.tm td.l1 small{display:inline;margin-left:6px}
 .mc table.tm td{height:26px}
+
+/* stesso codice su più righe / più commesse */
+.mc .dup{display:inline-flex;gap:3px;margin-left:5px;vertical-align:1px;cursor:help}
+.mc .dup i{font-style:normal;font-size:10.5px;line-height:1;padding:2px 5px;border-radius:8px;background:#fff;border:1px solid #c2410c;color:#c2410c;white-space:nowrap}
+.mc .dup i.ac{border-color:#6d28d9;color:#6d28d9}

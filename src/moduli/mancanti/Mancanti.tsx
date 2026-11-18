@@ -71,6 +71,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
   const [q, setQ] = useState("");
   const [filtroStato, setFiltroStato] = useState<string>("");
   const [soloRitardi, setSoloRitardi] = useState(false);
+  const [soloRipetuti, setSoloRipetuti] = useState(false);
   const [nascoste, setNascoste] = useState(false);
   const [msg, setMsg] = useState("");
   const [lavoro, setLavoro] = useState(false);
@@ -128,7 +129,25 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
   const nomeDi = (id: string | null) => persone.find((p) => p.id === id)?.nome || "";
   const aperti = righe.filter((m) => m.aperto);
   const visibileComm = (c: string) => nascoste || (nelPiano(c) && !comm[c]?.nascosta);
-  const filtrati = aperti.filter((m) => visibileComm(m.commessa) && trova(m, q) && (!filtroStato || statoDi(m) === filtroStato) && (!soloRitardi || ritardo(m, montaggioDi(m))));
+  // lo stesso codice aperto su più righe (altre macchine/OP della commessa) o su più commesse
+  const perCodice = useMemo(() => {
+    const M = new Map<string, Mancante[]>();
+    for (const m of righe) if (m.aperto) { const L = M.get(m.codice); if (L) L.push(m); else M.set(m.codice, [m]); }
+    return M;
+  }, [righe]);
+  const ripetuto = (m: Mancante) => (perCodice.get(m.codice)?.length || 0) > 1;
+  const filtrati = aperti.filter((m) => visibileComm(m.commessa) && trova(m, q) && (!filtroStato || statoDi(m) === filtroStato) && (!soloRitardi || ritardo(m, montaggioDi(m))) && (!soloRipetuti || ripetuto(m)));
+  const segnoRipetuto = (m: Mancante) => {
+    const L = perCodice.get(m.codice) || [];
+    if (L.length < 2) return null;
+    const stessa = L.filter((x) => x.commessa === m.commessa).length - 1;
+    const altre = [...new Set(L.filter((x) => x.commessa !== m.commessa).map((x) => x.commessa))];
+    const tot = L.reduce((t, x) => t + (x.qta || 0), 0);
+    const elenco = L.map((x) => `${x === m ? "▸ " : "   "}${x.commessa} · ${x.op || x.matricola}${x.op_descr ? " " + x.op_descr : ""} · q.tà ${q2(x.qta)}${x.nota ? " · nota: " + x.nota : ""}`).join("\n");
+    return <span className="dup" title={`Codice ${m.codice} mancante in ${L.length} righe (totale ${q2(tot)}):\n${elenco}`}>
+      {stessa > 0 && <i>{stessa === 1 ? "+1 riga" : `+${stessa} righe`}</i>}{altre.length > 0 && <i className="ac">{altre.length === 1 ? "anche " + altre[0] : `anche in ${altre.length} commesse`}</i>}
+    </span>;
+  };
 
   // ---------- salvataggi ----------
   async function salvaRiga(m: Mancante, campi: Partial<Pick<Mancante, "nota" | "responsabile" | "prevista" | "priorita">>) {
@@ -235,7 +254,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
           <tr key={m.id} className={(rit ? "rit " : "") + (coloreDi(m) && scuro(coloreDi(m)!) ? " scura" : "")} style={coloreDi(m) ? { background: coloreDi(m) } : undefined}>
             {o.commessa && <td><b>{m.commessa}</b><small>{clienteDi(m.commessa)}</small></td>}
             {o.macchina !== false && <td className="l1" title={m.op_descr || m.macchina}><span className="mono">{m.op}</span><small>{m.op_descr || m.macchina}</small></td>}
-            <td className="l1" title={m.descr}><span className="mono">{m.codice}</span><small>{m.descr}</small></td>
+            <td className="l1" title={m.descr}><span className="mono">{m.codice}</span>{segnoRipetuto(m)}<small>{m.descr}</small></td>
             <td className="n mono">{q2(m.qta)}</td>
             <td className="n mono hide-s">{q2(m.giac_mp)}</td>
             <td className="l1" title={[m.cella, m.ultima_lav && "ultima fase chiusa: " + m.ultima_lav, m.cdep].filter(Boolean).join("\n")}><span className={"st s-" + st}>{nomeStato(st)}</span>{m.cella && <small>{m.cella}{m.ultima_lav ? " · chiusa: " + m.ultima_lav.toLowerCase() : ""}</small>}{m.cdep && <small>{m.cdep}</small>}</td>
@@ -371,7 +390,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
     <div className="mc" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <header className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
         <div><h1>Mancanti montaggi</h1>
-          <p className="sub">{ult ? <>Aggiornato {quando(ult.il)} · {ult.origine || "—"} · {ult.righe} righe, {ult.nuovi} nuove, {ult.chiusi} prelevate</> : "Nessun aggiornamento ancora: carica l'estrazione di SAM o attiva l'invio automatico."}</p></div>
+          <p className="sub">{ult ? <>Aggiornato {quando(ult.il)} · {ult.origine || "—"} · {ult.righe} righe, {ult.nuovi} nuove, {ult.chiusi} prelevate{Date.now() - new Date(ult.il).getTime() > 26 * 3600e3 && <b style={{ color: "#b91c1c" }}> · più di un giorno fa: l&apos;invio automatico dal PC non sta girando</b>}</> : "Nessun aggiornamento ancora: carica l'estrazione di SAM o attiva l'invio automatico."}</p></div>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn sec" onClick={() => esporta(filtrati, "Mancanti")} disabled={!filtrati.length}>Excel</button>
           {modifica && <label className="btn" aria-disabled={lavoro}>{lavoro ? "Carico…" : "Carica file SAM"}<input type="file" accept=".xlsx" hidden disabled={lavoro} onChange={(e) => { caricaFile(e.target.files?.[0]); e.target.value = ""; }} /></label>}
@@ -386,6 +405,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
           <input type="search" placeholder="Cerca codice, descrizione, fornitore, OA, nota…" value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: "1 1 260px" }} aria-label="Cerca" />
           <select value={filtroStato} onChange={(e) => setFiltroStato(e.target.value)} aria-label="Stato"><option value="">Tutti gli stati</option>{STATI.map(([k, l]) => <option key={k} value={k}>{l} ({aperti.filter((m) => visibileComm(m.commessa) && statoDi(m) === k).length})</option>)}</select>
           <label className="ck"><input type="checkbox" checked={soloRitardi} onChange={(e) => setSoloRitardi(e.target.checked)} /> Solo in ritardo</label>
+          <label className="ck" title="Codici mancanti su più righe della stessa commessa o su più commesse"><input type="checkbox" checked={soloRipetuti} onChange={(e) => setSoloRipetuti(e.target.checked)} /> Solo codici ripetuti</label>
           <label className="ck"><input type="checkbox" checked={nascoste} onChange={(e) => setNascoste(e.target.checked)} /> Anche commesse fuori dal Piano produzione o tolte dal quadro</label>
         </div>
         <div className="leg">{STATI.map(([k, l, d]) => <span key={k} title={d}><i className={"b-" + k} />{l}</span>)}<span><i className="b-rit" />in ritardo: data passata o dopo l&apos;inizio montaggio</span></div>
