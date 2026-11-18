@@ -68,3 +68,7 @@
 .mc table.tm td.nt input{width:100%}
 .mc table.tm td.nt small{display:block}
 .mc .pal{display:inline-block;width:14px;height:14px;border-radius:50%;border:1px solid rgba(0,0,0,.25)}
+/* codice e descrizione sulla stessa riga */
+.mc table.tm td.l1{white-space:nowrap;max-width:360px;overflow:hidden;text-overflow:ellipsis}
+.mc table.tm td.l1 small{display:inline;margin-left:6px}
+.mc table.tm td{height:26px}

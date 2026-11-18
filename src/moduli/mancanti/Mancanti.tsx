@@ -234,8 +234,8 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
         return (
           <tr key={m.id} className={(rit ? "rit " : "") + (coloreDi(m) && scuro(coloreDi(m)!) ? " scura" : "")} style={coloreDi(m) ? { background: coloreDi(m) } : undefined}>
             {o.commessa && <td><b>{m.commessa}</b><small>{clienteDi(m.commessa)}</small></td>}
-            {o.macchina !== false && <td><span className="mono">{m.op}</span><small>{m.op_descr || m.macchina}</small></td>}
-            <td><span className="mono">{m.codice}</span><small>{m.descr}</small></td>
+            {o.macchina !== false && <td className="l1" title={m.op_descr || m.macchina}><span className="mono">{m.op}</span><small>{m.op_descr || m.macchina}</small></td>}
+            <td className="l1" title={m.descr}><span className="mono">{m.codice}</span><small>{m.descr}</small></td>
             <td className="n mono">{q2(m.qta)}</td>
             <td className="n mono hide-s">{q2(m.giac_mp)}</td>
             <td><span className={"st s-" + st}>{nomeStato(st)}</span>{m.cella && <small>{m.cella}</small>}{m.cdep && <small>{m.cdep}</small>}</td>
