@@ -44,3 +44,11 @@
 .mc td.gest input,.mc td.gest select{font-size:12.5px;padding:4px 6px;margin:0 4px 4px 0;max-width:150px}
 .mc td.gest input:not([type]){width:100%;max-width:none}
 @media (max-width:640px){.mc .hide-s{display:none}}
+.mc table.tm tr.scura td,.mc table.tm tr.scura td small,.mc table.tm tr.scura .nota{color:#fff}
+.mc table.tm tr.scura .st{background:rgba(255,255,255,.22);color:#fff}
+.mc table.tm tr[style] td{border-bottom-color:rgba(0,0,0,.08)}
+.mc table.tm tr[style] input,.mc table.tm tr[style] select{background:rgba(255,255,255,.85);color:#17202a}
+.mc .colori{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center}
+.mc .colori label{display:flex;align-items:center;gap:6px;font-size:14px}
+.mc .colori input[type=color]{width:34px;height:26px;padding:0;border:1px solid var(--line);border-radius:4px}
+.mc table.tm tr[style]:not(.scura) td,.mc table.tm tr[style]:not(.scura) td small{color:#17202a}

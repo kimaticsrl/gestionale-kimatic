@@ -13,6 +13,9 @@ export type Mancante = {
   nota: string; responsabile: string | null; prevista: string | null; priorita: "" | "alta" | "bassa";
 };
 type Commessa = { commessa: string; cliente: string; montaggio: string | null; note: string; nascosta: boolean };
+type MacchinaPiano = { code: string; desc: string; s: string | null; e: string | null; done: boolean; chi: string | null };
+type CommessaPiano = { commessa: string; cliente: string; chiusa: boolean; macchine: MacchinaPiano[] };
+type Assegnazione = { tipo: "fornitore" | "cella"; valore: string; persona: string };
 type Import = { il: string; origine: string; file: string; commesse: string[]; righe: number; nuovi: number; chiusi: number };
 
 // stato di un mancante, dal più vicino al montaggio al più lontano
@@ -47,6 +50,10 @@ function ritardo(m: Mancante, montaggio?: string | null): "" | "scaduta" | "oltr
   if (montaggio && (!a || a > montaggio) && statoDi(m) !== "cdep") return "oltre";
   return "";
 }
+// «080/2026» → «80/2026» (come in SAM)
+const norm = (c: string) => { const m = /^0*(\d+)\/(\d{4})$/.exec((c || "").trim()); return m ? `${+m[1]}/${m[2]}` : (c || "").trim(); };
+// testo leggibile sopra un colore di sfondo
+const scuro = (hex: string) => { const n = parseInt(hex.slice(1), 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255; return (0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.5; };
 // «247/2026» → «2026/000247»: prima l'anno, poi il numero
 const ordComm = (c: string) => { const [n, a] = c.split("/"); return `${a || ""}/${(n || "").padStart(6, "0")}`; };
 const pezzi = (v: string) => v.split(/\s+/).filter(Boolean);
@@ -59,7 +66,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
   const [ult, setUlt] = useState<Import | null>(null);
   const [persone, setPersone] = useState<{ id: string; nome: string }[]>([]);
   const [carico, setCarico] = useState(true);
-  const [vista, setVista] = useState<"commesse" | "fornitori" | "reparti" | "prelevati">("commesse");
+  const [vista, setVista] = useState<"commesse" | "fornitori" | "reparti" | "prelevati" | "assegnazioni">("commesse");
   const [aperta, setAperta] = useState<string>("");          // commessa / fornitore / reparto aperto
   const [q, setQ] = useState("");
   const [filtroStato, setFiltroStato] = useState<string>("");
@@ -67,6 +74,9 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
   const [nascoste, setNascoste] = useState(false);
   const [msg, setMsg] = useState("");
   const [lavoro, setLavoro] = useState(false);
+  const [piano, setPiano] = useState<Record<string, CommessaPiano>>({});
+  const [assegn, setAssegn] = useState<Assegnazione[]>([]);
+  const [colori, setColori] = useState<Record<string, string>>({});
 
   async function carica() {
     const tutte: Mancante[] = [];
@@ -77,10 +87,16 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
       tutte.push(...((data ?? []) as Mancante[]).map((x) => ({ ...x, qta: x.qta == null ? null : Number(x.qta), giac_mp: x.giac_mp == null ? null : Number(x.giac_mp), giac_mg: x.giac_mg == null ? null : Number(x.giac_mg), giac_grezzi: x.giac_grezzi == null ? null : Number(x.giac_grezzi) })));
       if (!data || data.length < 1000) break;
     }
-    const [{ data: C }, { data: I }] = await Promise.all([
+    const [{ data: C }, { data: I }, { data: P }, { data: A }, { data: K }] = await Promise.all([
       sb.from("mancanti_commesse").select("*"),
       sb.from("mancanti_import").select("*").order("il", { ascending: false }).limit(1),
+      sb.rpc("mancanti_piano"),
+      sb.from("mancanti_assegnazioni").select("*"),
+      sb.from("mancanti_colori").select("*"),
     ]);
+    setPiano(Object.fromEntries(((P ?? []) as CommessaPiano[]).map((c) => [norm(c.commessa), c])));
+    setAssegn((A ?? []) as Assegnazione[]);
+    setColori(Object.fromEntries(((K ?? []) as { chiave: string; colore: string }[]).map((k) => [k.chiave, k.colore])));
     setRighe(tutte);
     setComm(Object.fromEntries(((C ?? []) as Commessa[]).map((c) => [c.commessa, c])));
     setUlt(((I ?? []) as Import[])[0] ?? null);
@@ -91,9 +107,25 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
     sb.from("profili").select("id,nome,attivo").then(({ data }) => setPersone(((data ?? []) as { id: string; nome: string; attivo: boolean }[]).filter((p) => p.attivo && p.nome && p.nome !== "Utente generico").map((p) => ({ id: p.id, nome: p.nome })).sort((a, b) => a.nome.localeCompare(b.nome))));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // inizio montaggio (fase 3B del Piano produzione): della macchina o del gruppo, altrimenti il primo della commessa
+  const montaggioComm = (c: string): string | null => {
+    const P = piano[norm(c)];
+    const d = (P?.macchine || []).filter((x) => !x.done && x.s).map((x) => x.s as string).sort()[0];
+    return d || comm[c]?.montaggio || null;
+  };
+  const macchinaDi = (m: Mancante) => { const P = piano[norm(m.commessa)]; return P?.macchine.find((x) => x.code && x.code === m.op) || P?.macchine.find((x) => x.code && x.code === m.matricola) || null; };
+  const montaggioDi = (m: Mancante) => { const x = macchinaDi(m); return (x && !x.done && x.s) || montaggioComm(m.commessa); };
+  const clienteDi = (c: string) => piano[norm(c)]?.cliente || comm[c]?.cliente || "";
+  const nelPiano = (c: string) => !!piano[norm(c)] && !piano[norm(c)].chiusa;
+  // chi segue il codice: scelto sulla riga, altrimenti dalle assegnazioni (cella, poi fornitore)
+  const personaDi = (m: Mancante) => m.responsabile
+    || (m.cella && assegn.find((a) => a.tipo === "cella" && a.valore === m.cella)?.persona)
+    || assegn.find((a) => a.tipo === "fornitore" && (a.valore === m.fornitore || m.ordini.some((o) => o.fornitore === a.valore)))?.persona || null;
+  const coloreDi = (m: Mancante) => (statoDi(m) === "magazzino" ? colori.giacenti : (() => { const p = personaDi(m); return p ? colori[p] : undefined; })());
+  const nomeDi = (id: string | null) => persone.find((p) => p.id === id)?.nome || "";
   const aperti = righe.filter((m) => m.aperto);
-  const visibileComm = (c: string) => nascoste || !comm[c]?.nascosta;
-  const filtrati = aperti.filter((m) => visibileComm(m.commessa) && trova(m, q) && (!filtroStato || statoDi(m) === filtroStato) && (!soloRitardi || ritardo(m, comm[m.commessa]?.montaggio)));
+  const visibileComm = (c: string) => nascoste || (nelPiano(c) && !comm[c]?.nascosta);
+  const filtrati = aperti.filter((m) => visibileComm(m.commessa) && trova(m, q) && (!filtroStato || statoDi(m) === filtroStato) && (!soloRitardi || ritardo(m, montaggioDi(m))));
 
   // ---------- salvataggi ----------
   async function salvaRiga(m: Mancante, campi: Partial<Pick<Mancante, "nota" | "responsabile" | "prevista" | "priorita">>) {
@@ -105,6 +137,18 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
     const v = { ...(comm[c] || { commessa: c, cliente: "", montaggio: null, note: "", nascosta: false }), ...campi };
     setComm((x) => ({ ...x, [c]: v }));
     const { error } = await sb.from("mancanti_commesse").upsert(v);
+    if (error) setMsg("Non salvato: " + error.message);
+  }
+  async function assegna(tipo: Assegnazione["tipo"], valore: string, persona: string) {
+    setAssegn((L) => [...L.filter((a) => !(a.tipo === tipo && a.valore === valore)), ...(persona ? [{ tipo, valore, persona }] : [])]);
+    const { error } = persona
+      ? await sb.from("mancanti_assegnazioni").upsert({ tipo, valore, persona })
+      : await sb.from("mancanti_assegnazioni").delete().eq("tipo", tipo).eq("valore", valore);
+    if (error) setMsg("Non salvato: " + error.message);
+  }
+  async function colora(chiave: string, colore: string) {
+    setColori((c) => ({ ...c, [chiave]: colore }));
+    const { error } = await sb.from("mancanti_colori").upsert({ chiave, colore });
     if (error) setMsg("Non salvato: " + error.message);
   }
   async function caricaFile(f: File | undefined) {
@@ -134,16 +178,19 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
     const ExcelJS = (await import("exceljs")).default;
     const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet("Mancanti");
     ws.columns = [["Commessa", 12], ["Cliente", 20], ["Inizio montaggio", 12], ["Matricola", 15], ["Macchina", 30], ["OP", 16], ["Gruppo (OP)", 30], ["Codice", 16], ["Descrizione", 36], ["Q.tà", 7], ["Giacenza", 9],
-      ["Stato", 20], ["Fornitore", 24], ["Ordini", 26], ["Consegna ordine", 12], ["Cella lavorazione", 20], ["C/deposito", 18], ["Data prevista", 12], ["Responsabile", 18], ["Priorità", 8], ["Note", 36]]
+      ["Stato", 20], ["Fornitore", 24], ["Ordini", 26], ["Consegna ordine", 12], ["Cella lavorazione", 20], ["C/deposito", 18], ["Data prevista", 12], ["Chi lo segue", 18], ["Priorità", 8], ["Note", 36]]
       .map(([header, width]) => ({ header: String(header), width: Number(width) }));
     ws.getRow(1).font = { bold: true };
     const nomeP = Object.fromEntries(persone.map((p) => [p.id, p.nome]));
     for (const m of L) {
-      const c = comm[m.commessa], rit = ritardo(m, c?.montaggio);
-      const row = ws.addRow([m.commessa, c?.cliente || "", c?.montaggio ? new Date(c.montaggio + "T12:00:00") : "", m.matricola, m.macchina, m.op, m.op_descr, m.codice, m.descr, m.qta, m.giac_mp,
+      const rit = ritardo(m, montaggioDi(m)), mo = montaggioDi(m);
+      const row = ws.addRow([m.commessa, clienteDi(m.commessa), mo ? new Date(mo + "T12:00:00") : "", m.matricola, m.macchina, m.op, m.op_descr, m.codice, m.descr, m.qta, m.giac_mp,
         nomeStato(statoDi(m)), m.fornitore, m.ordini.map((o) => o.num).join(", "), m.consegna ? new Date(m.consegna + "T12:00:00") : "", m.cella, m.cdep,
-        m.prevista ? new Date(m.prevista + "T12:00:00") : "", m.responsabile ? nomeP[m.responsabile] || "" : "", m.priorita, m.nota]);
-      if (rit) row.font = { color: { argb: "FFB42318" } };
+        m.prevista ? new Date(m.prevista + "T12:00:00") : "", nomeP[personaDi(m) || ""] || "", m.priorita, m.nota]);
+      const col = coloreDi(m);
+      if (col) row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + col.slice(1).toUpperCase() } };
+      if (col && scuro(col)) row.font = { color: { argb: "FFFFFFFF" } };
+      if (rit) row.font = { ...(row.font || {}), bold: true, color: col && scuro(col) ? { argb: "FFFFFFFF" } : { argb: "FFB42318" } };
     }
     ["C", "O", "R"].forEach((k) => (ws.getColumn(k).numFmt = "dd/mm/yyyy"));
     ws.autoFilter = { from: "A1", to: "U1" }; ws.views = [{ state: "frozen", ySplit: 1 }];
@@ -162,10 +209,10 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
     <div className="mx"><table className="tm">
       <thead><tr>{o.commessa && <th>Commessa</th>}{o.macchina !== false && <th>Macchina / gruppo</th>}<th>Codice</th><th className="n">Q.tà</th><th className="n hide-s">Giac.</th><th>Stato</th><th>Fornitore / ordine</th><th>Attesa</th>{modifica || gestisce ? <th>Gestione</th> : <th>Note</th>}</tr></thead>
       <tbody>{L.map((m) => {
-        const st = statoDi(m), rit = ritardo(m, comm[m.commessa]?.montaggio), ed = modifica || gestisce;
+        const st = statoDi(m), rit = ritardo(m, montaggioDi(m)), ed = modifica || gestisce;
         return (
-          <tr key={m.id} className={(rit ? "rit " : "") + (m.priorita === "alta" ? "alta" : "")}>
-            {o.commessa && <td><b>{m.commessa}</b><small>{comm[m.commessa]?.cliente}</small></td>}
+          <tr key={m.id} className={(rit ? "rit " : "") + (m.priorita === "alta" ? "alta" : "") + (coloreDi(m) && scuro(coloreDi(m)!) ? " scura" : "")} style={coloreDi(m) ? { background: coloreDi(m) } : undefined}>
+            {o.commessa && <td><b>{m.commessa}</b><small>{clienteDi(m.commessa)}</small></td>}
             {o.macchina !== false && <td><span className="mono">{m.op}</span><small>{m.op_descr || m.macchina}</small></td>}
             <td><span className="mono">{m.codice}</span><small>{m.descr}</small></td>
             <td className="n mono">{q2(m.qta)}</td>
@@ -175,10 +222,10 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
             <td className="mono">{fd(attesa(m))}{rit && <small className="r">{rit === "scaduta" ? "data passata" : "dopo il montaggio"}</small>}</td>
             <td className="gest">{ed ? <>
               <input type="date" value={m.prevista || ""} title="Data prevista (se diversa dalla consegna dell'ordine)" aria-label="Data prevista" onChange={(e) => salvaRiga(m, { prevista: e.target.value || null })} />
-              <select value={m.responsabile || ""} aria-label="Chi lo segue" onChange={(e) => salvaRiga(m, { responsabile: e.target.value || null })}><option value="">chi lo segue…</option>{persone.map((p) => <option key={p.id} value={p.id}>{p.nome}{p.id === me ? " (tu)" : ""}</option>)}</select>
+              <select value={m.responsabile || ""} aria-label="Chi lo segue" onChange={(e) => salvaRiga(m, { responsabile: e.target.value || null })}><option value="">{personaDi(m) ? "↳ " + nomeDi(personaDi(m)) : "chi lo segue…"}</option>{persone.map((p) => <option key={p.id} value={p.id}>{p.nome}{p.id === me ? " (tu)" : ""}</option>)}</select>
               <select value={m.priorita} aria-label="Priorità" onChange={(e) => salvaRiga(m, { priorita: e.target.value as Mancante["priorita"] })}><option value="">priorità</option><option value="alta">alta</option><option value="bassa">bassa</option></select>
               <input defaultValue={m.nota} placeholder="nota" aria-label="Nota" onBlur={(e) => e.target.value !== m.nota && salvaRiga(m, { nota: e.target.value })} />
-            </> : <>{m.nota}{m.prevista && <small>prevista {fd(m.prevista)}</small>}</>}</td>
+            </> : <>{m.nota}{m.prevista && <small>prevista {fd(m.prevista)}</small>}{personaDi(m) && <small>segue {nomeDi(personaDi(m))}</small>}</>}</td>
           </tr>
         );
       })}</tbody>
@@ -197,31 +244,35 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
         {commesse.map((c) => {
           const L = filtrati.filter((m) => m.commessa === c), tutti = aperti.filter((m) => m.commessa === c), C = comm[c];
           if (!L.length && (q || filtroStato || soloRitardi)) return null;
-          const rit = tutti.filter((m) => ritardo(m, C?.montaggio)).length, prel = righe.filter((m) => !m.aperto && m.commessa === c).length;
+          const rit = tutti.filter((m) => ritardo(m, montaggioDi(m))).length, prel = righe.filter((m) => !m.aperto && m.commessa === c).length;
           const macchine = [...new Set(tutti.map((m) => m.macchina || m.matricola))];
           const ap = aperta === c;
           return (
             <section key={c} className={"box carta" + (ap ? " aperta" : "") + (C?.nascosta ? " nasc" : "")}>
               <div className="testa" onClick={() => setAperta(ap ? "" : c)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") setAperta(ap ? "" : c); }} aria-expanded={ap}>
-                <div><h2>{c}{C?.cliente && <span> · {C.cliente}</span>}</h2>
+                <div><h2>{c}{clienteDi(c) && <span> · {clienteDi(c)}</span>}</h2>
                   <p className="nota">{macchine.slice(0, 3).join(" · ")}{macchine.length > 3 ? ` e altre ${macchine.length - 3}` : ""}</p></div>
                 <div className="num"><b>{tutti.length}</b> mancanti{rit > 0 && <span className="r"> · {rit} in ritardo</span>}{prel > 0 && <span className="nota"> · {prel} prelevati in 14 gg</span>}
-                  <span className="nota">{C?.montaggio ? "montaggio " + fd(C.montaggio) : "montaggio da indicare"}</span></div>
+                  <span className="nota">{montaggioComm(c) ? "montaggio " + fd(montaggioComm(c)) : "montaggio non pianificato"}{!nelPiano(c) && " · non nel Piano produzione"}</span></div>
               </div>
               {barra(tutti)}
               {ap && <div className="dett">
                 <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-                  <label className="f">Cliente<input defaultValue={C?.cliente || ""} disabled={!modifica} onBlur={(e) => e.target.value !== (C?.cliente || "") && salvaComm(c, { cliente: e.target.value })} /></label>
-                  <label className="f">Inizio montaggio<input type="date" value={C?.montaggio || ""} disabled={!modifica} onChange={(e) => salvaComm(c, { montaggio: e.target.value || null })} /></label>
+                  {piano[norm(c)]?.cliente ? <label className="f">Cliente<input value={piano[norm(c)].cliente} disabled title="dal Piano produzione" /></label>
+                    : <label className="f">Cliente<input defaultValue={C?.cliente || ""} disabled={!modifica} onBlur={(e) => e.target.value !== (C?.cliente || "") && salvaComm(c, { cliente: e.target.value })} /></label>}
+                  {(piano[norm(c)]?.macchine || []).some((x) => x.s && !x.done)
+                    ? <label className="f">Inizio montaggio<input value={fd(montaggioComm(c))} disabled title="fase 3B del Piano produzione" /><small className="nota">dal Piano produzione</small></label>
+                    : <label className="f">Inizio montaggio<input type="date" value={C?.montaggio || ""} disabled={!modifica} onChange={(e) => salvaComm(c, { montaggio: e.target.value || null })} /><small className="nota">non pianificato nel Piano produzione</small></label>}
                   <label className="f w">Note sulla commessa<input defaultValue={C?.note || ""} disabled={!modifica} onBlur={(e) => e.target.value !== (C?.note || "") && salvaComm(c, { note: e.target.value })} /></label>
                   <div className="row" style={{ alignItems: "flex-end", gap: 8 }}>
                     <button className="btn sec" onClick={() => esporta(L, "Mancanti " + c)}>Excel</button>
                     {modifica && <button className="btn sec" onClick={() => salvaComm(c, { nascosta: !C?.nascosta })}>{C?.nascosta ? "Rimetti nel quadro" : "Togli dal quadro"}</button>}
                   </div>
                 </div>
-                {raggruppa(L, (m) => `${m.matricola}  ${m.macchina}`).map(([k, G]) => (
-                  <div key={k} className="gruppo"><h3>{k} <small className="nota">{G.length}</small></h3>{tabella(G)}</div>
-                ))}
+                {raggruppa(L, (m) => `${m.matricola}  ${m.macchina}`).map(([k, G]) => {
+                  const mo = montaggioDi(G[0]), x = macchinaDi(G[0]);
+                  return <div key={k} className="gruppo"><h3>{k} <small className="nota">{G.length} · {mo ? `montaggio ${fd(mo)}${x?.chi ? " (" + x.chi + ")" : ""}` : "montaggio non pianificato"}</small></h3>{tabella(G)}</div>;
+                })}
               </div>}
             </section>
           );
@@ -235,7 +286,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
     corpo = (
       <div className="carte">
         {G.map(([k, L]) => {
-          const ap = aperta === k, rit = L.filter((m) => ritardo(m, comm[m.commessa]?.montaggio)).length, cc = [...new Set(L.map((m) => m.commessa))];
+          const ap = aperta === k, rit = L.filter((m) => ritardo(m, montaggioDi(m))).length, cc = [...new Set(L.map((m) => m.commessa))];
           return (
             <section key={k} className={"box carta" + (ap ? " aperta" : "")}>
               <div className="testa" onClick={() => setAperta(ap ? "" : k)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") setAperta(ap ? "" : k); }} aria-expanded={ap}>
@@ -247,6 +298,40 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
           );
         })}
         {!G.length && <p className="nota">{vista === "reparti" ? "Nessun mancante in lavorazione interna o in conto deposito con questi filtri. (Le celle di lavorazione arrivano solo con l'estrazione Excel dei mancanti, non dalla vista automatica di SAM.)" : "Nessun mancante con questi filtri."}</p>}
+      </div>
+    );
+  } else if (vista === "assegnazioni") {
+    const conta = (k: (m: Mancante) => string[]) => { const c = new Map<string, number>(); aperti.filter((m) => visibileComm(m.commessa)).forEach((m) => k(m).filter(Boolean).forEach((v) => c.set(v, (c.get(v) || 0) + 1))); return [...c.entries()].sort((a, b) => b[1] - a[1]); };
+    const forn = conta((m) => [...new Set([m.fornitore, ...m.ordini.map((o) => o.fornitore)])]).filter(([v]) => !q || v.toLowerCase().includes(q.toLowerCase()));
+    const celle = conta((m) => [m.cella]).filter(([v]) => !q || v.toLowerCase().includes(q.toLowerCase()));
+    const conColore = persone.filter((p) => colori[p.id] || assegn.some((a) => a.persona === p.id));
+    const sel = (tipo: Assegnazione["tipo"], v: string) => {
+      const a = assegn.find((x) => x.tipo === tipo && x.valore === v)?.persona || "";
+      return <select value={a} disabled={!modifica} onChange={(e) => assegna(tipo, v, e.target.value)} style={a && colori[a] ? { background: colori[a], color: scuro(colori[a]) ? "#fff" : undefined } : undefined}>
+        <option value="">— nessuno —</option>{persone.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}</select>;
+    };
+    corpo = (
+      <div className="carte">
+        <section className="box" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <h2 style={{ margin: 0 }}>Colori</h2>
+          <p className="nota">Ogni codice prende il colore della persona che lo segue: quella scelta sulla riga, altrimenti quella assegnata alla cella di lavorazione, altrimenti quella del fornitore. I codici giacenti a magazzino hanno sempre il loro colore.</p>
+          <div className="colori">
+            <label><input type="color" value={colori.giacenti || "#d6f2d3"} disabled={!modifica} onChange={(e) => colora("giacenti", e.target.value)} /> Giacenti disponibili</label>
+            {conColore.map((p) => <label key={p.id}><input type="color" value={colori[p.id] || "#ffffff"} disabled={!modifica} onChange={(e) => colora(p.id, e.target.value)} /> {p.nome}</label>)}
+            {modifica && <select value="" onChange={(e) => e.target.value && colora(e.target.value, "#fde68a")} aria-label="Aggiungi una persona"><option value="">+ aggiungi una persona…</option>{persone.filter((p) => !conColore.includes(p)).map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}</select>}
+          </div>
+        </section>
+        <section className="box" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <h2 style={{ margin: 0 }}>Fornitori <small className="nota">{forn.length}</small></h2>
+          <div className="mx"><table className="tm"><thead><tr><th>Fornitore</th><th className="n">Mancanti</th><th>Chi lo segue</th></tr></thead>
+            <tbody>{forn.map(([v, n]) => <tr key={v}><td>{v}</td><td className="n mono">{n}</td><td>{sel("fornitore", v)}</td></tr>)}</tbody></table></div>
+        </section>
+        <section className="box" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <h2 style={{ margin: 0 }}>Celle di lavorazione <small className="nota">{celle.length}</small></h2>
+          {!celle.length ? <p className="nota">Le celle arriveranno da SAM appena aggiungiamo la vista con cella di lavorazione e conto deposito.</p>
+            : <div className="mx"><table className="tm"><thead><tr><th>Cella</th><th className="n">Mancanti</th><th>Chi la segue</th></tr></thead>
+              <tbody>{celle.map(([v, n]) => <tr key={v}><td>{v}</td><td className="n mono">{n}</td><td>{sel("cella", v)}</td></tr>)}</tbody></table></div>}
+        </section>
       </div>
     );
   } else {
@@ -273,15 +358,16 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
       {msg && <div className="msg" role="status">{msg}</div>}
       <div className="box" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <div className="stati" role="tablist" aria-label="Vista">
-          {([["commesse", "Per commessa"], ["fornitori", "Per fornitore"], ["reparti", "Per reparto"], ["prelevati", "Prelevati"]] as const).map(([k, l]) => <button key={k} role="tab" aria-selected={vista === k} aria-pressed={vista === k} onClick={() => { setVista(k); setAperta(""); }}>{l}</button>)}
+          {([["commesse", "Per commessa"], ["fornitori", "Per fornitore"], ["reparti", "Per reparto"], ["prelevati", "Prelevati"], ["assegnazioni", "Assegnazioni e colori"]] as const).map(([k, l]) => <button key={k} role="tab" aria-selected={vista === k} aria-pressed={vista === k} onClick={() => { setVista(k); setAperta(""); }}>{l}</button>)}
         </div>
         <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
           <input type="search" placeholder="Cerca codice, descrizione, fornitore, OA, nota…" value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: "1 1 260px" }} aria-label="Cerca" />
           <select value={filtroStato} onChange={(e) => setFiltroStato(e.target.value)} aria-label="Stato"><option value="">Tutti gli stati</option>{STATI.map(([k, l]) => <option key={k} value={k}>{l} ({aperti.filter((m) => visibileComm(m.commessa) && statoDi(m) === k).length})</option>)}</select>
           <label className="ck"><input type="checkbox" checked={soloRitardi} onChange={(e) => setSoloRitardi(e.target.checked)} /> Solo in ritardo</label>
-          <label className="ck"><input type="checkbox" checked={nascoste} onChange={(e) => setNascoste(e.target.checked)} /> Anche commesse tolte dal quadro</label>
+          <label className="ck"><input type="checkbox" checked={nascoste} onChange={(e) => setNascoste(e.target.checked)} /> Anche commesse fuori dal Piano produzione o tolte dal quadro</label>
         </div>
         <div className="leg">{STATI.map(([k, l, d]) => <span key={k} title={d}><i className={"b-" + k} />{l}</span>)}<span><i className="b-rit" />in ritardo: data passata o dopo l&apos;inizio montaggio</span></div>
+        {Object.keys(colori).length > 0 && <div className="leg">{colori.giacenti && <span><i style={{ background: colori.giacenti }} />giacenti disponibili</span>}{persone.filter((p) => colori[p.id]).map((p) => <span key={p.id}><i style={{ background: colori[p.id] }} />{p.nome}</span>)}</div>}
       </div>
       {carico ? <p className="nota">Carico i mancanti…</p> : corpo}
     </div>
