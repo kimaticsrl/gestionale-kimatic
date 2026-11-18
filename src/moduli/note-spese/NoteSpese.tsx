@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { MEZZI } from "@/moduli/rapporti/addebito";
 import {
-  CATEGORIE, METODI, STATI, VALUTE, daRimborsare, fd, giornoCambio, imp, inEuro, leggiCambio, nomeCat, nomeMetodo, nomeStato,
+  CATEGORIE, METODI, STATI, VALUTE, cartaDiversa, daRimborsare, fd, giornoCambio, imp, inEuro, leggiCambio, nomeCat, nomeMetodo, nomeStato,
   totali, valuteDi, type Cambio, type Nota, type Rap, type Spesa,
 } from "./calcolo";
 import "./ns.css";
@@ -43,6 +43,10 @@ export default function NoteSpese({ me, nome, gestisce, modifica }: Props) {
   const [zoom, setZoom] = useState("");
   const [cambio, setCambio] = useState<Cambio | null>(null);
   const [miaCarta, setMiaCarta] = useState("");
+  const [lettura, setLettura] = useState(false);           // lettura automatica degli scontrini attiva?
+  const [leggo, setLeggo] = useState(false);
+  const [letto, setLetto] = useState("");
+  const [importoTesto, setImportoTesto] = useState<string | null>(null); // testo dell'importo (null = dal valore salvato)
 
   async function carica() {
     const [{ data, error }, { data: R }] = await Promise.all([
@@ -58,6 +62,7 @@ export default function NoteSpese({ me, nome, gestisce, modifica }: Props) {
   useEffect(() => {
     carica();
     sb.rpc("mia_carta").then(({ data }) => setMiaCarta(typeof data === "string" ? data : ""));
+    fetch("/api/scontrino").then((r) => r.json()).then((j) => setLettura(!!j.attivo)).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // cambi della nota aperta: giorno della firma del rapporto (prima della firma: oggi, provvisorio)
@@ -116,6 +121,7 @@ export default function NoteSpese({ me, nome, gestisce, modifica }: Props) {
     const ultima = (n.dati.spese || []).slice(-1)[0];
     const R = rap[n.rapporto_id];
     const d = oggi();
+    setImportoTesto(null); setLetto("");
     setEs({ id: rid(), data: R?.dal && R.al && (d < R.dal || d > R.al) ? R.al : d, cat: "", esercente: "", importo: 0, valuta: ultima?.valuta || "EUR", metodo: "aziendale", fatt: false, foto: [], note: "" });
   }
   async function salvaSpesa() {
@@ -153,6 +159,32 @@ export default function NoteSpese({ me, nome, gestisce, modifica }: Props) {
     }
     setLavoro(false);
     setEs((s) => s && { ...s, foto: [...(s.foto || []), ...nuove] });
+    // prima foto di una spesa ancora da compilare: lettura automatica
+    if (lettura && nuove.length && !(es.importo > 0)) leggiScontrino(await comprimi(Array.from(files)[0]));
+  }
+  async function leggiScontrino(blob: Blob) {
+    setLeggo(true); setLetto(""); setMsg("");
+    try {
+      const immagine = await new Promise<string>((ok) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result)); fr.readAsDataURL(blob); });
+      const r = await fetch("/api/scontrino", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ immagine }) });
+      const x = await r.json();
+      if (!r.ok) { setLetto("Lettura automatica non riuscita (" + (x.errore || "errore") + "): compila a mano."); return; }
+      const presi: string[] = [];
+      setEs((s) => {
+        if (!s) return s;
+        const n = { ...s };
+        if (x.importo && !(s.importo > 0)) { n.importo = x.importo; presi.push("importo"); if (x.valuta) { n.valuta = VALUTE.includes(x.valuta) ? x.valuta : s.valuta; presi.push("valuta"); } }
+        if (x.data) { n.data = x.data; presi.push("data"); }
+        if (x.esercente && !s.esercente) { n.esercente = x.esercente; presi.push("esercente"); }
+        if (x.categoria && !s.cat) { n.cat = x.categoria; n.fatt = CATEGORIE.find((c) => c.id === x.categoria)?.fatt ?? false; presi.push("categoria"); }
+        if (x.pagamento === "contanti" && s.metodo === "aziendale") { n.metodo = "contanti"; presi.push("pagamento in contanti"); }
+        if (x.carta4) n.cartaLetta = x.carta4;
+        return n;
+      });
+      setImportoTesto(x.importo ? String(x.importo).replace(".", ",") : null);
+      setLetto(presi.length ? "Letti dallo scontrino: " + presi.join(", ") + ". Controlla che siano giusti prima di salvare." : "Non sono riuscito a leggere i dati dallo scontrino: compila a mano.");
+    } catch { setLetto("Lettura automatica non riuscita: compila a mano."); }
+    finally { setLeggo(false); }
   }
   async function togliFoto(p: string) {
     if (!es || !confirm("Tolgo questa foto?")) return;
@@ -279,6 +311,9 @@ export default function NoteSpese({ me, nome, gestisce, modifica }: Props) {
                 <input type="file" accept="image/*" capture="environment" multiple hidden onChange={(e) => { aggiungiFoto(e.target.files); e.target.value = ""; }} /></label>}
             </div>
           </div>
+          {leggo && <p className="nota">Leggo lo scontrino…</p>}
+          {letto && <p className="nota" role="status" style={{ color: "var(--fg)" }}>{letto}</p>}
+          {!roS && lettura && !!es.foto?.length && !leggo && <div><button type="button" className="btn sec" onClick={async () => { const p = es.foto![0]; const { data } = await sb.storage.from("note-spese").download(p); if (data) { setEs((s) => s && { ...s, importo: 0 }); leggiScontrino(data); } }}>Rileggi dallo scontrino</button></div>}
           <div className="fl">
             <label className="f">Data *<input type="date" value={es.data} disabled={roS} onChange={(e) => setEs({ ...es, data: e.target.value })} /></label>
             <label className="f">Categoria *
@@ -287,8 +322,8 @@ export default function NoteSpese({ me, nome, gestisce, modifica }: Props) {
               </select></label>
             <label className="f">Esercente<input value={es.esercente || ""} disabled={roS} placeholder="es. Pepesale, Esso…" onChange={(e) => setEs({ ...es, esercente: e.target.value })} /></label>
             <label className="f">Importo (IVA inclusa) *
-              <input inputMode="decimal" disabled={roS} defaultValue={es.importo ? String(es.importo).replace(".", ",") : ""} placeholder="0,00"
-                onChange={(e) => setEs({ ...es, importo: leggiImporto(e.target.value) })} /></label>
+              <input inputMode="decimal" disabled={roS} value={importoTesto ?? (es.importo ? String(es.importo).replace(".", ",") : "")} placeholder="0,00"
+                onChange={(e) => { setImportoTesto(e.target.value); setEs({ ...es, importo: leggiImporto(e.target.value) }); }} /></label>
             <label className="f">Valuta
               <select value={es.valuta} disabled={roS} onChange={(e) => setEs({ ...es, valuta: e.target.value })}>{VALUTE.map((v) => <option key={v} value={v}>{v}</option>)}</select>
               {es.valuta !== "EUR" && <small className="nota">{e1 != null ? `≈ ${imp(e1)} al cambio ${cambio?.provvisorio ? "di oggi (provvisorio)" : "del " + fd(cambio?.data)}` : "cambio non disponibile"}</small>}
@@ -303,6 +338,8 @@ export default function NoteSpese({ me, nome, gestisce, modifica }: Props) {
                 </button>
               ))}
             </div>
+            {cartaDiversa(es, ed.dati.carta || (mia(ed) ? miaCarta : "")) && <p className="avviso" style={{ marginTop: 8 }}>Sullo scontrino la carta finisce con <b>{es.cartaLetta}</b>, diversa dalla carta aziendale <b>••{ed.dati.carta || miaCarta}</b>. Se hai pagato con la carta personale, sceglila qui sopra.</p>}
+            {es.cartaLetta && !cartaDiversa(es, ed.dati.carta || (mia(ed) ? miaCarta : "")) && es.metodo === "aziendale" && (ed.dati.carta || miaCarta) && <p className="nota" style={{ marginTop: 6 }}>✓ Carta sullo scontrino ••{es.cartaLetta}: è la carta aziendale.</p>}
             {pers && <p className="avviso" style={{ marginTop: 8 }}>Pagata con <b>{es.metodo === "contanti" ? "contanti" : "carta personale"}</b>: la spesa risulterà <b>da rimborsare</b> ed è evidenziata per l&apos;Amministrazione.</p>}
             {!pers && !(ed.dati.carta || miaCarta) && <p className="nota" style={{ marginTop: 6 }}>Le ultime cifre della tua carta aziendale non sono nell&apos;Anagrafica dipendenti: chiedi all&apos;Amministrazione di inserirle.</p>}
           </div>
@@ -384,12 +421,12 @@ export default function NoteSpese({ me, nome, gestisce, modifica }: Props) {
                 const e1 = inEuro(s, cambio), p = daRimborsare(s), f0 = (s.foto || [])[0];
                 const mz = s.mezzo === "altro" ? s.mezzoAltro : MEZZI.find((m) => m.targa === s.mezzo)?.nome;
                 return (
-                  <button key={s.id} type="button" className={"spesa" + (p ? " p" : "")} onClick={() => { setEs(JSON.parse(JSON.stringify(s))); setMsg(""); }}>
+                  <button key={s.id} type="button" className={"spesa" + (p ? " p" : "")} onClick={() => { setImportoTesto(null); setLetto(""); setEs(JSON.parse(JSON.stringify(s))); setMsg(""); }}>
                     <span className="thumb">{f0 ? (foto[f0] ? <img src={foto[f0]} alt="" /> : "…") : "senza foto"}</span>
                     <span style={{ minWidth: 0 }}>
                       <b>{nomeCat(s.cat)}</b>{s.esercente && " – " + s.esercente}<br />
                       <span className="nota">{[fd(s.data), mz && "⛽ " + mz, s.fatt && "da addebitare"].filter(Boolean).join(" · ")}</span><br />
-                      {p ? <span className="tag-pers">{s.metodo === "contanti" ? "Contanti" : "Carta personale"} · da rimborsare</span> : <span className="nota">{nomeMetodo(s.metodo, ed.dati.carta)}</span>}
+                      {p ? <span className="tag-pers">{s.metodo === "contanti" ? "Contanti" : "Carta personale"} · da rimborsare</span> : <span className="nota">{nomeMetodo(s.metodo, ed.dati.carta)}</span>}{cartaDiversa(s, ed.dati.carta) && <> <span className="tag-pers">carta scontrino ••{s.cartaLetta}</span></>}
                     </span>
                     <span className="imp">{imp(s.importo, s.valuta)}{s.valuta !== "EUR" && <small>{e1 != null ? "≈ " + imp(e1) : "senza cambio"}</small>}</span>
                   </button>

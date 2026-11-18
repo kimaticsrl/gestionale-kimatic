@@ -1,6 +1,6 @@
 // Nota spese in PDF (A4): elenco spese, totali per valuta e in euro al cambio BCE, riepiloghi e foto degli scontrini
 import { MEZZI } from "@/moduli/rapporti/addebito";
-import { daRimborsare, fd, imp, inEuro, nomeCat, nomeMetodo, nomeStato, num, totali, type Cambio, type Nota, type Rap } from "./calcolo";
+import { cartaDiversa, daRimborsare, fd, imp, inEuro, nomeCat, nomeMetodo, nomeStato, num, totali, type Cambio, type Nota, type Rap } from "./calcolo";
 
 type JsPDF = new (o: object) => any; // eslint-disable-line @typescript-eslint/no-explicit-any
 const ARANCIO = "#c2410c", BLU = "#1f3a5f", GRIGIO = "#666666";
@@ -51,7 +51,7 @@ export function pdfNotaSpese(jsPDF: JsPDF, n: Nota, r: Rap | null | undefined, c
   spese.forEach((s, i) => {
     const mz = s.mezzo === "altro" ? s.mezzoAltro : MEZZI.find((m) => m.targa === s.mezzo) ? `${MEZZI.find((m) => m.targa === s.mezzo)!.nome} ${s.mezzo}` : "";
     doc.setFont("helvetica", "normal"); doc.setFontSize(9);
-    const righe: string[] = doc.splitTextToSize([nomeCat(s.cat) + (s.esercente ? " – " + s.esercente : ""), mz && "Mezzo: " + mz, s.note, s.fatt && "da addebitare al cliente", !s.foto?.length && "senza foto dello scontrino"].filter(Boolean).join("\n"), 70);
+    const righe: string[] = doc.splitTextToSize([nomeCat(s.cat) + (s.esercente ? " – " + s.esercente : ""), mz && "Mezzo: " + mz, s.note, s.fatt && "da addebitare al cliente", cartaDiversa(s, d.carta) && `ATTENZIONE: sullo scontrino carta ••${s.cartaLetta}, diversa dalla carta aziendale`, !s.foto?.length && "senza foto dello scontrino"].filter(Boolean).join("\n"), 70);
     const h = Math.max(daRimborsare(s) ? 2 : 1, righe.length) * 4 + 2.5;
     spazio(h);
     const p = daRimborsare(s), e1 = inEuro(s, c);

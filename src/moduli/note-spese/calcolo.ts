@@ -14,7 +14,10 @@ export type Spesa = {
   fatt?: boolean;        // da addebitare al cliente
   note?: string;
   foto?: string[];       // percorsi nell'archivio «note-spese»
+  cartaLetta?: string;   // ultime 4 cifre della carta lette sullo scontrino (lettura automatica)
 };
+/** Carta letta sullo scontrino diversa dalla carta aziendale dell'anagrafica? */
+export const cartaDiversa = (s: Spesa, carta?: string) => !!(s.cartaLetta && carta && s.metodo === "aziendale" && s.cartaLetta !== carta);
 export type DatiNota = {
   titolo?: string; note?: string; spese?: Spesa[];
   carta?: string; autore?: string;

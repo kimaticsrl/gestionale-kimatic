@@ -59,6 +59,9 @@ all'autore). Di default si paga con la carta aziendale (ultime cifre nell'Anagra
 il mezzo aziendale. I totali in euro usano il cambio BCE del giorno della firma del rapporto
 (`/api/cambi`, salvati nella tabella `cambi`). Nel «Da fatturare» dei rapporti c'è la colonna Note spese
 con il PDF, e l'export Excel ha le righe delle note e il foglio «Note spese».
+Lettura automatica degli scontrini (`/api/scontrino`, Claude): con `ANTHROPIC_API_KEY` su Vercel, alla prima
+foto si compilano importo, valuta, data, esercente e categoria; le ultime cifre della carta lette sullo
+scontrino si confrontano con la carta aziendale.
 
 ## Prima installazione
 
