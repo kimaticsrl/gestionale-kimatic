@@ -46,8 +46,13 @@ export default function Piano({ livello, utente, ruoli, soloCliente = false, sch
       },
     };
     let dbWrap: Db | null = null;
-    (window as unknown as { KIMATIC_PP: unknown }).KIMATIC_PP = {
+    // planning giornaliero: chi pianifica modifica tutto, gli altri le proprie attività e quelle dei collaboratori
+    const pianifica = gestisce || ruoli.some((r) => r === "pianificatore" || r === "direzione");
+    const kpp: Record<string, unknown> = {
       soloCliente,
+      nome: utente.nome,
+      pianifica,
+      persona: "",
       // Anagrafica clienti del gestionale (lettura per tutti gli utenti attivi)
       clienti: async () => {
         const { data } = await sb.from("clienti").select("id,nome,dati").order("nome");
@@ -85,7 +90,12 @@ export default function Piano({ livello, utente, ruoli, soloCliente = false, sch
         return dbWrap;
       },
     };
-    setPronto(true);
+    (window as unknown as { KIMATIC_PP: unknown }).KIMATIC_PP = kpp;
+    let fermo = false;
+    // la persona del Piano collegata all'utente (dall'Anagrafica dipendenti), prima di aprire il Piano
+    Promise.resolve(sb.rpc("mia_persona_piano")).then(({ data }) => { if (typeof data === "string") kpp.persona = data; }, () => {})
+      .finally(() => { if (!fermo) setPronto(true); });
+    return () => { fermo = true; };
   }, [livello, utente, ruoli, soloCliente, schede]);
   if (!pronto) return <div className="empty">Caricamento…</div>;
   return (

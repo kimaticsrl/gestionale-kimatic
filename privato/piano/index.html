@@ -2183,12 +2183,14 @@ function buildLoad(){
 const noAtt=per=>per&&per.att===false;
 const capOf=per=>per&&per.ext?1e9:8*((per&&per.cap)||1);
 function unav(per,d){if(!per)return'';if(per.att===false)return'non più in azienda';const f=d2n(per.fine);if(f!=null&&d>f)return'non disponibile dal '+fm(f+1);return''}
-const ABS=['Ferie','Permesso','Malattia'];
+const ABS=['Ferie','Permesso','Malattia','Assente'];
+/* assenze: nel planning si vede solo che la persona non c'è, mai il motivo */
+const kLbl=k=>ABS.includes(k)?'Assente':(k||'Impegno');
 const allocs=n=>n?(Array.isArray(n.a)?n.a:(n.c?[{c:n.c,m:n.m,h:n.h}]:[])).filter(r=>r&&r.c):[];
 const allocH=(n,a)=>{const l=allocs(n);return +a.h>0?+a.h:((n&&n.b)?8/Math.max(1,l.length):0)};
 const ncLbl=n=>allocs(n).map(a=>{const c=IDX.c[a.c];if(!c)return'';const m=a.m&&IDX.m[a.m];return c.num+(m?' '+alias(m):'')+(a.f&&PHD[a.f]?' '+PHD[a.f].s:a.f==='SW'?' Software':'')+(+a.h>0?' · '+a.h+' h':'')}).filter(Boolean).join(' + ');
 const ACAT={'Ufficio Tecnico':'pro','Software':'osw','Collaudo':'oc','Elettrici':'oq'};
-const KINDS=['Ferie','Permesso','Malattia','Corso','Trasferta','Uscita macchina','Assistenza','Altro'];
+const KINDS=['Assente','Corso','Trasferta','Uscita macchina','Assistenza','Altro'];
 const blockOf=(pid,d)=>S.agenda.find(n=>n.b&&n.p===pid&&n.d===n2s(d));
 function clashes(p){const sp=span(p);if(!sp)return[];const out=[];
  for(let d=sp.s;d<=sp.e;d++){if(!isWork(d)||(!sp.full&&d!==sp.s))continue;whoOnDay(p,d).forEach(n=>{const b=blockOf(n.id,d),u=unav(IDX.p[n.id],d);if(b)out.push({name:n.name,d,k:b.k||'impegno'});else if(u)out.push({name:n.name,d,k:u})})}
@@ -2231,7 +2233,7 @@ function analyze(){
  LD.forEach((days,pid)=>{
   const per=IDX.p[pid];if(!per||per.tipo==='risorsa'||per.ext)return;const cap=capOf(per);let run=null;
   [...days.keys()].sort((a,b)=>a-b).forEach(d=>{const c=days.get(d);
-   if(c.h>cap+.01&&d>=TODAY-7&&c.items.length){if(run&&d-run.to<=3){run.to=d;run.max=Math.max(run.max,c.h);if(c.blk){run.blk=c.blk.k||'impegno';run.na=!!c.blk.na}c.items.forEach(i=>run.items.set(i.x.key,i.x))}
+   if(c.h>cap+.01&&d>=TODAY-7&&c.items.length){if(run&&d-run.to<=3){run.to=d;run.max=Math.max(run.max,c.h);if(c.blk){run.blk=kLbl(c.blk.k);run.na=!!c.blk.na}c.items.forEach(i=>run.items.set(i.x.key,i.x))}
     else{run={pid,per,from:d,to:d,max:c.h,blk:c.blk?(c.blk.k||'impegno'):'',na:!!(c.blk&&c.blk.na),items:new Map(c.items.map(i=>[i.x.key,i.x]))};A.push({k:'Sovrapposizione',run})}}});
  });
  A.forEach(a=>{if(a.run&&a.run.na)a.msg=`${a.run.per.name} ha attività pianificate dal ${fm(a.run.from)} al ${fm(a.run.to)} ma ${a.run.blk}`;else if(a.run&&a.run.blk)a.msg=`${a.run.per.name} ha attività pianificate dal ${fm(a.run.from)} al ${fm(a.run.to)} ma è impegnata a giornata piena (${a.run.blk})`;else if(a.run)a.msg=`${a.run.per.name} ha più attività insieme dal ${fm(a.run.from)} al ${fm(a.run.to)} (fino a ${Math.round(a.run.max)} h/giorno su ${8*(a.run.per.cap||1)} disponibili)`});
@@ -2456,7 +2458,7 @@ async function ensurePh(pid,days,al){
    await setPhase(o.k,o.id,o.code,{t:t0,s:mn,e:mx,w:whoOf(p.w||'').some(n=>n.id===pid)?p.w:(p.w?p.w+' + '+v:v)})}}
 }
 async function setNote(pid,d,t,o={}){
- if(!canWrite())return;const to=Math.max(d,o.to||d),days=[];for(let x=d;x<=to&&days.length<120;x++)if(x===d||isWork(x))days.push(x);
+ if(!canWrite())return;if(!canPlan(pid)){noPlan();return}const to=Math.max(d,o.to||d),days=[];for(let x=d;x<=to&&days.length<120;x++)if(x===d||isWork(x))days.push(x);
  const caps=o.tot>0&&!o.nota&&!o.del?days.map((_,i)=>Math.max(0,Math.min(8,o.tot-8*i))):null,rowsAt=i=>caps&&o.a&&o.a.length?o.a.map(r=>({...r,h:Math.round(caps[i]/o.a.length*100)/100})):o.a;
  try{for(const [i,x] of days.entries()){if(caps&&caps[i]<=0)continue;const id=n2s(x)+'_'+pid;
   if(o.del||(!t.trim()&&!o.b&&!(o.a&&o.a.length)))await db.doc('agenda/'+id).delete();
@@ -3022,11 +3024,11 @@ const cellLines=(p,d)=>{const items=cellMap.get(p.id+'|'+d)||[],n0=ag.get(p.id+'
   let fill=null;
   if(p.nota){if(n0&&n0.st){fill=n0.st==='d'?[250,228,150]:[190,218,245];L.push({t:n0.st==='d'?'Da confermare':'Confermato',b:1})}
    if(n0&&nTxt(n0)){doc.setFontSize(FS);doc.splitTextToSize(nTxt(n0),CW-8).forEach(l=>L.push({t:l}))}return{L,fill}}
-  if(n&&n.b){const gray=!!ua||ABS.includes(n.k);fill=gray?[226,228,226]:(n.dc?[250,228,150]:[190,218,245]);if(!gray)L.push({t:(n.k||'Impegno')+(n.dc?' · da confermare':' · confermata'),b:1})}
+  if(n&&n.b){const gray=!!ua||ABS.includes(n.k);fill=gray?[226,228,226]:(n.dc?[250,228,150]:[190,218,245]);if(!gray)L.push({t:(n.k||'Impegno')+(n.dc?' · da confermare':' · confermata'),b:1});else if(!ua)L.push({t:'Assente',b:1})}
   else if(items.some(x=>x.code==='5B')){fill=[190,218,245];L.push({t:'Trasferta · installazione linea',b:1})}
   items.forEach(x=>{const t=(x.code==='4B'?'F.A.T. · ':'')+x.c.num+' '+(x.m?alias(x.m):'linea')+(isDone(x.p)?' (conclusa)':'');doc.setFontSize(FS);doc.splitTextToSize(t,CW-12).forEach((l,i)=>L.push({t:l,g:i?null:PHD[x.code].g,st:x.p.st}))});
   if(isAct(n)&&!fill)fill=n.st==='d'?[250,228,150]:[190,218,245];
-  if(n&&nTxt(n)){doc.setFontSize(FS);doc.splitTextToSize(nTxt(n)+actSfx(n),CW-8).forEach(l=>L.push({t:l,i:1}))}
+  if(n&&nTxt(n)&&!(n.b&&ABS.includes(n.k))){doc.setFontSize(FS);doc.splitTextToSize(nTxt(n)+actSfx(n),CW-8).forEach(l=>L.push({t:l,i:1}))}
   return{L,fill}};
  let first=true;doc.pages=[[]];doc.cur=0;
  const header=(ch,ci)=>{
@@ -3116,11 +3118,11 @@ async function exportPlanXLSX(){
    const items=cellMap.get(p.id+'|'+d)||[],n0=ag.get(p.id+'|'+d),ua=unav(p,d),n=ua?{b:1,k:ua,t:n0?.t}:n0,L=[];let fill=null;
    if(p.nota){if(n0&&n0.st){fill=n0.st==='d'?'FAE496':'BEDAF5';L.push(n0.st==='d'?'Da confermare':'Confermato')}if(n0&&nTxt(n0))L.push(nTxt(n0));if(!fill)fill='E4E6E4'}
    else{
-    if(n&&n.b){const gray=!!ua||ABS.includes(n.k);fill=gray?'E2E4E2':(n.dc?'FAE496':'BEDAF5');if(!gray)L.push((n.k||'Impegno')+(n.dc?' · da confermare':' · confermata'))}
+    if(n&&n.b){const gray=!!ua||ABS.includes(n.k);fill=gray?'E2E4E2':(n.dc?'FAE496':'BEDAF5');if(!gray)L.push((n.k||'Impegno')+(n.dc?' · da confermare':' · confermata'));else if(!ua)L.push('Assente')}
     else if(items.some(x=>x.code==='5B')){fill='BEDAF5';L.push('Trasferta · installazione linea')}
     items.forEach(x=>{L.push((x.code==='4B'?'F.A.T. · ':'')+x.c.num+' '+(x.m?alias(x.m):'linea')+(isDone(x.p)?' (conclusa)':x.p.st==='d'?' (da confermare)':''));if(!fill&&PAL_LIGHT[PHD[x.code].g])fill=hx(PAL_LIGHT[PHD[x.code].g])});
     if(isAct(n)&&!fill)fill=n.st==='d'?'FAE496':'BEDAF5';
-    if(n&&nTxt(n))L.push(nTxt(n)+actSfx(n));
+    if(n&&nTxt(n)&&!(n.b&&ABS.includes(n.k)))L.push(nTxt(n)+actSfx(n));
     if(!fill&&today)fill='E3EEF3'}
    mx=Math.max(mx,L.length);
    return{v:L.join('\n'),s:sty({fill,bd:1,sz:9,b:0})}});
@@ -3139,7 +3141,7 @@ async function exportPlanXLSX(){
 const aMatch=(a,x)=>a.f===x.code&&a.c===x.c.id&&(x.m?a.m===x.m.id:!a.m);
 const chipH=(n,x)=>{const h=n?allocs(n).filter(a=>aMatch(a,x)).reduce((t,a)=>t+(+a.h>0?+a.h:0),0):0;return h>0?' · '+Math.round(h*100)/100+' h':''};
 const noteH=(n,items)=>{if(!n)return'';const rest=allocs(n).filter(a=>!items.some(x=>aMatch(a,x)));
- return rest.map(a=>`<span class="ch ${a.f&&PHD[a.f]?PHD[a.f].g:(a.f==='SW'?'p3cq':'')}" title="Attività inserita dal planning">${esc(ncLbl({a:[a]}))}</span>`).join('')+(isAct(n)?`<span class="ch act ${n.st==='d'?'sd':'sc'}" title="Attività descrittiva · ${n.st==='d'?'da confermare':'confermata'}">${esc(nTxt(n))}${actSfx(n)}</span>`:(nTxt(n)?`<span class="note">${esc(nTxt(n))}</span>`:''))};
+ return rest.map(a=>`<span class="ch ${a.f&&PHD[a.f]?PHD[a.f].g:(a.f==='SW'?'p3cq':'')}" title="Attività inserita dal planning">${esc(ncLbl({a:[a]}))}</span>`).join('')+(isAct(n)?`<span class="ch act ${n.st==='d'?'sd':'sc'}" title="Attività descrittiva · ${n.st==='d'?'da confermare':'confermata'}">${esc(nTxt(n))}${actSfx(n)}</span>`:(nTxt(n)&&!(n.b&&ABS.includes(n.k))?`<span class="note">${esc(nTxt(n))}</span>`:''))};
 function vPlan(){
  const {days,allDays,lo,hi,cellMap,ag,cols,groups}=planModel();
  const TC=['#3b82c4','#d9822b','#3aa56b','#8a63c9','#c9487a','#2aa0a6','#b8a12a','#6b7a8c','#c4573b','#5a8f2e','#4f6bd6'],tcOf=t=>TC[Math.max(0,TEAMS.indexOf(t))%TC.length],firstOf=new Set();
@@ -3152,12 +3154,12 @@ function vPlan(){
   body+=`<tr class="${d===TODAY?'td':''}${nw?' nw':''}${we?' we':''}"><td class="dc">${DOW[dow(d)]} ${fm(d)}${nwl?`<div class="tag" style="font-weight:400">${esc(nwl)}</div>`:''}${d===TODAY?'<span class="oggi">OGGI</span>':''}</td>${cols.map(p=>{
    const items=cellMap.get(p.id+'|'+d)||[],n0=ag.get(p.id+'|'+d),ua=unav(p,d),n=ua?{b:1,k:ua,t:n0?.t}:n0;
    const fat=items.some(x=>x.code==='4B'&&!isDone(x.p)&&x.p.st!=='d'),trs=!(n&&n.b)&&items.some(x=>x.code==='5B'),trd=trs&&items.filter(x=>x.code==='5B').every(x=>x.p.st==='d'),gray=n&&n.b&&(ua||ABS.includes(n.k)),nst=p.nota?(n0?.st||''):'',col=nst?(nst==='d'?' bkd':' bkc'):(n&&n.b&&!gray?(n.dc?' bkd':' bkc'):'');
-   return `<td class="${RO()?'':'cl'}${gray?' blk':''}${col}${trs?(trd?' bkd':' bkc'):''}${fat?' fatc':''}${firstOf.has(p.id)?' tf':''}${p.nota&&!nst?' nt':''}" style="--tc:${tcOf(p.team)}" data-cell="${p.id}|${d}">${trs?`<span class="bl">Trasferta · installazione linea${trd?' · da confermare':''}</span>`:''}${nst?`<span class="bl">${nst==='d'?'Da confermare':'Confermato'}</span>`:''}${n&&n.b&&!p.nota&&!gray?`<span class="bl">${esc(n.k||'Impegno')}${col?(n.dc?' · da confermare':' · confermata'):''}</span>`:''}${items.map(x=>{const dn=isDone(x.p),sp=span(x.p),full=sp&&sp.full&&!RO()&&!dn,isF=full&&nextW(sp.s)===d,isL=full&&prevW(sp.e)===d;
+   return `<td class="${RO()?'':'cl'}${gray?' blk':''}${col}${trs?(trd?' bkd':' bkc'):''}${fat?' fatc':''}${firstOf.has(p.id)?' tf':''}${p.nota&&!nst?' nt':''}" style="--tc:${tcOf(p.team)}" data-cell="${p.id}|${d}">${trs?`<span class="bl">Trasferta · installazione linea${trd?' · da confermare':''}</span>`:''}${nst?`<span class="bl">${nst==='d'?'Da confermare':'Confermato'}</span>`:''}${n&&n.b&&!p.nota&&gray&&!ua?'<span class="bl">Assente</span>':''}${n&&n.b&&!p.nota&&!gray?`<span class="bl">${esc(n.k||'Impegno')}${col?(n.dc?' · da confermare':' · confermata'):''}</span>`:''}${items.map(x=>{const dn=isDone(x.p),sp=span(x.p),full=sp&&sp.full&&!RO()&&!dn,isF=full&&nextW(sp.s)===d,isL=full&&prevW(sp.e)===d;
     return `<span class="ch ${PHD[x.code].g}${n&&n.b&&!dn?' cf':''}${dn?' dn':''}${x.p.st?' st-'+x.p.st:''}${dn?'':(x.p.st==='d'?' sd':' sc')}${x.p.pr&&!dn?' prp':''}" ${RO()||dn?'':'draggable="true"'} data-ph="${x.m?'macchine':'commesse'}|${x.m?x.m.id:x.c.id}|${x.code}" data-pid="${p.id}" data-d="${d}" title="${esc(phTip(x))}">${isF?'<i class="hd t" draggable="true" data-m="start" title="Trascina per cambiare l\'inizio"></i>':''}${dn?'✓ ':(n&&n.b?'⚠ ':(x.p.pr?'✦ ':''))}${x.code==='4B'?'F.A.T. · ':''}${esc(x.c.num)} ${esc(x.m?alias(x.m):'linea')}${chipH(n,x)}${chipR(p.id,d,x)}${isL?'<i class="hd b" draggable="true" data-m="end" title="Trascina per cambiare la fine"></i>':''}</span>`}).join('')}${noteH(n,items)}</td>`}).join('')}</tr>`;
  });
  let ed='';
  if(UI.note){const [pid,d]=[UI.note.pid,UI.note.d],p=IDX.p[pid],n=ag.get(pid+'|'+d),dr=UI.note.dr,rows=dr?dr.rows:allocs(n).map(a=>({c:a.c,m:a.m||'',f:a.f||'',h:a.h||''}));
-  ed=p?.nota?`<div class="panel" style="margin-bottom:10px"><b>${esc(p.name)}</b> · ${DOW[dow(d)]} ${fmt(d)} <span class="tag">colonna solo note</span><div class="bar" style="margin:8px 0 0"><select id="nst" aria-label="Stato"><option value="c" ${n?.st!=='d'?'selected':''}>Confermato (azzurro)</option><option value="d" ${n?.st==='d'?'selected':''}>Da confermare (giallo)</option></select><label>dalle <input type="time" id="nh1" value="${esc(n?.h1||'')}"></label><label>alle <input type="time" id="nh2" value="${esc(n?.h2||'')}"></label><label>fino al <input type="date" id="nto" value="${n2s(d)}" min="${n2s(d)}"></label></div><div class="bar" style="margin:8px 0 0"><input id="notein" value="${esc(n?.t||'')}" placeholder="Nota per il reparto: es. arrivo macchina 755" style="flex:1;min-width:220px"><button class="pri" data-act="nsave">Salva</button>${n?'<button data-act="ndel">Elimina</button>':''}<button data-act="nclose">Chiudi</button></div></div>`:`<div class="panel" style="margin-bottom:10px"><b>${esc(p?.name||'')}</b> · ${DOW[dow(d)]} ${fmt(d)}<div class="bar" style="margin:8px 0 0"><label><input type="checkbox" id="nblk" ${dr?(dr.b?'checked':''):(n&&n.b?'checked':'')}> Giornata piena (blocca la persona)</label><select id="nkind" aria-label="Tipo">${KINDS.map(k=>`<option ${(dr?dr.k:(n?.k||'Altro'))===k?'selected':''}>${k}</option>`).join('')}</select><label title="Per le attività diverse da ferie, permesso e malattia: azzurro se confermata, giallo se da confermare"><input type="checkbox" id="ndc" ${(dr?dr.dc:n?.dc)?'checked':''}> Da confermare (giallo)</label><label>fino al <input type="date" id="nto" value="${dr?dr.to:n2s(d)}" min="${n2s(d)}"></label>${(()=>{const nn=+String(dr?dr.n:'').replace(',','.')||0,u=dr&&dr.u==='h'?'h':'g',tot=u==='h'?nn:nn*8,dd=Math.max(1,Math.ceil(tot/8-1e-9));return `<label title="Se indichi la durata, la data di fine si calcola da sola (giorni lavorativi, 8 ore al giorno per risorsa)">oppure durata <input type="number" id="ndur" min="0" step="0.5" style="width:70px" value="${dr?esc(dr.n||''):''}"><select id="ndurk" aria-label="Unità"><option value="g" ${u==='g'?'selected':''}>giorni</option><option value="h" ${u==='h'?'selected':''}>ore</option></select></label>${nn>0?`<span class="tag">${f1(tot)} ore · ${dd} ${dd===1?'giorno':'giorni'} lavorativ${dd===1?'o':'i'} · fine ${fmt(noteEnd(d,nn,u))}</span>`:'<span class="tag">8 ore al giorno per risorsa</span>'}`})()}</div>
+  ed=p?.nota?`<div class="panel" style="margin-bottom:10px"><b>${esc(p.name)}</b> · ${DOW[dow(d)]} ${fmt(d)} <span class="tag">colonna solo note</span><div class="bar" style="margin:8px 0 0"><select id="nst" aria-label="Stato"><option value="c" ${n?.st!=='d'?'selected':''}>Confermato (azzurro)</option><option value="d" ${n?.st==='d'?'selected':''}>Da confermare (giallo)</option></select><label>dalle <input type="time" id="nh1" value="${esc(n?.h1||'')}"></label><label>alle <input type="time" id="nh2" value="${esc(n?.h2||'')}"></label><label>fino al <input type="date" id="nto" value="${n2s(d)}" min="${n2s(d)}"></label></div><div class="bar" style="margin:8px 0 0"><input id="notein" value="${esc(n?.t||'')}" placeholder="Nota per il reparto: es. arrivo macchina 755" style="flex:1;min-width:220px"><button class="pri" data-act="nsave">Salva</button>${n?'<button data-act="ndel">Elimina</button>':''}<button data-act="nclose">Chiudi</button></div></div>`:`<div class="panel" style="margin-bottom:10px"><b>${esc(p?.name||'')}</b> · ${DOW[dow(d)]} ${fmt(d)}<div class="bar" style="margin:8px 0 0"><label><input type="checkbox" id="nblk" ${dr?(dr.b?'checked':''):(n&&n.b?'checked':'')}> Giornata piena (blocca la persona)</label><select id="nkind" aria-label="Tipo">${KINDS.map(k=>`<option ${kLbl(dr?dr.k:(n?.k||'Altro'))===k?'selected':''}>${k}</option>`).join('')}</select><label title="Per le attività diverse da ferie, permesso e malattia: azzurro se confermata, giallo se da confermare"><input type="checkbox" id="ndc" ${(dr?dr.dc:n?.dc)?'checked':''}> Da confermare (giallo)</label><label>fino al <input type="date" id="nto" value="${dr?dr.to:n2s(d)}" min="${n2s(d)}"></label>${(()=>{const nn=+String(dr?dr.n:'').replace(',','.')||0,u=dr&&dr.u==='h'?'h':'g',tot=u==='h'?nn:nn*8,dd=Math.max(1,Math.ceil(tot/8-1e-9));return `<label title="Se indichi la durata, la data di fine si calcola da sola (giorni lavorativi, 8 ore al giorno per risorsa)">oppure durata <input type="number" id="ndur" min="0" step="0.5" style="width:70px" value="${dr?esc(dr.n||''):''}"><select id="ndurk" aria-label="Unità"><option value="g" ${u==='g'?'selected':''}>giorni</option><option value="h" ${u==='h'?'selected':''}>ore</option></select></label>${nn>0?`<span class="tag">${f1(tot)} ore · ${dd} ${dd===1?'giorno':'giorni'} lavorativ${dd===1?'o':'i'} · fine ${fmt(noteEnd(d,nn,u))}</span>`:'<span class="tag">8 ore al giorno per risorsa</span>'}`})()}</div>
   <div style="margin:8px 0 0" title="Per attività fuori dal Gantt (non per ferie, permesso, malattia): il costo va alle commesse indicate nel controllo di gestione"><div class="tag">Commesse su cui lavora (per i costi) · ore vuote = giornata divisa in parti uguali</div>${rows.map((r,i)=>`<div class="bar" style="margin:4px 0 0"><select data-nr="${i}|c" aria-label="Commessa"><option value="">— commessa —</option>${S.commesse.filter(c=>!c.chiusa||c.id===r.c).sort((a,b)=>String(a.num).localeCompare(String(b.num),'it',{numeric:true})).map(c=>`<option value="${c.id}" ${c.id===r.c?'selected':''}>${esc(c.num)} ${esc(cut(c.cliente||'',22))}</option>`).join('')}</select><select data-nr="${i}|m" aria-label="Macchina"><option value="">— tutta la commessa —</option>${r.c?S.macchine.filter(m=>m.line===r.c).sort(byOrd).map(m=>`<option value="${m.id}" ${m.id===r.m?'selected':''}>${esc(alias(m))}${m.code?' · '+esc(m.code):''}</option>`).join(''):''}</select><select data-nr="${i}|f" aria-label="Fase"><option value="">— fase (facoltativa) —</option>${r.c?PH.filter(x=>!x.common===!!r.m).map(x=>`<option value="${x.c}" ${x.c===r.f?'selected':''}>${esc(x.c)} ${esc(x.n)}</option>`).join('')+(r.c&&!r.m&&(p?.team==='Software'||r.f==='SW')?`<option value="SW" ${r.f==='SW'?'selected':''}>SW Software (ore della linea)</option>`:''):''}</select><label>Ore${dr&&+String(dr.n).replace(',','.')>0?' (da durata)':''} <input type="number" data-nr="${i}|h" min="0" step="0.5" style="width:70px" value="${r.h||''}" ${dr&&+String(dr.n).replace(',','.')>0?'disabled':''}></label><button data-act="nrdel" data-i="${i}" aria-label="Togli riga">✕</button></div>`).join('')}<div class="bar" style="margin:4px 0 0"><button data-act="nradd">+ Aggiungi commessa</button></div></div>
   <div class="bar" style="margin:8px 0 0" title="Attività descrittiva: testo libero con orario di inizio e fine e stato. Senza stato resta una nota grigia."><label>Attività dalle <input type="time" id="nh1" value="${esc(dr?dr.h1:(n?.h1||''))}"></label><label>alle <input type="time" id="nh2" value="${esc(dr?dr.h2:(n?.h2||''))}"></label><label title="Ore dell'attività (per ogni giorno): contano nel carico della persona e, se scegli le commesse sopra, nei loro costi">Ore <input type="number" id="nore" min="0" step="0.25" style="width:70px" value="${esc(dr?(dr.ore||''):(n?.ore||''))}" placeholder="obblig."></label><select id="nsd" aria-label="Stato attività descrittiva">${[['','Nota semplice (grigia)'],['c','Confermata (azzurro)'],['d','Da confermare (giallo)']].map(([v,l])=>`<option value="${v}" ${(dr?dr.st:(n?(n.st||''):'c'))===v?'selected':''}>${l}</option>`).join('')}</select></div>
   <div class="bar" style="margin:8px 0 0"><input id="notein" value="${esc(dr?dr.t:(n?.t||''))}" placeholder="Descrizione attività (es. corso sicurezza, visita cliente, collaudo da cliente…)" style="flex:1;min-width:220px"><button class="pri" data-act="nsave">Salva</button>${n?'<button data-act="ndel">Elimina</button>':''}<button data-act="nclose">Chiudi</button></div></div>`}
@@ -3220,7 +3222,7 @@ function carPanel(){
  if(!UI.car)return'';const per=IDX.p[UI.car.pid];if(!per)return'';
  if(UI.car.und)return undPanel(per);
  const w=UI.car.w,we=UI.car.day?w:w+6,days=buildLoad().get(per.id),seen=new Map(),bl=[],at=[];
- for(let d=w;d<=we;d++){const c=days?.get(d);if(!c)continue;c.items.forEach(i=>{const e=seen.get(i.x.key)||{x:i.x,h:0};e.h+=i.h;seen.set(i.x.key,e)});if(c.blk)bl.push(fm(d)+' '+(c.blk.k||'impegno'));(c.att||[]).forEach(a=>at.push(fm(d)+' '+a.t+' '+f1(a.h)+' h'))}
+ for(let d=w;d<=we;d++){const c=days?.get(d);if(!c)continue;c.items.forEach(i=>{const e=seen.get(i.x.key)||{x:i.x,h:0};e.h+=i.h;seen.set(i.x.key,e)});if(c.blk)bl.push(fm(d)+' '+kLbl(c.blk.k).toLowerCase());(c.att||[]).forEach(a=>at.push(fm(d)+' '+a.t+' '+f1(a.h)+' h'))}
  const row=o=>edRow(o.x,o.h,per.id);
  ALTS=[];const capd=capOf(per),runs=[];{let cur=null,lw=null;for(let d=w;d<=we;d++){if(!isWork(d))continue;const c=days?.get(d);if(c&&c.h>capd+.01){if(!cur||cur.to!==lw){cur={pid:per.id,per,from:d,to:d,max:c.h,blk:'',na:false,items:new Map()};runs.push(cur)}cur.to=d;cur.max=Math.max(cur.max,c.h);c.items.forEach(i=>cur.items.set(i.x.key,i.x))}lw=d}}
  const prop=runs.map(r=>{const al=altsFor({k:'Sovrapposizione',run:r}).map(o=>{if(!o.ops)return `<span class="tag">${esc(o.l)}</span>`;ALTS.push(o.ops);return `<button class="alt${o.t?' alt-'+o.t:''}" data-act="alt" data-i="${ALTS.length-1}">${altLbl(o)}</button>`}).join(' ');return `<div class="panel" style="margin:8px 0;border-left:3px solid var(--bad,#c0392b)"><b>Sovraccarico ${r.from===r.to?'il '+fmt(r.from):'dal '+fmt(r.from)+' al '+fmt(r.to)}</b> <span class="tag">fino a ${r.max.toFixed(1).replace('.',',')} h su ${capd}</span><div class="tag" style="margin:4px 0">Attività coinvolte: ${[...r.items.values()].map(i=>esc(lbl(i))).join(' · ')}</div>${al?`<div class="bar" style="margin:4px 0 0;flex-wrap:wrap">${al}</div>`:''}</div>`}).join('');
@@ -3965,6 +3967,29 @@ let UID=null;const OP={d:TODAY,p:null,c:'',k:'',m:''};
 const opKey=x=>`${x.m?'m':'c'}~${x.m?x.m.id:x.c.id}~${x.code}`;
 const wkId=(pid,d)=>pid+'_'+n2s(monday(d));
 const oreOf=(pid,d)=>{const o=S.ore.find(o=>o.id===wkId(pid,d));return(o&&o.d&&o.d[n2s(d)])||{}};
+
+/* ===================== organigramma e permessi sul planning =====================
+   config/organigramma: r = {collaboratore: responsabile} (id delle persone del Piano).
+   Chi pianifica (gestisce il Piano, o è pianificatore/direzione nel gestionale) modifica tutto;
+   il responsabile modifica le attività dei propri collaboratori; gli altri solo le proprie. */
+const orgR=()=>((S.config.find(x=>x.id==='organigramma')||{}).r)||{};
+const nmKey=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).sort().join(' ');
+const myPid=()=>{const l=UID&&S.link.find(x=>x.id===UID);if(l&&IDX.p[l.p])return l.p;const kp=KPP&&KPP.persona;if(kp&&IDX.p[kp])return kp;const nm=KPP&&KPP.nome?nmKey(KPP.nome):'';if(nm){const q=S.persone.find(x=>nmKey(x.name)===nm);if(q)return q.id}return''};
+const fullPlan=()=>ADM||!KPP||!!KPP.pianifica;
+const canPlan=pid=>{if(fullPlan())return true;const me=myPid();return !!me&&(pid===me||orgR()[pid]===me)};
+const noPlan=()=>{toast(myPid()?'Puoi modificare solo le tue attività e quelle dei tuoi collaboratori':'Il tuo utente non è collegato a una persona del Piano: chiedi all\'amministratore');return false};
+function vOrg(){
+ const R=orgR(),ed=ADM&&!!db,me=myPid(),P=S.persone.filter(p=>p.tipo!=='risorsa'&&!p.nota&&!noAtt(p)&&!p.ext&&!/^da assegnare$/i.test(p.name||''));
+ const resp=[...new Set(Object.values(R))].filter(id=>IDX.p[id]).sort((a,b)=>IDX.p[a].name.localeCompare(IDX.p[b].name));
+ const box=r=>{const C=Object.keys(R).filter(c=>R[c]===r&&IDX.p[c]).sort((a,b)=>IDX.p[a].name.localeCompare(IDX.p[b].name));
+  return `<div class="card" style="min-width:230px;flex:1 1 230px;margin:0;border-top:4px solid ${['#3b82c4','#d9822b','#3aa56b','#8a63c9','#c9487a','#2aa0a6','#b8a12a','#6b7a8c','#c4573b','#5a8f2e','#4f6bd6'][Math.max(0,TEAMS.indexOf(IDX.p[r].team))%11]}"><b style="font-size:15px">${esc(IDX.p[r].name)}</b>${r===me?' <span class="tag">(tu)</span>':''}<div class="tag">${esc(IDX.p[r].team||'')} · responsabile</div><ul style="margin:8px 0 0;padding-left:18px">${C.map(c=>`<li>${esc(IDX.p[c].name)}${c===me?' <span class="tag">(tu)</span>':''} <span class="tag">${esc(IDX.p[c].team||'')}</span></li>`).join('')}</ul></div>`};
+ const opt=(cur,self)=>`<option value="">— nessuno —</option>`+P.filter(p=>p.id!==self).map(p=>`<option value="${p.id}" ${p.id===cur?'selected':''}>${esc(p.name)}</option>`).join('');
+ return `<div class="card"><h2 style="margin:0 0 4px">Organigramma</h2><p class="tag" style="margin:0">Il responsabile può assegnare e modificare nel Planning giornaliero le attività dei propri collaboratori e riceve ogni mattina la mail con le loro attività. Gli altri modificano solo le proprie. Chi pianifica (pianificatore, direzione, chi gestisce il Piano) modifica tutto.${KPP&&!fullPlan()?` <b>${me?'Nel Piano sei: '+esc(IDX.p[me].name)+'.':'Il tuo utente non è collegato a nessuna persona del Piano.'}</b>`:''}</p></div>
+ <div style="display:flex;flex-wrap:wrap;gap:12px;margin:12px 0">${resp.length?resp.map(box).join(''):'<div class="empty">Nessun responsabile indicato.</div>'}</div>
+ ${ed?`<div class="card"><h2 style="margin:0 0 6px">Chi è il responsabile di chi</h2><p class="tag" style="margin:0 0 8px">Per ogni persona scegli il suo responsabile. Le modifiche sono immediate.</p><div class="scroll dt" style="max-width:640px"><table><thead><tr><th>Persona</th><th>Reparto</th><th>Responsabile</th></tr></thead><tbody>${P.map(p=>`<tr><td>${esc(p.name)}</td><td class="tag">${esc(p.team||'')}</td><td><select data-org="${p.id}" aria-label="Responsabile di ${esc(p.name)}">${opt(R[p.id]||'',p.id)}</select></td></tr>`).join('')}</tbody></table></div></div>`:''}`}
+document.addEventListener('change',async e=>{const t=e.target,c=t.dataset&&t.dataset.org;if(!c)return;if(!ADM||!db){toast('Solo gli amministratori del Piano modificano l\'organigramma');render();return}
+ const R=Object.assign({},orgR());if(t.value)R[c]=t.value;else delete R[c];
+ try{await db.doc('config/organigramma').set({r:R});toast('Organigramma aggiornato')}catch(er){toast('Errore: '+(er.code||er.message))}});
 const opMine=()=>{const l=UID&&S.link.find(x=>x.id===UID);if(l&&IDX.p[l.p])return l.p;try{const v=localStorage.getItem('pp_opme');return v&&IDX.p[v]?v:''}catch(e){return''}};
 let OSUM=null,OSV=-1;
 function oreSum(){if(OSUM&&OSV===VER)return OSUM;OSV=VER;const m={};Object.entries(oreSpan()).forEach(([k,z])=>m[k]=z.h);return OSUM=m}
@@ -4046,7 +4071,7 @@ function vOp(){
 function opAllHtml(d,me){
  const m=opAll(d),ag=new Map();S.agenda.forEach(n=>{if(d2n(n.d)===d)ag.set(n.p,n)});
  const per=S.persone.filter(q=>q.tipo!=='risorsa'&&!noAtt(q)&&!q.nota&&(m.has(q.id)||(ag.get(q.id)&&(ag.get(q.id).b||isAct(ag.get(q.id))))));
- return `<h2>Planning di tutti · ${DOW[dow(d)]} ${fmt(d)}</h2>`+(per.length?`<div class="scroll dt"><table><thead><tr><th>Reparto</th><th>Persona</th><th>Attività</th></tr></thead><tbody>${per.map(q=>{const it=m.get(q.id)||[],n=ag.get(q.id);return `<tr style="${q.id===me?'font-weight:700':''}"><td>${esc(q.team||'')}</td><td>${esc(q.name)}</td><td>${n&&n.b?`<span class="tag">${esc(n.k||'Impegno')}${n.t?' · '+esc(n.t):''}</span> `:''}${isAct(n)?`<span class="ch ${n.st==='d'?'sd':'sc'}">${esc(nTxt(n))}${actSfx(n)}</span> `:''}${it.map(x=>`<span class="ch ${PHD[x.code].g}" title="${esc(PHD[x.code].n)}">${esc(x.c.num)} ${esc(x.m?alias(x.m):'linea')}</span>`).join(' ')}</td></tr>`}).join('')}</tbody></table></div>`:'<div class="empty">Nessuna attività pianificata.</div>')}
+ return `<h2>Planning di tutti · ${DOW[dow(d)]} ${fmt(d)}</h2>`+(per.length?`<div class="scroll dt"><table><thead><tr><th>Reparto</th><th>Persona</th><th>Attività</th></tr></thead><tbody>${per.map(q=>{const it=m.get(q.id)||[],n=ag.get(q.id);return `<tr style="${q.id===me?'font-weight:700':''}"><td>${esc(q.team||'')}</td><td>${esc(q.name)}</td><td>${n&&n.b?`<span class="tag">${esc(kLbl(n.k))}${n.t&&!ABS.includes(n.k)?' · '+esc(n.t):''}</span> `:''}${isAct(n)?`<span class="ch ${n.st==='d'?'sd':'sc'}">${esc(nTxt(n))}${actSfx(n)}</span> `:''}${it.map(x=>`<span class="ch ${PHD[x.code].g}" title="${esc(PHD[x.code].n)}">${esc(x.c.num)} ${esc(x.m?alias(x.m):'linea')}</span>`).join(' ')}</td></tr>`}).join('')}</tbody></table></div>`:'<div class="empty">Nessuna attività pianificata.</div>')}
 function opWeek(pid){const w=monday(OP.d),ds=[0,1,2,3,4].map(i=>w+i),v=ds.map(d=>{const o=oreOf(pid,d);return(Object.values(o.r||{}).reduce((a,r)=>a+(+r.h||0),0))+((o.x||[]).reduce((a,r)=>a+(+r.h||0),0))});
  return `<h2>Le mie ore della settimana</h2><div class="scroll dt"><table><thead><tr>${ds.map(d=>`<th>${DOW[dow(d)]} ${fm(d)}</th>`).join('')}<th>Totale</th></tr></thead><tbody><tr>${v.map(x=>`<td>${x?x.toFixed(1).replace('.',','):'—'}</td>`).join('')}<td><b>${v.reduce((a,b)=>a+b,0).toFixed(1).replace('.',',')}</b></td></tr></tbody></table></div>`}
 function opAdmin(){const w=monday(OP.d),ds=[0,1,2,3,4].map(i=>w+i),per=S.persone.filter(q=>q.tipo!=='risorsa'&&!noAtt(q)&&!q.nota);
@@ -4233,12 +4258,12 @@ async function fatPDF(){
  const np=doc.getNumberOfPages();for(let i=1;i<=np;i++){doc.setPage(i);doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(210,0,0);const f='QUESTE SONO DATE PREVISTE DA GANTT.';doc.text(f,PW/2-doc._w(f,8,'bold')/2,PH-16)}
  try{await dl.save({filename:'calendario_FAT_'+n2s(TODAY)+'.pdf',data:doc.output('blob')})}catch(e){if(e&&e.code!=='declined')toast('Esportazione non riuscita: '+(e.code||e.message))}
 }
-const TABS=[['pan','Panoramica'],['dati','Dati'],['lin','Gantt linea'],['mac','Gantt macchina'],['cli','Cliente e TV'],['pre','Gantt preliminare'],['prl','Prelanci Kimatic'],['plan','Planning giornaliero'],['op','Operativi: il mio giorno'],['car','Carichi'],['al','Segnalazioni'],['tem','Tempi standard e risorse'],['pers','Persone e reparti'],['acq','Acquisti'],['cos','Controllo di gestione'],['fcm','File commesse Kimatic'],['fat','Calendario FAT'],['reg','Registro attività'],['rul','Regole'],['ut','Utenti e permessi'],['todo','Da implementare']];
+const TABS=[['pan','Panoramica'],['dati','Dati'],['lin','Gantt linea'],['mac','Gantt macchina'],['cli','Cliente e TV'],['pre','Gantt preliminare'],['prl','Prelanci Kimatic'],['plan','Planning giornaliero'],['op','Operativi: il mio giorno'],['car','Carichi'],['al','Segnalazioni'],['tem','Tempi standard e risorse'],['pers','Persone e reparti'],['acq','Acquisti'],['cos','Controllo di gestione'],['fcm','File commesse Kimatic'],['fat','Calendario FAT'],['org','Organigramma'],['reg','Registro attività'],['rul','Regole'],['ut','Utenti e permessi'],['todo','Da implementare']];
 
 /* ===================== utenti, ruoli e permessi ===================== */
 let USR=null;
 /* schede raggruppate per scopo: riga principale (gruppi) + riga delle schede del gruppo */
-const TGROUPS=[['Panoramica',['pan','al','fat']],['Commesse',['dati','fcm','prl']],['Gantt',['lin','mac','pre','cli']],['Persone e giorni',['plan','op','car']],['Risorse e acquisti',['tem','pers','acq']],['Amministrazione',['cos','rul','ut','reg','todo']]],GLAST={};
+const TGROUPS=[['Panoramica',['pan','al','fat']],['Commesse',['dati','fcm','prl']],['Gantt',['lin','mac','pre','cli']],['Persone e giorni',['plan','op','car','org']],['Risorse e acquisti',['tem','pers','acq']],['Amministrazione',['cos','rul','ut','reg','todo']]],GLAST={};
 function tabsBar(vt,lab){
  const ks=new Set(vt.map(x=>x[0])),lb=Object.fromEntries(vt),gs=TGROUPS.map(([n,l])=>({n,l:l.filter(k=>ks.has(k))})).filter(g=>g.l.length);
  const used=new Set(gs.flatMap(g=>g.l)),rest=vt.map(x=>x[0]).filter(k=>!used.has(k));if(rest.length)gs.push({n:'Altro',l:rest});
@@ -4247,7 +4272,7 @@ function tabsBar(vt,lab){
  const r1=gs.map(g=>g.l.length===1?btn(g.l[0]):`<button role="tab" class="${g===ag?'on':''}" data-act="tab" data-t="${GLAST[g.n]&&g.l.includes(GLAST[g.n])?GLAST[g.n]:g.l[0]}">${esc(g.n)}${g.l.includes('al')?nal():''}</button>`).join('');
  return `<div class="tabs g1" role="tablist">${r1}${lab}</div>`+(ag&&ag.l.length>1?`<div class="tabs sub" role="tablist">${ag.l.map(btn).join('')}</div>`:'');
 }
-const AR=()=>new Set(TABS.map(x=>x[0]).filter(k=>!['cos','reg','todo','ut'].includes(k)));
+const AR=()=>new Set(TABS.map(x=>x[0]).filter(k=>!['cos','reg','todo','ut','org'].includes(k)));
 const LVN=['Nessun accesso','Vede','Modifica'];
 function defRoles(){const all=v=>{const o={};AR().forEach(k=>o[k]=v);return o};const rep=all(1);rep.op=2;return{pian:{n:'Pianificatore',p:all(2)},rep:{n:'Reparto (operativi)',p:rep},lett:{n:'Sola lettura',p:all(1)}}}
 const accDoc=id=>S.accessi.find(x=>x.id===id)||null;
@@ -4319,7 +4344,7 @@ function render(){
  if(!ADM&&!AR().has(UI.tab)&&UI.tab!=='reg'&&UI.tab!=='todo'){}
  else if(!PPCLI&&!PPSC&&!ADM&&AR().has(UI.tab)&&lvl(UI.tab)<1){const f=[...AR()].find(k=>lvl(k)>=1);if(f&&f!==UI.tab){UI.tab=f;saveUI();return render()}}
  if(!PPCLI&&!PPSC&&!ADM&&![...AR()].some(k=>lvl(k)>=1)){$('#app').innerHTML='<div class="empty">Accesso non abilitato. Chiedi all\'amministratore di assegnarti un ruolo.</div>';stRole();return}
- const V={ut:vUt,todo:(OWN&&UID)?vTodo:vPan,rul:RO()?vPan:vRegole,reg:OWN?vReg:vPan,fat:vFat,pan:vPan,lin:vLin,mac:vMac,fcm:vFcm,cli:vCli,pre:vPre,prl:vPrl,plan:vPlan,car:vCar,acq:vAcq,al:vAl,tem:vTem,pers:vPers,dati:vDati,cos:vCos,op:vOp}[UI.tab]||vPan;
+ const V={ut:vUt,todo:(OWN&&UID)?vTodo:vPan,rul:RO()?vPan:vRegole,reg:OWN?vReg:vPan,fat:vFat,pan:vPan,lin:vLin,mac:vMac,fcm:vFcm,cli:vCli,pre:vPre,prl:vPrl,plan:vPlan,org:vOrg,car:vCar,acq:vAcq,al:vAl,tem:vTem,pers:vPers,dati:vDati,cos:vCos,op:vOp}[UI.tab]||vPan;
  $('#app').innerHTML=S.commesse.length||UI.tab==='dati'||UI.tab==='pre'||UI.tab==='ut'?V():'<div class="empty">Nessun dato ancora. Le linee e le macchine compariranno qui appena inserite.</div>';
  if(UI.tab==='plan'&&UI.note){const i=$('#notein');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}}
  renderModal();renderTV();stRole();
@@ -4335,8 +4360,8 @@ document.addEventListener('click',e=>{
  const ld=e.target.closest&&e.target.closest('td[data-ld]');if(ld){const [pid,w,dy]=ld.dataset.ld.split('|');{const nu=dy==='u'?{pid,w:0,und:1}:{pid,w:+w,day:dy?1:0},c=UI.car;UI.car=c&&c.pid===pid&&c.w===nu.w&&!!c.und===!!nu.und&&!!c.day===!!nu.day?null:nu}render();setTimeout(()=>{const r=document.querySelector('.carx');if(r&&UI.car)r.scrollIntoView({block:'nearest'})},60);return}
  const rp=e.target.closest&&e.target.closest('.rw[data-rph]');if(rp&&!RO()){UI.ph=rp.dataset.rph;UI.note=null;render();return}
  const nv=e.target.closest('[data-nav]');if(nv&&nv.dataset.nav){navTo(nv.dataset.nav);return}
- const ch=e.target.closest('.ch[data-ph]');if(ch&&!RO()){UI.ph=ch.dataset.ph;UI.note=null;render();return}
- const cl=e.target.closest('td[data-cell]');if(cl&&!RO()){const [pid,d]=cl.dataset.cell.split('|');UI.note={pid,d:+d};UI.ph=null;render();return}
+ const ch=e.target.closest('.ch[data-ph]');if(ch&&!RO()){if(ch.dataset.pid&&!canPlan(ch.dataset.pid)){noPlan();return}UI.ph=ch.dataset.ph;UI.note=null;render();return}
+ const cl=e.target.closest('td[data-cell]');if(cl&&!RO()){const [pid,d]=cl.dataset.cell.split('|');if(!canPlan(pid)){noPlan();return}UI.note={pid,d:+d};UI.ph=null;render();return}
  const t=e.target.closest('[data-act]');if(!t)return;const D=t.dataset;
  switch(D.act){
   case'tab':UI.ph=null;UI.tab=D.t;logTab(D.t);if(D.k!==undefined)UI.akind=D.k;saveUI();render();break;
@@ -4393,10 +4418,10 @@ document.addEventListener('click',e=>{
   case'addp':{if(!canWrite())break;db.collection('persone').doc().set({name:'Nuova persona',team:DA,k:[],cap:1,tipo:'persona',ord:Math.max(0,...S.persone.map(p=>p.ord||0))+1}).catch(e=>toast('Errore: '+e.code));break}
  }
 });
-document.addEventListener('dragstart',e=>{const t=e.target.closest&&e.target.closest('.hd,.ch[data-ph]');if(!t||RO()){return}const c=t.closest('.ch');
+document.addEventListener('dragstart',e=>{const t=e.target.closest&&e.target.closest('.hd,.ch[data-ph]');if(!t||RO()){return}const c=t.closest('.ch');if(c&&c.dataset.pid&&!canPlan(c.dataset.pid)){e.preventDefault();noPlan();return}
  DRAG={mode:t.classList.contains('hd')?t.dataset.m:'move',ph:c.dataset.ph,pid:c.dataset.pid,d:+c.dataset.d};e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain','attivita')}catch(x){}});
 document.addEventListener('dragover',e=>{if(!DRAG)return;const td=e.target.closest('td[data-cell]');document.querySelectorAll('td.dz').forEach(x=>x!==td&&x.classList.remove('dz'));if(td){e.preventDefault();td.classList.add('dz')}});
-document.addEventListener('drop',e=>{if(!DRAG)return;const td=e.target.closest('td[data-cell]');if(!td)return;e.preventDefault();const [pid2,d2]=td.dataset.cell.split('|'),R=DRAG;DRAG=null;document.querySelectorAll('td.dz').forEach(x=>x.classList.remove('dz'));planMove(R.mode,R,pid2,+d2)});
+document.addEventListener('drop',e=>{if(!DRAG)return;const td=e.target.closest('td[data-cell]');if(!td)return;e.preventDefault();const [pid2,d2]=td.dataset.cell.split('|'),R=DRAG;DRAG=null;document.querySelectorAll('td.dz').forEach(x=>x.classList.remove('dz'));if(!canPlan(pid2)){noPlan();return}planMove(R.mode,R,pid2,+d2)});
 document.addEventListener('dragend',()=>{DRAG=null;document.querySelectorAll('td.dz').forEach(x=>x.classList.remove('dz'))});
 document.addEventListener('change',e=>{
  const t=e.target;

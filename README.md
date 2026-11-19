@@ -81,6 +81,19 @@ Il modulo nel menu apre la scheda; per vedere i rapporti serve anche l'accesso a
 Chi fattura vede anche le note spese chiuse o verificate delle trasferte e ne scarica il PDF con gli
 scontrini (migrazione 0061), in sola lettura.
 
+## Piano produzione: organigramma e mail del planning
+
+Scheda **Organigramma** del Piano (migrazione 0062, `pp_docs` config/organigramma): chi è il responsabile
+di chi. Nel Planning giornaliero chi pianifica (Gestisce il Piano, ruoli Pianificatore o Direzione) modifica
+tutto; il responsabile le attività dei propri collaboratori; gli altri solo le proprie. L'utente si collega
+alla sua persona del Piano dall'Anagrafica dipendenti (`mia_persona_piano()`), altrimenti per nome.
+Le assenze nel planning si vedono solo come «Assente», senza il motivo.
+
+Nel giro del mattino (`/api/notifiche`, `src/lib/planningMail.ts`): ai responsabili le attività di oggi dei
+collaboratori, a ognuno le proprie attività in ritardo, il lunedì il piano della settimana. Gli indirizzi
+vengono dall'Anagrafica dipendenti (persona del Piano → e-mail aziendale), poi da utenti e inviti con lo
+stesso nome. Si accendono e spengono dalla pagina Notifiche.
+
 ## Mancanti montaggi
 
 Modulo **Mancanti montaggi** (migrazione 0048): i codici ancora da prelevare delle commesse, per commessa,

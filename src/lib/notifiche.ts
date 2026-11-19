@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import nodemailer from "nodemailer";
+import { preparaPlanning } from "./planningMail";
 
 /* Spedizione delle notifiche in coda (tabella «notifiche») con la Gmail del gestionale.
    Variabili su Vercel: GMAIL_USER, GMAIL_APP_PASSWORD (password per le app di Google),
@@ -38,16 +39,19 @@ export async function spedisci({ scadenze = false } = {}) {
   if (manca.length) return { inviate: 0, errori: 0, scadenze: 0, manca };
   const sb = servizio();
   let nScad = 0;
+  let planning: { planning: number; senzaMail: string[] } | { errore: string } | null = null;
   if (scadenze) {
     const oggi = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Rome" }).format(new Date());
     const { data, error } = await sb.rpc("genera_scadenze", { p_giorno: oggi });
     if (error) throw new Error("Scadenze: " + error.message);
     nScad = (data as number) ?? 0;
+    // mail del Planning giornaliero (responsabili, ritardi, piano della settimana): un errore qui non ferma le altre
+    try { planning = await preparaPlanning(sb, oggi); } catch (e) { planning = { errore: e instanceof Error ? e.message : "errore" }; }
   }
   const { data, error } = await sb.rpc("notifiche_da_inviare");
   if (error) throw new Error("Coda notifiche: " + error.message);
   const coda = (data ?? []) as Notifica[];
-  if (!coda.length) return { inviate: 0, errori: 0, scadenze: nScad, manca };
+  if (!coda.length) return { inviate: 0, errori: 0, scadenze: nScad, planning, manca };
 
   const posta = nodemailer.createTransport({
     service: "gmail",
@@ -72,5 +76,5 @@ export async function spedisci({ scadenze = false } = {}) {
       errori++;
     }
   }
-  return { inviate, errori, scadenze: nScad, manca };
+  return { inviate, errori, scadenze: nScad, planning, manca };
 }
