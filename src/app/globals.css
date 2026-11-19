@@ -93,3 +93,10 @@ select.lv-nessuno{color:var(--muted)}
 .vedi-come label{display:flex;align-items:center;gap:8px;font-weight:600}
 .vedi-come .nota{color:var(--muted)}
 .vedi-come.attiva{border-color:#d97706;background:color-mix(in srgb,#f59e0b 14%,var(--surface));position:sticky;top:0;z-index:20}
+
+/* menu a sinistra richiudibile */
+.menu-lat{position:fixed;top:10px;left:10px;z-index:60;font-size:13px;line-height:1;padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--muted);cursor:pointer}
+.menu-lat:hover{color:var(--fg);border-color:var(--fg)}
+html[data-menu="chiuso"] .shell{grid-template-columns:minmax(0,1fr)}
+html[data-menu="chiuso"] .shell>aside{display:none}
+html[data-menu="chiuso"] main{padding-top:48px}

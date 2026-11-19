@@ -1,5 +1,6 @@
 import Nav from "@/components/Nav";
 import VediCome from "@/components/VediCome";
+import MenuLaterale from "@/components/MenuLaterale";
 import { utenteCorrente, diDirezione } from "@/lib/dati";
 import { esci } from "./azioni";
 
@@ -28,6 +29,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="shell">
+      <MenuLaterale />
       <aside>
         <div className="brand">
           <span className="logo"><img src="/logo/kimatic" alt="Kimatic" width={356} height={252} /></span>

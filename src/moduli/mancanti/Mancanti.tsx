@@ -11,6 +11,7 @@ export type Mancante = {
   fornitore: string; cella: string; cdep: string; ultima_lav: string; ordini: Ordine[]; consegna: string | null;
   aperto: boolean; primo_il: string; visto_il: string; chiuso_il: string | null;
   nota: string; nota_il: string | null; responsabile: string | null; prevista: string | null; priorita: "" | "alta" | "bassa";
+  ids?: number[]; // righe accorpate (stesso codice nella stessa commessa)
 };
 type Commessa = { commessa: string; cliente: string; montaggio: string | null; note: string; nascosta: boolean };
 type MacchinaPiano = { code: string; desc: string; s: string | null; e: string | null; done: boolean; chi: string | null };
@@ -47,8 +48,9 @@ const opFinita = (o: OpSam) => /^[ea]$/i.test(o.stato.trim()) || ((o.qta ?? 0) >
 const opDaLanciare = (o: OpSam) => /^[pc]$/i.test(o.stato.trim());
 const numOp = (op: string) => { const [n, a] = op.split("/"); return (a || "0").padStart(4, "0") + (n || "").padStart(8, "0"); };
 type Materiale = "" | "non prelevato" | "da prelevare" | "prelevato";
-export function statoDi(m: Mancante, haOp = false, cellaOp = ""): Stato {
-  if (m.qta != null && m.giac_mp != null && m.giac_mp >= m.qta && m.qta > 0) return "magazzino";
+// coperto: la giacenza (unica per tutte le commesse) basta per questa riga, dopo le righe con il montaggio prima
+export function statoDi(m: Mancante, haOp = false, cellaOp = "", coperto?: boolean): Stato {
+  if (coperto ?? (m.qta != null && m.giac_mp != null && m.giac_mp >= m.qta && m.qta > 0)) return "magazzino";
   if (m.cdep) return "cdep";
   const cella = m.cella || cellaOp;
   if (cella) return cellaInterna(cella) ? "cella" : "esterna";
@@ -63,12 +65,9 @@ const oggi = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Rome" })
 const fd = (s?: string | null) => (s && /^\d{4}-\d{2}-\d{2}/.test(s) ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(2, 4)}` : "");
 const quando = (s?: string | null) => (s ? new Date(s).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "");
 const q2 = (v: number | null) => (v == null ? "" : v.toLocaleString("it-IT", { maximumFractionDigits: 2 }));
-/** Data attesa: prima la data prevista scritta a mano, poi la consegna dell'ordine. */
-const attesa = (m: Mancante) => m.prevista || m.consegna;
 /** In ritardo: data attesa passata, o oltre l'inizio montaggio della commessa. */
-function ritardo(m: Mancante, montaggio: string | null | undefined, st: Stato): "" | "scaduta" | "oltre" {
+function ritardo(m: Mancante, montaggio: string | null | undefined, st: Stato, a: string | null): "" | "scaduta" | "oltre" {
   if (!m.aperto || st === "magazzino") return "";
-  const a = attesa(m);
   if (a && a < oggi()) return "scaduta";
   if (montaggio && (!a || a > montaggio) && st !== "cdep") return "oltre";
   return "";
@@ -130,7 +129,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
   const [ult, setUlt] = useState<Import | null>(null);
   const [persone, setPersone] = useState<{ id: string; nome: string; colore: string | null; profilo: string | null; ordine: number }[]>([]);
   const [carico, setCarico] = useState(true);
-  const [vista, setVista] = useState<"commesse" | "fornitori" | "reparti" | "prelevati" | "assegnazioni">("commesse");
+  const [vista, setVista] = useState<"commesse" | "elenco" | "fornitori" | "reparti" | "prelevati" | "assegnazioni">("commesse");
   const [aperta, setAperta] = useState<string>("");          // commessa / fornitore / reparto aperto
   const [q, setQ] = useState("");
   const [filtroStato, setFiltroStato] = useState<string[]>([]);
@@ -149,6 +148,10 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
   const [filtroPers, setFiltroPers] = useState<string[]>([]);
   const [liste, setListe] = useState<string[]>([]);
   const [filtroFase, setFiltroFase] = useState<string[]>([]);
+  // ordinamento personalizzato: elenco di chiavi (es. fornitore, poi commessa, poi codice), ricordato sul dispositivo
+  const [ordine, setOrdineS] = useState<string[]>([]);
+  useEffect(() => { try { const v = JSON.parse(localStorage.getItem("mancanti-ordine") || "[]"); if (Array.isArray(v)) setOrdineS(v.filter((x) => typeof x === "string")); } catch { /* niente */ } }, []);
+  const setOrdine = (v: string[]) => { setOrdineS(v); try { localStorage.setItem("mancanti-ordine", JSON.stringify(v)); } catch { /* niente */ } };
 
   async function carica() {
     const tutte: Mancante[] = [];
@@ -201,6 +204,40 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
   };
   const macchinaDi = (m: Mancante) => { const P = piano[norm(m.commessa)]; return P?.macchine.find((x) => x.code && x.code === m.op) || P?.macchine.find((x) => x.code && x.code === m.matricola) || null; };
   const montaggioDi = (m: Mancante) => { const x = macchinaDi(m); return (x && !x.done && x.s) || montaggioComm(m.commessa); };
+  // ---------- giacenza e ordinato condivisi tra commesse ----------
+  // La giacenza di un codice è unica (la stessa su tutte le righe): si assegna alle righe partendo dal montaggio
+  // più vicino. Le righe che la giacenza non copre prendono l'ordinato, ordine dopo ordine per data di consegna,
+  // e la loro data di arrivo è la consegna dell'ultimo ordine che serve a coprirle.
+  type Quota = { giac: number; daGiac: number; coperto: boolean; arrivo: string | null; ordiniUsati: string[]; scoperta: number; ordiniNoti: boolean };
+  const quote = useMemo(() => {
+    const Q = new Map<number, Quota>();
+    const perCod = new Map<string, Mancante[]>();
+    for (const m of righe) if (m.aperto) perCod.set(m.codice, [...(perCod.get(m.codice) || []), m]);
+    for (const L of perCod.values()) {
+      L.sort((a, b) => (montaggioDi(a) || "9999").localeCompare(montaggioDi(b) || "9999") || ordComm(a.commessa).localeCompare(ordComm(b.commessa)) || a.id - b.id);
+      const giac = Math.max(0, ...L.map((m) => m.giac_mp ?? 0));
+      const ordini = new Map<string, { num: string; consegna: string | null; resto: number }>();
+      for (const m of L) for (const o of m.ordini) if (!/grezz/i.test(o.tipo || "") && !ordini.has(o.num)) ordini.set(o.num, { num: o.num, consegna: o.consegna, resto: o.qta == null ? Infinity : Math.max(0, o.qta) });
+      const coda = [...ordini.values()].sort((a, b) => (a.consegna || "9999").localeCompare(b.consegna || "9999"));
+      let resto = giac;
+      for (const m of L) {
+        const serve = Math.max(0, m.qta ?? 0), daGiac = Math.min(serve, resto); resto -= daGiac;
+        let manca = serve - daGiac, arrivo: string | null = null; const usati: string[] = [];
+        for (const o of coda) { if (manca <= 0) break; if (o.resto <= 0) continue; const x = Math.min(manca, o.resto); o.resto -= x; manca -= x; usati.push(o.num); if (o.consegna && (!arrivo || o.consegna > arrivo)) arrivo = o.consegna; }
+        Q.set(m.id, { giac, daGiac, coperto: serve > 0 && daGiac >= serve, arrivo: serve - daGiac > 0 ? arrivo : null, ordiniUsati: usati, scoperta: coda.length ? manca : 0, ordiniNoti: coda.length > 0 });
+      }
+    }
+    return Q;
+  }, [righe, piano, comm]); // eslint-disable-line react-hooks/exhaustive-deps
+  // per le righe accorpate (stesso codice nella stessa commessa) valgono tutte le righe unite
+  const quotaDi = (m: Mancante): Quota | undefined => {
+    const L = (m.ids || [m.id]).map((i) => quote.get(i)).filter(Boolean) as Quota[];
+    if (L.length < 2) return L[0];
+    return { giac: L[0].giac, daGiac: L.reduce((t, x) => t + x.daGiac, 0), coperto: L.every((x) => x.coperto), arrivo: L.map((x) => x.arrivo).filter(Boolean).sort().pop() || null,
+      ordiniUsati: [...new Set(L.flatMap((x) => x.ordiniUsati))], scoperta: L.reduce((t, x) => t + x.scoperta, 0), ordiniNoti: L.some((x) => x.ordiniNoti) };
+  };
+  /** Data attesa: la data prevista scritta a mano, poi la consegna dell'ordinato assegnato alla riga, poi la prima consegna. */
+  const attesaDi = (m: Mancante) => { const x = quotaDi(m); return m.prevista || x?.arrivo || (x?.ordiniNoti ? null : m.consegna); };
   // OP di produzione del codice (prima quella della stessa commessa) e fase in corso
   // l'OP che riguarda la riga: tra quelle non finite, prima quella della stessa commessa, poi quella la cui fase in corso
   // è nella cella indicata da SAM per la riga, poi la più recente
@@ -223,8 +260,8 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
   };
   const faseDi = (m: Mancante) => { const o = opDi(m); return o ? (o.fasi.find((f) => !FASE_CHIUSA.test(f.stato)) || null) : null; };
   const cellaOra = (m: Mancante) => m.cella || faseDi(m)?.cella || "";
-  const stDi = (m: Mancante) => statoDi(m, !!opDi(m), faseDi(m)?.cella || "");
-  const ritDi = (m: Mancante) => ritardo(m, montaggioDi(m), stDi(m));
+  const stDi = (m: Mancante) => statoDi(m, !!opDi(m), faseDi(m)?.cella || "", quotaDi(m)?.coperto ?? false);
+  const ritDi = (m: Mancante) => ritardo(m, montaggioDi(m), stDi(m), attesaDi(m));
   const clienteDi = (c: string) => piano[norm(c)]?.cliente || comm[c]?.cliente || "";
   const nelPiano = (c: string) => !!piano[norm(c)] && !piano[norm(c)].chiusa;
   // chi segue il codice: scelto sulla riga, altrimenti dalle assegnazioni (cella, poi fornitore)
@@ -389,7 +426,8 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
     const unisci = (a: string, b: string) => (!b || a.split(", ").includes(b) ? a : a ? a + ", " + b : b);
     for (const m of L) {
       const k = m.commessa + "|" + m.codice, x = M.get(k);
-      if (!x) { M.set(k, { ...m, ordini: [...m.ordini] }); continue; }
+      if (!x) { M.set(k, { ...m, ordini: [...m.ordini], ids: [m.id] }); continue; }
+      x.ids = [...(x.ids || [x.id]), m.id];
       x.qta = (x.qta ?? 0) + (m.qta ?? 0);
       x.op = unisci(x.op, m.op); x.op_descr = unisci(x.op_descr, m.op_descr);
       if (x.matricola !== m.matricola) { x.matricola = unisci(x.matricola, m.matricola); x.macchina = unisci(x.macchina, m.macchina); }
@@ -410,7 +448,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
       const comeUrl = (b: Blob) => new Promise<string>((ok) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.readAsDataURL(b); });
       const [{ jsPDF }, { pdfMancanti }, logo] = await Promise.all([import("jspdf"), import("./pdf"), fetch("/logo/kimatic").then((r) => r.blob()).then(comeUrl).catch(() => undefined)]);
       const posComm = (c: string) => montaggioComm(c) || "9999";
-      const ord = [...L].sort((a, b) => posComm(a.commessa).localeCompare(posComm(b.commessa)) || ordComm(b.commessa).localeCompare(ordComm(a.commessa))
+      const ord = ordine.length ? ordina(L) : [...L].sort((a, b) => posComm(a.commessa).localeCompare(posComm(b.commessa)) || ordComm(b.commessa).localeCompare(ordComm(a.commessa))
         || a.matricola.localeCompare(b.matricola) || a.op.localeCompare(b.op) || a.codice.localeCompare(b.codice));
       const righePdf = ord.map((m) => {
         const st = stDi(m), f = faseDi(m), o = opDi(m);
@@ -419,7 +457,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
         else if (st === "cdep") { dove = m.cdep.replace(/^C\/Dep\.\s*Forn\.\s*/i, "") || "Conto deposito"; dettaglio = "in conto deposito"; }
         else if (f) { const mat = materialeDi(m); dove = f.lav; dettaglio = [f.cella, f.stato && f.stato.toLowerCase(), o && "OP " + o.op, mat && "materiale " + mat].filter(Boolean).join(" · "); }
         else if (m.cella) { dove = m.cella; dettaglio = [st === "esterna" ? "lavorazione esterna" : "", m.ultima_lav && "chiusa: " + m.ultima_lav.toLowerCase()].filter(Boolean).join(" · "); }
-        else if (st === "ordinato") { dove = m.fornitore || m.ordini[0]?.fornitore || "Ordinato"; const a = attesa(m); dettaglio = [m.ordini.map((x) => x.num).filter(Boolean).join(", ") && "ord. " + m.ordini.map((x) => x.num).filter(Boolean).join(", "), a && "consegna " + fd(a)].filter(Boolean).join(" · "); }
+        else if (st === "ordinato") { dove = m.fornitore || m.ordini[0]?.fornitore || "Ordinato"; const a = attesaDi(m); dettaglio = [m.ordini.map((x) => x.num).filter(Boolean).join(", ") && "ord. " + m.ordini.map((x) => x.num).filter(Boolean).join(", "), a && "consegna " + fd(a)].filter(Boolean).join(" · "); }
         else if (st === "cella") { dove = "Produzione interna"; dettaglio = o ? "OP " + o.op : "OP non presente"; }
         else { dove = "Da ordinare"; }
         return { commessa: m.commessa, cliente: clienteDi(m.commessa) || "", macchina: m.matricola, macchinaDescr: m.macchina + (m.op.includes(", ") ? " · per " + m.op : ""), codice: m.codice, descr: m.descr, qta: q2(m.qta), dove, dettaglio, rosso: !!ritDi(m) || materialeDi(m) === "non prelevato" };
@@ -435,16 +473,16 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
     const L = accorpa(L0);
     const ExcelJS = (await import("exceljs")).default;
     const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet("Mancanti");
-    ws.columns = [["Commessa", 12], ["Cliente", 20], ["Inizio montaggio", 12], ["Matricola", 15], ["Macchina", 30], ["OP", 16], ["Gruppo (OP)", 30], ["Codice", 16], ["Descrizione", 36], ["Q.tà", 7], ["Giacenza", 9],
-      ["Stato", 20], ["Fornitore", 24], ["Ordini", 26], ["Consegna ordine", 12], ["Cella lavorazione", 20], ["C/deposito", 18], ["Data prevista", 12], ["Chi lo segue", 18], ["Note", 36], ["Nota aggiornata il", 14], ["OP produzione / fase", 26], ["Figli del gruppo", 22]]
+    ws.columns = [["Commessa", 12], ["Cliente", 20], ["Inizio montaggio", 12], ["Matricola", 15], ["Macchina", 30], ["OP", 16], ["Gruppo (OP)", 30], ["Codice", 16], ["Descrizione", 36], ["Q.tà", 7], ["Giacenza totale", 9], ["Giacenza assegnata", 10],
+      ["Stato", 20], ["Fornitore", 24], ["Ordini", 26], ["Consegna ordine", 12], ["Arrivo previsto", 12], ["Cella lavorazione", 20], ["C/deposito", 18], ["Data prevista", 12], ["Chi lo segue", 18], ["Note", 36], ["Nota aggiornata il", 14], ["OP produzione / fase", 26], ["Figli del gruppo", 22]]
       .map(([header, width]) => ({ header: String(header), width: Number(width) }));
     ws.getRow(1).font = { bold: true };
     const nomeP = Object.fromEntries(persone.map((p) => [p.id, p.nome]));
-    const ordinati = liste.includes("sollecitare") || filtroForn.length ? [...L].sort((a, b) => (a.fornitore || "~").localeCompare(b.fornitore || "~") || (attesa(a) || "9999").localeCompare(attesa(b) || "9999")) : L;
+    const ordinati = ordine.length ? ordina(L) : liste.includes("sollecitare") || filtroForn.length ? [...L].sort((a, b) => (a.fornitore || "~").localeCompare(b.fornitore || "~") || (attesaDi(a) || "9999").localeCompare(attesaDi(b) || "9999")) : L;
     for (const m of ordinati) {
       const rit = ritDi(m), mo = montaggioDi(m), o = opDi(m), f = faseDi(m), F = assieme(m.codice) ? figliDi(m) : null;
-      const row = ws.addRow([m.commessa, clienteDi(m.commessa), mo ? new Date(mo + "T12:00:00") : "", m.matricola, m.macchina, m.op, m.op_descr, m.codice, m.descr, m.qta, m.giac_mp,
-        nomeStato(stDi(m)), m.fornitore, m.ordini.map((o) => o.num).join(", "), m.consegna ? new Date(m.consegna + "T12:00:00") : "", cellaOra(m), m.cdep,
+      const row = ws.addRow([m.commessa, clienteDi(m.commessa), mo ? new Date(mo + "T12:00:00") : "", m.matricola, m.macchina, m.op, m.op_descr, m.codice, m.descr, m.qta, m.giac_mp, quotaDi(m)?.daGiac ?? "",
+        nomeStato(stDi(m)), m.fornitore, m.ordini.map((o) => o.num).join(", "), m.consegna ? new Date(m.consegna + "T12:00:00") : "", attesaDi(m) ? new Date(attesaDi(m) + "T12:00:00") : "", cellaOra(m), m.cdep,
         m.prevista ? new Date(m.prevista + "T12:00:00") : "", nomeP[personaDi(m) || ""] || "", m.nota, m.nota_il ? new Date(m.nota_il) : "",
         o ? `OP ${o.op}${f ? " · " + f.lav : ""}${materialeDi(m) ? " · materiale " + materialeDi(m) : ""}` : "", F ? (F.length ? `${F.length} figli mancanti` : o ? "figli prelevati" : "figli non nel file") : ""]);
       const col = coloreDi(m);
@@ -452,13 +490,32 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
       if (col && scuro(col)) row.font = { color: { argb: "FFFFFFFF" } };
       if (rit) row.font = { ...(row.font || {}), bold: true, color: col && scuro(col) ? { argb: "FFFFFFFF" } : { argb: "FFB42318" } };
     }
-    ["C", "O", "R", "U"].forEach((k) => (ws.getColumn(k).numFmt = "dd/mm/yyyy"));
-    ws.autoFilter = { from: "A1", to: "W1" }; ws.views = [{ state: "frozen", ySplit: 1 }];
+    ["C", "P", "Q", "T", "W"].forEach((k) => (ws.getColumn(k).numFmt = "dd/mm/yyyy"));
+    ws.autoFilter = { from: "A1", to: "Y1" }; ws.views = [{ state: "frozen", ySplit: 1 }];
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([await wb.xlsx.writeBuffer()], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
     a.download = `${nome} ${oggi()}.xlsx`.replace(/[\\/:*?"<>|]+/g, " "); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 3000);
   }
 
+  // ---------- ordinamento personalizzato ----------
+  const CHIAVI: Record<string, { l: string; f: (m: Mancante) => string }> = {
+    montaggio: { l: "Inizio montaggio", f: (m) => montaggioDi(m) || "9999" },
+    commessa: { l: "Commessa", f: (m) => ordComm(m.commessa) },
+    macchina: { l: "Macchina", f: (m) => m.matricola },
+    gruppo: { l: "Gruppo (OP)", f: (m) => m.op },
+    codice: { l: "Codice", f: (m) => m.codice },
+    fornitore: { l: "Fornitore", f: (m) => (m.fornitore || m.ordini[0]?.fornitore || "~").toLowerCase() },
+    stato: { l: "Stato", f: (m) => String(STATI.findIndex((x) => x[0] === stDi(m))) },
+    arrivo: { l: "Data di arrivo", f: (m) => attesaDi(m) || "9999" },
+    persona: { l: "Seguito da", f: (m) => nomeDi(personaDi(m)).toLowerCase() || "~" },
+    fase: { l: "Fase", f: (m) => (faseDi(m)?.lav || "~").toLowerCase() },
+    cella: { l: "Cella / reparto", f: (m) => (cellaOra(m) || m.cdep || "~").toLowerCase() },
+  };
+  const ordina = (L: Mancante[]) => {
+    const K = ordine.filter((k) => CHIAVI[k]); if (!K.length) return L;
+    const V = new Map(L.map((m) => [m, K.map((k) => CHIAVI[k].f(m))]));
+    return [...L].sort((a, b) => { const x = V.get(a)!, y = V.get(b)!; for (let i = 0; i < K.length; i++) { const c = x[i].localeCompare(y[i], "it", { numeric: true }); if (c) return c; } return 0; });
+  };
   // ---------- pezzi di interfaccia ----------
   const conteggi = (L: Mancante[]) => Object.fromEntries(STATI.map(([k]) => [k, L.filter((m) => stDi(m) === k).length])) as Record<Stato, number>;
   const barra = (L: Mancante[]) => {
@@ -466,26 +523,27 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
     return <div className="barra" aria-hidden>{STATI.map(([k]) => c[k] ? <span key={k} className={"b-" + k} style={{ width: `${(c[k] / n) * 100}%` }} title={`${nomeStato(k)}: ${c[k]}`} /> : null)}</div>;
   };
   const tabella = (L: Mancante[], o: { commessa?: boolean; macchina?: boolean } = {}) => (
-    <div className="mx"><table className="tm">
-      <thead><tr>{o.commessa && <th>Commessa</th>}{o.macchina !== false && <th>Macchina / gruppo</th>}<th>Codice</th><th className="n">Q.tà</th><th className="n hide-s">Giac.</th><th>Stato</th><th>Fornitore / ordine</th><th>Attesa</th><th>Segue</th><th>Prevista</th><th>Nota</th></tr></thead>
-      <tbody>{L.map((m) => {
+    <div className="mx"><table className={"tm fit" + (o.commessa ? " con-comm" : "") + (o.macchina === false ? " senza-mac" : "")}>
+      <thead><tr>{o.commessa && <th className="c-comm">Commessa</th>}{o.macchina !== false && <th className="c-mac">Macchina / gruppo</th>}<th className="c-cod">Codice</th><th className="n c-q">Q.tà</th><th className="n hide-s c-g" title="Giacenza assegnata a questa riga, di quella totale del codice">Giac.</th><th className="c-st">Stato</th><th className="c-for">Fornitore / ordine</th><th className="c-att">Arrivo</th><th className="c-chi" title="Chi lo segue">Segue</th><th className="c-prev">Prevista</th><th className="c-nt">Nota</th></tr></thead>
+      <tbody>{ordina(L).map((m) => {
         const st = stDi(m), rit = ritDi(m), ed = modifica || gestisce;
         return (
           <tr key={m.id} className={(rit ? "rit " : "") + (coloreDi(m) && scuro(coloreDi(m)!) ? " scura" : "")} style={coloreDi(m) ? { background: coloreDi(m) } : undefined}>
-            {o.commessa && <td><b>{m.commessa}</b><small>{clienteDi(m.commessa)}</small></td>}
+            {o.commessa && <td className="l1" title={clienteDi(m.commessa)}><b>{m.commessa}</b><small>{clienteDi(m.commessa)}</small></td>}
             {o.macchina !== false && <td className="l1" title={m.op_descr || m.macchina}><span className="mono">{m.op}</span><small>{m.op_descr || m.macchina}</small></td>}
             <td className="l1" title={m.descr}><span className="mono">{m.codice}</span>{segnoFigli(m)}{segnoRipetuto(m)}<small>{m.descr}</small></td>
             <td className="n mono">{q2(m.qta)}</td>
-            <td className="n mono hide-s">{q2(m.giac_mp)}</td>
+            <td className="n mono hide-s">{(() => { const x = quotaDi(m); if (!x || !x.giac) return q2(m.giac_mp);
+              return <span title={`Giacenza totale del codice: ${q2(x.giac)}, la stessa per tutte le commesse.\nAssegnata a questa riga: ${q2(x.daGiac)} di ${q2(m.qta)} (prima le righe con il montaggio più vicino).`}>{q2(x.daGiac)}<small>di {q2(x.giac)}</small></span>; })()}</td>
             <td className="l1" title={[cellaOra(m), m.ultima_lav && "ultima fase chiusa: " + m.ultima_lav, m.cdep].filter(Boolean).join("\n")}><span className={"st s-" + st}>{nomeStato(st)}</span>{cellaOra(m) && <small>{cellaOra(m)}{m.ultima_lav ? " · chiusa: " + m.ultima_lav.toLowerCase() : ""}</small>}{m.cdep && <small>{m.cdep}</small>}{segnoOp(m)}</td>
-            <td className="l1" title={m.ordini.map((x) => `OA ${x.num}${x.consegna ? " · " + fd(x.consegna) : ""}${x.fornitore ? " · " + x.fornitore : ""}`).join("\n")}>{m.fornitore}{m.ordini.length > 0 && <small>{m.ordini.map((x) => `OA ${x.num}${x.consegna ? " · " + fd(x.consegna) : ""}${x.fornitore && x.fornitore !== m.fornitore ? " · " + x.fornitore : ""}`).join("; ")}</small>}</td>
-            <td className="mono l1">{fd(attesa(m))}{rit && <small className="r">{rit === "scaduta" ? "data passata" : "dopo il montaggio"}</small>}</td>
+            <td className="l1" title={m.ordini.map((x) => `OA ${x.num}${x.consegna ? " · " + fd(x.consegna) : ""}${x.fornitore ? " · " + x.fornitore : ""}`).join("\n")}>{m.fornitore}{m.ordini.length > 0 && <small>{(() => { const u = quotaDi(m)?.ordiniUsati || []; const L = u.length ? m.ordini.filter((x) => u.includes(x.num)) : m.ordini; return L.map((x) => `OA ${x.num}${x.consegna ? " · " + fd(x.consegna) : ""}${x.fornitore && x.fornitore !== m.fornitore ? " · " + x.fornitore : ""}`).join("; "); })()}</small>}{(quotaDi(m)?.scoperta || 0) > 0 && <small className="r" title="Le quantità ordinate vanno prima alle commesse con il montaggio più vicino">ordinato non basta: mancano {q2(quotaDi(m)!.scoperta)}</small>}</td>
+            <td className="mono l1">{fd(attesaDi(m))}{rit && <small className="r">{rit === "scaduta" ? "data passata" : "dopo il montaggio"}</small>}</td>
             <td className="chi">{(() => { const p = personaDi(m), c = p ? colori[p] : undefined; return ed
               ? <select value={m.responsabile || ""} aria-label="Chi lo segue" title={p ? nomeDi(p) + (m.responsabile ? "" : " (dall'assegnazione)") : "Chi lo segue"} onChange={(e) => salvaRiga(m, { responsabile: e.target.value || null })} style={c ? { background: c, borderColor: "rgba(0,0,0,.35)" } : undefined}>
                   <option value="">{p && !m.responsabile ? "↳ " + nomeDi(p) : "—"}</option>{persone.map((x) => <option key={x.id} value={x.id}>{x.nome}</option>)}</select>
               : <i className="pal" style={{ background: c || "transparent" }} title={nomeDi(p)} />; })()}</td>
             <td>{ed ? <input type="date" value={m.prevista || ""} title="Data prevista (se diversa dalla consegna dell'ordine)" aria-label="Data prevista" onChange={(e) => salvaRiga(m, { prevista: e.target.value || null })} /> : <span className="mono">{fd(m.prevista)}</span>}</td>
-            <td className="nt">{ed ? <input defaultValue={m.nota} placeholder="nota" aria-label="Nota" onBlur={(e) => e.target.value !== m.nota && salvaRiga(m, { nota: e.target.value })} /> : m.nota}
+            <td className="nt l1" title={m.nota}>{ed ? <input defaultValue={m.nota} placeholder="nota" aria-label="Nota" onBlur={(e) => e.target.value !== m.nota && salvaRiga(m, { nota: e.target.value })} /> : m.nota}
               {m.nota && m.nota_il && <small title={"Nota aggiornata il " + quando(m.nota_il)}>agg. {fd(m.nota_il.slice(0, 10))}</small>}</td>
           </tr>
         );
@@ -493,6 +551,20 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
     </table></div>
   );
 
+  // ultimo pezzo in arrivo di una commessa o di una macchina: la data più lontana tra i codici non coperti dalla giacenza
+  // (data prevista, consegna dell'ordinato assegnato, o fine dell'ultima fase dell'OP di produzione)
+  const fineOp = (m: Mancante) => (opDi(m)?.fasi || []).map((f) => f.scad).filter(Boolean).sort().pop() || null;
+  const ultimoPezzo = (L: Mancante[]) => {
+    let max: string | null = null, senza = 0, n = 0;
+    for (const m of L) { if (stDi(m) === "magazzino") continue; n++; const d = attesaDi(m) || fineOp(m); if (!d) senza++; else if (!max || d > max) max = d; }
+    return { max, senza, n };
+  };
+  const testoUltimo = (L: Mancante[]) => {
+    const u = ultimoPezzo(L);
+    if (!u.n) return <span className="ult ok">tutto disponibile a magazzino</span>;
+    return <span className={"ult" + (u.max && u.max < oggi() ? " r" : "")} title={u.senza ? `${u.senza} ${u.senza === 1 ? "codice" : "codici"} senza data di arrivo (da ordinare, ordinato senza consegna o produzione senza scadenza)` : undefined}>
+      {u.max ? <>ultimo pezzo in arrivo il <b>{fd(u.max)}</b></> : "ultimo pezzo in arrivo: data non nota"}{u.max && u.senza > 0 && <> · {u.senza} senza data</>}{u.max && u.max < oggi() && " (data passata)"}</span>;
+  };
   // ---------- viste ----------
   const commesse = [...new Set(aperti.map((m) => m.commessa))].filter(visibileComm)
     .filter((c) => !filtroComm.length || filtroComm.includes(c))
@@ -515,7 +587,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
                 <div><h2>{c}{clienteDi(c) && <span> · {clienteDi(c)}</span>}</h2>
                   <p className="nota">{macchine.slice(0, 3).join(" · ")}{macchine.length > 3 ? ` e altre ${macchine.length - 3}` : ""}</p></div>
                 <div className="num"><b>{tutti.length}</b> mancanti{rit > 0 && <span className="r"> · {rit} in ritardo</span>}{prel > 0 && <span className="nota"> · {prel} prelevati in 14 gg</span>}
-                  <span className="nota">{montaggioComm(c) ? "montaggio " + fd(montaggioComm(c)) : "montaggio non pianificato"}{!nelPiano(c) && " · non nel Piano produzione"}</span></div>
+                  <span className="nota">{montaggioComm(c) ? "montaggio " + fd(montaggioComm(c)) : "montaggio non pianificato"}{!nelPiano(c) && " · non nel Piano produzione"}</span>{testoUltimo(tutti)}</div>
               </div>
               {barra(tutti)}
               {ap && <div className="dett">
@@ -532,13 +604,24 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
                 </div>
                 {raggruppa(L, (m) => `${m.matricola}  ${m.macchina}`).map(([k, G]) => {
                   const mo = montaggioDi(G[0]), x = macchinaDi(G[0]);
-                  return <div key={k} className="gruppo"><h3>{k} <small className="nota">{G.length} · {mo ? `montaggio ${fd(mo)}${x?.chi ? " (" + x.chi + ")" : ""}` : "montaggio non pianificato"}</small></h3>{tabella(G)}</div>;
+                  const tuttiM = aperti.filter((m) => m.commessa === c && m.matricola === G[0].matricola);
+                  return <div key={k} className="gruppo"><h3>{k} <small className="nota">{G.length} · {mo ? `montaggio ${fd(mo)}${x?.chi ? " (" + x.chi + ")" : ""}` : "montaggio non pianificato"}</small> <small>{testoUltimo(tuttiM)}</small></h3>{tabella(G)}</div>;
                 })}
               </div>}
             </section>
           );
         })}
         {!commesse.length && <p className="nota">Nessuna commessa con mancanti aperti.</p>}
+      </div>
+    );
+  } else if (vista === "elenco") {
+    // tutte le righe in una tabella sola, nell'ordine scelto (predefinito: montaggio, commessa, macchina, codice)
+    const MAX = 1500;
+    const L = ordine.length ? ordina(filtrati) : [...filtrati].sort((a, b) => (montaggioDi(a) || "9999").localeCompare(montaggioDi(b) || "9999") || ordComm(a.commessa).localeCompare(ordComm(b.commessa)) || a.matricola.localeCompare(b.matricola) || a.codice.localeCompare(b.codice));
+    corpo = (
+      <div className="box" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <p className="nota">{L.length} righe{L.length > MAX ? ` · ne mostro ${MAX}: restringi con i filtri o scarica l'Excel per vederle tutte` : ""}{ordine.length ? " · ordinate per " + ordine.map((k) => CHIAVI[k]?.l.toLowerCase()).filter(Boolean).join(", poi ") : ""}</p>
+        {L.length ? tabella(L.slice(0, MAX), { commessa: true }) : <p className="nota">Nessun mancante con questi filtri.</p>}
       </div>
     );
   } else if (vista === "fornitori" || vista === "reparti") {
@@ -554,7 +637,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
                 <div><h2>{k}</h2><p className="nota">{cc.length} {cc.length === 1 ? "commessa" : "commesse"}: {cc.slice(0, 6).join(", ")}{cc.length > 6 ? "…" : ""}</p></div>
                 <div className="num"><b>{L.length}</b> mancanti{rit > 0 && <span className="r"> · {rit} in ritardo</span>}</div>
               </div>
-              {ap && <div className="dett"><div><button className="btn sec" onClick={() => esporta(L, "Mancanti " + k)}>Excel</button></div>{tabella(L.sort((a, b) => (attesa(a) || "9999").localeCompare(attesa(b) || "9999")), { commessa: true })}</div>}
+              {ap && <div className="dett"><div><button className="btn sec" onClick={() => esporta(L, "Mancanti " + k)}>Excel</button></div>{tabella(L.sort((a, b) => (attesaDi(a) || "9999").localeCompare(attesaDi(b) || "9999")), { commessa: true })}</div>}
             </section>
           );
         })}
@@ -637,7 +720,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
       {msg && <div className="msg" role="status">{msg}</div>}
       <div className="box" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <div className="stati" role="tablist" aria-label="Vista">
-          {([["commesse", "Per commessa"], ["fornitori", "Per fornitore"], ["reparti", "Per reparto"], ["prelevati", "Prelevati"], ["assegnazioni", "Assegnazioni e colori"]] as const).map(([k, l]) => <button key={k} role="tab" aria-selected={vista === k} aria-pressed={vista === k} onClick={() => { setVista(k); setAperta(""); }}>{l}</button>)}
+          {([["commesse", "Per commessa"], ["elenco", "Elenco unico"], ["fornitori", "Per fornitore"], ["reparti", "Per reparto"], ["prelevati", "Prelevati"], ["assegnazioni", "Assegnazioni e colori"]] as const).map(([k, l]) => <button key={k} role="tab" aria-selected={vista === k} aria-pressed={vista === k} onClick={() => { setVista(k); setAperta(""); }}>{l}</button>)}
         </div>
         <div className="row filtri" style={{ gap: 8, flexWrap: "wrap" }}>
           <Multi etichetta="Liste" tutti="Liste pronte…" largo voci={Object.entries(LISTE).map(([k, x]) => ({ v: k, l: x.l, n: base.filter(x.f).length }))} scelti={liste} cambia={setListe} />
@@ -658,6 +741,20 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
           <label className="ck"><input type="checkbox" checked={soloRitardi} onChange={(e) => setSoloRitardi(e.target.checked)} /> Solo in ritardo</label>
           <label className="ck" title="Codici mancanti su più righe della stessa commessa o su più commesse"><input type="checkbox" checked={soloRipetuti} onChange={(e) => setSoloRipetuti(e.target.checked)} /> Solo codici ripetuti</label>
           <label className="ck"><input type="checkbox" checked={nascoste} onChange={(e) => setNascoste(e.target.checked)} /> Anche commesse fuori dal Piano produzione</label>
+        </div>
+        <div className="row ordina" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }} aria-label="Ordinamento">
+          <span className="nota">Ordina per</span>
+          {[...ordine, ""].slice(0, 6).map((k, i) => (
+            <span key={i} className="row" style={{ gap: 6, alignItems: "center" }}>
+              {i > 0 && <span className="nota" aria-hidden>→</span>}
+              <select className={k ? "on" : ""} value={k} aria-label={i ? `Poi per (livello ${i + 1})` : "Ordina per"} onChange={(e) => setOrdine([...ordine.slice(0, i), ...(e.target.value ? [e.target.value] : [])])}>
+                <option value="">{i ? "poi per…" : "ordine predefinito"}</option>
+                {Object.entries(CHIAVI).filter(([x]) => x === k || !ordine.includes(x)).map(([x, c]) => <option key={x} value={x}>{c.l}</option>)}
+              </select>
+            </span>
+          ))}
+          {ordine.length > 0 && <button type="button" className="btn sec" onClick={() => setOrdine([])}>Ordine predefinito</button>}
+          <span className="nota">vale per le tabelle, l&apos;Excel e il PDF{vista === "commesse" ? " (dentro ogni commessa e macchina; «Elenco unico» per una tabella sola)" : ""}</span>
         </div>
         <div className="leg">{STATI.map(([k, l, d]) => <span key={k} title={d}><i className={"b-" + k} />{l}</span>)}<span><i className="b-rit" />in ritardo: data passata o dopo l&apos;inizio montaggio</span></div>
         {Object.keys(colori).length > 0 && <div className="leg">{colori.giacenti && <span><i style={{ background: colori.giacenti }} />giacenti disponibili</span>}{persone.filter((p) => colori[p.id]).map((p) => <span key={p.id}><i style={{ background: colori[p.id] }} />{p.nome}</span>)}</div>}
