@@ -78,6 +78,8 @@ così il Commerciale fattura senza gestire tutto il modulo: Legge = vede coda, i
 Modifica = compila gli importi e segna fatturato; Gestisce = anche i prezzi dei listini. Di default:
 Commerciale Modifica, Amministrazione Gestisce. Chi gestisce Rapporti d'intervento continua a fare tutto.
 Il modulo nel menu apre la scheda; per vedere i rapporti serve anche l'accesso a Rapporti d'intervento.
+Chi fattura vede anche le note spese chiuse o verificate delle trasferte e ne scarica il PDF con gli
+scontrini (migrazione 0061), in sola lettura.
 
 ## Mancanti montaggi
 
