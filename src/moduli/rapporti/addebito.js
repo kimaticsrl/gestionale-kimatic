@@ -21,6 +21,8 @@ export const MEZZI = [
   { targa: 'GG928ZD', nome: 'Jumper', tipo: 'furgone' },
   { targa: 'GX806HS', nome: 'SKODA Andrea', tipo: 'auto' },
   { targa: 'GS435RD', nome: 'CUPRA Giulio', tipo: 'auto' },
+  { targa: 'GX809HS', nome: 'SKODA Moreno', tipo: 'auto' },
+  { targa: 'GZ358KF', nome: 'Tiguan Matthias', tipo: 'auto' },
 ];
 // Mezzo del rapporto: scelto nell'addebito (o.mezzo) oppure dal tecnico nel rapporto (r.mezzo); 'altro' = testo libero
 export function mezzoDi(r, o) {
