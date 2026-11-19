@@ -101,3 +101,8 @@
 .mc .multi-p li label:hover{background:var(--bg)}
 .mc .multi-p li label span{flex:1}
 .mc .multi-p li small{color:var(--muted);font-family:var(--f-mono);font-size:12px}
+
+.mc .mat{display:inline-block;margin-left:5px;padding:0 5px;border-radius:7px;font-size:10.5px;font-weight:600;border:1px solid currentColor}
+.mc .mat.m-non-prelevato{color:#fff;background:#a3352b;border-color:#a3352b}
+.mc .mat.m-da-prelevare{color:#9a5b12}
+.mc .mat.m-prelevato{color:#2f6b4f}
