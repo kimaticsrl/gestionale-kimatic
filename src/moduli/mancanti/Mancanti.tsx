@@ -350,6 +350,35 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
     } catch (e) { setMsg("Non riesco a leggere il file: " + (e instanceof Error ? e.message : "errore")); }
     finally { setLavoro(false); }
   }
+  // PDF di quello che si vede: commessa, macchina, codice, descrizione, quantità, fase o fornitore
+  const [pdfInCorso, setPdfInCorso] = useState(false);
+  async function scaricaPdf(L: Mancante[]) {
+    setPdfInCorso(true);
+    try {
+      const comeUrl = (b: Blob) => new Promise<string>((ok) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.readAsDataURL(b); });
+      const [{ jsPDF }, { pdfMancanti }, logo] = await Promise.all([import("jspdf"), import("./pdf"), fetch("/logo/kimatic").then((r) => r.blob()).then(comeUrl).catch(() => undefined)]);
+      const posComm = (c: string) => montaggioComm(c) || "9999";
+      const ord = [...L].sort((a, b) => posComm(a.commessa).localeCompare(posComm(b.commessa)) || ordComm(b.commessa).localeCompare(ordComm(a.commessa))
+        || a.matricola.localeCompare(b.matricola) || a.op.localeCompare(b.op) || a.codice.localeCompare(b.codice));
+      const righePdf = ord.map((m) => {
+        const st = stDi(m), f = faseDi(m), o = opDi(m);
+        let dove = "", dettaglio = "";
+        if (st === "magazzino") { dove = "Pronto a magazzino"; dettaglio = `giacenza ${q2(m.giac_mp)}`; }
+        else if (st === "cdep") { dove = m.cdep.replace(/^C\/Dep\.\s*Forn\.\s*/i, "") || "Conto deposito"; dettaglio = "in conto deposito"; }
+        else if (f) { dove = f.lav; dettaglio = [f.cella, f.stato && f.stato.toLowerCase(), o && "OP " + o.op].filter(Boolean).join(" · "); }
+        else if (m.cella) { dove = m.cella; dettaglio = [st === "esterna" ? "lavorazione esterna" : "", m.ultima_lav && "chiusa: " + m.ultima_lav.toLowerCase()].filter(Boolean).join(" · "); }
+        else if (st === "ordinato") { dove = m.fornitore || m.ordini[0]?.fornitore || "Ordinato"; const a = attesa(m); dettaglio = [m.ordini.map((x) => x.num).filter(Boolean).join(", ") && "ord. " + m.ordini.map((x) => x.num).filter(Boolean).join(", "), a && "consegna " + fd(a)].filter(Boolean).join(" · "); }
+        else if (st === "cella") { dove = "Produzione interna"; dettaglio = o ? "OP " + o.op : "OP non presente"; }
+        else { dove = "Da ordinare"; }
+        return { commessa: m.commessa, cliente: clienteDi(m.commessa) || "", macchina: m.matricola, macchinaDescr: m.macchina, codice: m.codice, descr: m.descr, qta: q2(m.qta), dove, dettaglio, rosso: !!ritDi(m) };
+      });
+      const filtri = nomeLista().replace(/^Mancanti( - )?/, "") + (q ? (nomeLista() === "Mancanti" ? "" : " - ") + "ricerca: " + q : "") + (soloRitardi ? " - solo in ritardo" : "");
+      const doc = pdfMancanti(jsPDF, righePdf, { titolo: `${righePdf.length} righe · ${new Set(righePdf.map((r) => r.commessa)).size} commesse`, filtri, logo });
+      doc.save(`${nomeLista()} ${oggi()}.pdf`.replace(/[\\/:*?"<>|]+/g, " "));
+    } catch (e) { alert("PDF non riuscito: " + (e instanceof Error ? e.message : String(e))); }
+    setPdfInCorso(false);
+  }
+
   async function esporta(L: Mancante[], nome: string) {
     const ExcelJS = (await import("exceljs")).default;
     const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet("Mancanti");
@@ -549,6 +578,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
           <p className="sub">{ult ? <>Aggiornato {quando(ult.il)} · {ult.origine || "—"} · {ult.righe} righe, {ult.nuovi} nuove, {ult.chiusi} prelevate{Date.now() - new Date(ult.il).getTime() > 26 * 3600e3 && <b style={{ color: "#b91c1c" }}> · più di un giorno fa: l&apos;invio automatico dal PC non sta girando</b>}</> : "Nessun aggiornamento ancora: carica l'estrazione di SAM o attiva l'invio automatico."}</p></div>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn sec" onClick={() => esporta(filtrati, nomeLista())} disabled={!filtrati.length} title="Scarica in Excel quello che vedi con i filtri scelti">Excel ({filtrati.length})</button>
+          <button className="btn sec" onClick={() => scaricaPdf(filtrati)} disabled={!filtrati.length || pdfInCorso} title="PDF di quello che vedi: commessa, macchina, codice, descrizione, quantità, fase o fornitore">{pdfInCorso ? "Preparo il PDF…" : "PDF"}</button>
           {modifica && <label className="btn" aria-disabled={lavoro}>{lavoro ? "Carico…" : "Carica file SAM"}<input type="file" accept=".xlsx" hidden disabled={lavoro} onChange={(e) => { caricaFile(e.target.files?.[0]); e.target.value = ""; }} /></label>}
         </div>
       </header>
