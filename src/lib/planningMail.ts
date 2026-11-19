@@ -19,7 +19,7 @@ const FASI: Record<string, { n: string; common?: boolean; office?: boolean }> = 
   "2A-M": { n: "Acquisti e produzione meccanica", office: true }, "2A-E": { n: "Acquisti elettrica", office: true },
   "2B": { n: "Controllo qualità e trattamenti" }, "3A": { n: "Preparazione scansie" }, "3B": { n: "Montaggio meccanico e pneumatico" },
   "3A-E": { n: "Prelievo materiale elettrico (QE)" }, "3C-Q": { n: "Cablaggio quadro elettrico" }, "3C-B": { n: "Bordo macchina" },
-  "4A": { n: "Testing (collaudo)", common: true }, "4B": { n: "F.A.T.", common: true }, "5A": { n: "Imballaggio e carico linea", common: true },
+  "4S": { n: "Start up linea", common: true }, "4A": { n: "Testing (collaudo)", common: true }, "4B": { n: "F.A.T.", common: true }, "5A": { n: "Imballaggio e carico linea", common: true },
   "5B": { n: "Installazione linea", common: true },
 };
 const ASSENZE = ["Ferie", "Permesso", "Malattia", "Assente"];

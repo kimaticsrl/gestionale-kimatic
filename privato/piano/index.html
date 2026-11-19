@@ -2041,6 +2041,7 @@ const PH=[
  {c:'3A-E',n:'Prelievo materiale elettrico (QE)',s:'Prelievo QE',g:'p3ae',allow:['Magazzino']},
  {c:'3C-Q',n:'Cablaggio quadro elettrico',s:'Quadro',g:'p3cq',allow:['Elettrici']},
  {c:'3C-B',n:'Bordo macchina',s:'Bordo mac.',g:'p3cb',allow:['Elettrici']},
+ {c:'4S',n:'Start up linea',s:'Start up',g:'p4a',common:true,allow:['Collaudo'],ex:['p042','p043','p044']},
  {c:'4A',n:'Testing (collaudo)',s:'Collaudo',g:'p4a',common:true,allow:['Collaudo'],ex:['p042','p043','p044']},
  {c:'4B',n:'F.A.T.',s:'F.A.T.',g:'p4b',common:true,allow:['Collaudo'],ex:['p042','p043','p044']},
  {c:'5A',n:'Imballaggio e carico linea',s:'Imballaggio',g:'p5a',common:true,allow:['Magazzino']},
@@ -2051,7 +2052,7 @@ const STAGES=[
  {g:'appr',n:'Acquisti e lavorazioni',codes:['2A-M','2A-E','2B','3A','3A-E']},
  {g:'mont',n:'Montaggio meccanico',codes:['3B']},
  {g:'elet',n:'Impianto elettrico',codes:['3C-Q','3C-B']},
- {g:'coll',n:'Collaudo',codes:['4A']},
+ {g:'coll',n:'Collaudo',codes:['4S','4A']},
  {g:'fat',n:'F.A.T.',codes:['4B']},
  {g:'imb',n:'Imballaggio e carico linea',codes:['5A']},
  {g:'inst',n:'Installazione linea',codes:['5B']}];
@@ -2623,8 +2624,8 @@ function rowsLinea(c){
    xs.forEach(x=>rows.push({kind:'r',bold:true,indent:1,label:`${x.code} ${PHD[x.code].n}`,sub:x.p.w||'',bars:[mkBar(x,x.p.w?cut(x.p.w,14):'')].filter(Boolean),none:'nessuna data'}));
    if(!xs.length)rows.push({kind:'r',indent:1,label:'nessuna fase inserita',bars:[]})}
  });
- rows.push({kind:'h',label:'Fasi comuni alla linea (collaudo, imballaggio, installazione)'});
- rows.push(com('4A'));rows.push(com('4B'));rows.push(com('5A'));rows.push(com('5B'));
+ rows.push({kind:'h',label:'Fasi comuni alla linea (start up, collaudo, imballaggio, installazione)'});
+ rows.push(com('4S'));rows.push(com('4A'));rows.push(com('4B'));rows.push(com('5A'));rows.push(com('5B'));
  return rows;
 }
 const SHOW_DUR=false; // durata totale per fase nel Gantt di linea (disattivata per ora)
@@ -3226,15 +3227,15 @@ function carPanel(){
  if(!UI.car)return'';const per=IDX.p[UI.car.pid];if(!per)return'';
  if(UI.car.und)return undPanel(per);
  const w=UI.car.w,we=UI.car.day?w:w+6,days=buildLoad().get(per.id),seen=new Map(),bl=[],at=[];
- for(let d=w;d<=we;d++){const c=days?.get(d);if(!c)continue;c.items.forEach(i=>{const e=seen.get(i.x.key)||{x:i.x,h:0};e.h+=i.h;seen.set(i.x.key,e)});if(c.blk)bl.push(fm(d)+' '+kLbl(c.blk.k).toLowerCase());(c.att||[]).forEach(a=>at.push(fm(d)+' '+a.t+' '+f1(a.h)+' h'))}
+ for(let d=w;d<=we;d++){const c=days?.get(d);if(!c)continue;c.items.forEach(i=>{const e=seen.get(i.x.key)||{x:i.x,h:0};e.h+=i.h;seen.set(i.x.key,e)});if(c.blk)bl.push(fm(d)+' '+kLbl(c.blk.k).toLowerCase());(c.att||[]).forEach(a=>at.push({d,t:a.t,h:a.h}))}
  const row=o=>edRow(o.x,o.h,per.id);
  ALTS=[];const capd=capOf(per),runs=[];{let cur=null,lw=null;for(let d=w;d<=we;d++){if(!isWork(d))continue;const c=days?.get(d);if(c&&c.h>capd+.01){if(!cur||cur.to!==lw){cur={pid:per.id,per,from:d,to:d,max:c.h,blk:'',na:false,items:new Map()};runs.push(cur)}cur.to=d;cur.max=Math.max(cur.max,c.h);c.items.forEach(i=>cur.items.set(i.x.key,i.x))}lw=d}}
  const prop=runs.map(r=>{const al=altsFor({k:'Sovrapposizione',run:r}).map(o=>{if(!o.ops)return `<span class="tag">${esc(o.l)}</span>`;ALTS.push(o.ops);return `<button class="alt${o.t?' alt-'+o.t:''}" data-act="alt" data-i="${ALTS.length-1}">${altLbl(o)}</button>`}).join(' ');return `<div class="panel" style="margin:8px 0;border-left:3px solid var(--bad,#c0392b)"><b>Sovraccarico ${r.from===r.to?'il '+fmt(r.from):'dal '+fmt(r.from)+' al '+fmt(r.to)}</b> <span class="tag">fino a ${r.max.toFixed(1).replace('.',',')} h su ${capd}</span><div class="tag" style="margin:4px 0">Attività coinvolte: ${[...r.items.values()].map(i=>esc(lbl(i))).join(' · ')}</div>${al?`<div class="bar" style="margin:4px 0 0;flex-wrap:wrap">${al}</div>`:''}</div>`}).join('');
  const propBox=runs.length?`<details data-carprop style="margin:8px 0" ${UI.carprop?'open':''}><summary><b>Proposte per il sovraccarico (${runs.length})</b> <span class="tag">clic per aprire</span></summary><p class="tag" style="margin:4px 0"><span style="background:#e08a1a;display:inline-block;width:10px;height:10px;border-radius:2px"></span> posticipo · <span style="background:#2f6fb3;display:inline-block;width:10px;height:10px;border-radius:2px"></span> cambio o affiancamento di risorsa</p>${prop}</details>`:'';
  const L=[...seen.values()].sort((a,b)=>(span(a.x.p)?.s||0)-(span(b.x.p)?.s||0));
  return `<div class="panel" style="margin-bottom:10px"><b>${esc(per.name)}</b> · ${UI.car.day?'giorno '+DOW[dow(w)]+' '+fmt(w):'settimana dal '+fmt(w)+' al '+fmt(w+6)} <button data-act="carclose" style="float:right">Chiudi</button>
- ${propBox}${bl.length?`<div class="tag" style="margin:6px 0">Giornate bloccate: ${esc(bl.join(' · '))}</div>`:''}${at.length?`<div class="tag" style="margin:6px 0">Attività inserite a mano: ${esc(at.join(' · '))}</div>`:''}
- ${L.length?carBars(per,L,w,we)+'<details style="margin-top:6px"><summary>Cambia risorsa o date da tabella</summary>'+edTable(L.map(row))+'</details>':'<div class="tag">Nessuna attività di commessa in '+(UI.car.day?'questo giorno':'questa settimana')+'.</div>'}</div>`}
+ ${propBox}${bl.length?`<div class="tag" style="margin:6px 0">Giornate bloccate: ${esc(bl.join(' · '))}</div>`:''}${at.length?`<div style="margin:8px 0"><b>Attività inserite a mano nel planning</b> <span class="tag">${f1(at.reduce((t,a)=>t+a.h,0))} h</span><div class="scroll dt"><table><thead><tr><th>Giorno</th><th>Attività</th><th>Ore</th><th></th></tr></thead><tbody>${at.map(a=>`<tr><td>${DOW[dow(a.d)]} ${fm(a.d)}</td><td>${esc(a.t)}</td><td>${f1(a.h)} h</td><td><button data-act="carnote" data-pid="${per.id}" data-d="${a.d}">Apri nel planning</button></td></tr>`).join('')}</tbody></table></div></div>`:''}
+ ${L.length?carBars(per,L,w,we)+'<details style="margin-top:6px"><summary>Cambia risorsa o date da tabella</summary>'+edTable(L.map(row))+'</details>':(at.length?'':'<div class="tag">Nessuna attività in '+(UI.car.day?'questo giorno':'questa settimana')+'.</div>')}</div>`}
 function vCarDay(){
  const LD=buildLoad(),UD=undMap(),m0=monday(TODAY),n=UI.carn||4,W=[];for(let i=0;i<n*7;i++){const d=m0+i;if(isWork(d))W.push(d)}
  const ppl=S.persone.filter(p=>p.tipo!=='risorsa'&&!noAtt(p)),rows=[];let last='';
@@ -3618,7 +3619,7 @@ function propBuild(c,over){
   let H2=+p.h>0?+p.h:H;if(!(H2>0))return null;
   let s0=p.s&&!over?d2n(p.s):earliest;s0=nextW(Math.max(s0,TODAY));
   let pp=[],r=null,note=hint||'',cands=poolSrc.concat(actAll.filter(q=>isLR(q)&&okC(code,q)&&!poolSrc.includes(q)));
-  if(fixedPP&&fixedPP.length&&(over||!p.w)){pp=fixedPP;r=sim(pp,s0,H2,key);note=(note?note+' · ':'')+'stessa risorsa del collaudo'}
+  if(fixedPP&&fixedPP.length&&(over||!p.w)){pp=fixedPP;r=sim(pp,s0,H2,key);note=(note?note+' · ':'')+(code==='4A'?'stessa risorsa dello start up':'stessa risorsa del collaudo')}
   else if(p.w&&!over){pp=whoOf(p.w).filter(n=>n.id).map(n=>IDX.p[n.id]).filter(Boolean);r=sim(pp,s0,H2,key)}
   else{let b=pick(poolSrc,s0,H2,key);if(!b){b=pick(actAll.filter(q=>isLR(q)&&okC(code,q)),s0,H2,key);if(b)note=(note?note+' · ':'')+b.q.name+' come ultima risorsa (nessun altro disponibile)'}if(b){pp=[b.q];r=b.r}}
   if(!r){r=sim([],s0,H2,key);note=(note?note+' · ':'')+'nessuna persona libera trovata: calcolato a 8 ore al giorno'}
@@ -3646,7 +3647,13 @@ function propBuild(c,over){
  const cm=c.common||{};
  const hc=ms.reduce((a,m)=>{const t=stdMatch(m);return a+(t?(Number(t.col)||0):0)},0);
  const cpool=act.filter(p=>okC('4A',p)),lab0='Linea '+c.num;
- const a4=noOf(c).includes('4A')?null:plan('commesse',c,'4A',hc>0?hc:8,mx(TODAY,e3c!=null?e3c+1:null),cpool,lab0,(e3c!=null?'dopo la fine di montaggio e cablaggi':'')+(hc>0?'':(e3c!=null?' · ':'')+'ore collaudo non nei tempi standard: 8 h provvisorie'));
+ /* start up della linea: 1 giorno (8 h) dopo montaggio e cablaggi, fatto dal collaudo; collaudo e F.A.T. di solito dalla stessa persona */
+ const a4s=noOf(c).includes('4S')?null:plan('commesse',c,'4S',8,mx(TODAY,e3c!=null?e3c+1:null),cpool,lab0,(e3c!=null?'dopo la fine di montaggio e cablaggi · ':'')+'1 giorno');
+ if(a4s)rows.push(a4s);
+ const e4s=a4s?a4s.eN:fin(cm['4S']);
+ const pp4s=a4s&&a4s.pp&&a4s.pp.length?a4s.pp:whoOf(cm['4S']&&cm['4S'].w).filter(n=>n.id).map(n=>IDX.p[n.id]).filter(Boolean).slice(0,1);
+ const dopo3=e4s!=null?e4s:e3c;
+ const a4=noOf(c).includes('4A')?null:plan('commesse',c,'4A',hc>0?hc:8,mx(TODAY,dopo3!=null?dopo3+1:null),pp4s.length?pp4s:cpool,lab0,(e4s!=null?'dopo lo start up':e3c!=null?'dopo la fine di montaggio e cablaggi':'')+(hc>0?'':(dopo3!=null?' · ':'')+'ore collaudo non nei tempi standard: 8 h provvisorie'),pp4s);
  if(a4)rows.push(a4);
  const e4a=a4?a4.eN:fin(cm['4A']);
  const pp4=a4&&a4.pp&&a4.pp.length?a4.pp:whoOf(cm['4A']&&cm['4A'].w).filter(n=>n.id).map(n=>IDX.p[n.id]).filter(Boolean).slice(0,1);
@@ -3784,7 +3791,7 @@ function cosModel(){
   P.forEach(cp=>{const b=bestQ.get(cp.id);if(b)pcost[b.q.id]=cp})}
  const extR=(cosD('ext')||{}).r||{};
  const rOf=(pid,c)=>{const q=IDX.p[pid];if(q&&q.ext)return +extR[pid]>0?+extR[pid]:0;const cp=pcost[pid];return cp&&cp.kc==='d'&&+cp.ral>0?cp.ral*cfg.coeff/cfg.ore:rate[c]};
- const LC={'1B-M':'pro','1B-E':'pro','3B':'om','3C-Q':'oq','3C-B':'ob','4A':'oc','4B':'oc'},lgm={};
+ const LC={'4S':'oc','1B-M':'pro','1B-E':'pro','3B':'om','3C-Q':'oq','3C-B':'ob','4A':'oc','4B':'oc'},lgm={};
  const lgv={},lgx={};S.ore.forEach(o=>Object.values(o.d||{}).forEach(dd=>Object.entries(dd.r||{}).forEach(([k,r])=>{const [t,id,code]=k.split('~'),c=LC[code];if(t!=='m'||!c||!(+r.h>0))return;const q=lgm[id]??={},v=lgv[id]??={};q[c]=(q[c]||0)+(+r.h);v[c]=(v[c]||0)+(+r.h)*rOf(o.p,c);if((IDX.p[o.p]||{}).ext){const x=lgx[id]??={};x[c]=(x[c]||0)+(+r.h)}})));
  const costM=new Set((S.costi||[]).filter(d=>d.id.startsWith('m_')&&!d.qo).map(r=>pm[r.mat]&&pm[r.mat].id).filter(Boolean));
  const isLog=(n,a)=>!(n.b&&ABS.includes(n.k))&&a.m&&a.f&&LC[a.f]&&costM.has(a.m)&&IDX.p[n.p];
@@ -4375,6 +4382,7 @@ document.addEventListener('click',e=>{
  const ch=e.target.closest('.ch[data-ph]');if(ch&&!RO()){if(ch.dataset.pid&&!canPlan(ch.dataset.pid)){noPlan();return}UI.ph=ch.dataset.ph;UI.note=null;render();return}
  const cl=e.target.closest('td[data-cell]');if(cl&&!RO()){const [pid,d]=cl.dataset.cell.split('|');if(!canPlan(pid)){noPlan();return}UI.note={pid,d:+d};UI.ph=null;render();return}
  const t=e.target.closest('[data-act]');if(!t)return;const D=t.dataset;
+ if(D.act==='carnote'){const pid=D.pid,d=+D.d;if(!canPlan(pid)){noPlan();return}UI.tab='plan';UI.car=null;UI.note={pid,d};UI.ph=null;saveUI();render();return}
  switch(D.act){
   case'tab':UI.ph=null;UI.tab=D.t;logTab(D.t);if(D.k!==undefined)UI.akind=D.k;saveUI();render();break;
   case'alt':applyOps(ALTS[+D.i]);break;
