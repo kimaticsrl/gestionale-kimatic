@@ -6,7 +6,8 @@
 //    sabato, domenica e festivi interamente a tariffa extra; × nr. tecnici della giornata;
 //  - viaggio: per tecnico e per giornata le prime 8 ore a tariffa «fino a 8 ore», le successive a quella «oltre 8 ore»;
 //  - km: auto o furgone, a scelta per il rapporto;
-//  - pasti: indennità per tecnico e per giornata, se il cliente non li paga;
+//  - pasti: due indennità per tecnico e per giornata (pranzo e cena), tranne quelli che il tecnico
+//    ha segnato come pagati dal cliente (g.pranzoCli, g.cenaCli);
 //  - le giornate segnate «in garanzia» (lavoro, viaggio, km, pasti) e le parti in garanzia non si addebitano:
 //    sono riportate a parte con il loro valore;
 //  - viaggi, alloggio e trasporti locali: a costo, importi scritti a mano.
@@ -48,7 +49,7 @@ export function calcola(r, L, o) {
   L = Object.assign({}, LISTINO_BASE, L || {}); o = o || {};
   const vuoto = () => ({ ord: 0, ext: 0, vIn: 0, vOl: 0, km: 0, pasti: 0 });
   const A = vuoto(), G = vuoto(), giorni = [];
-  const avvisi = [];
+  const avvisi = []; let pagatiCli = 0;
   const ordinati = (r.giorni || []).slice().sort((a, b) => String(a.d || '').localeCompare(String(b.d || '')));
   for (const g of ordinati) {
     const B = g.gar ? G : A;
@@ -65,8 +66,11 @@ export function calcola(r, L, o) {
       B.vIn += dentro * vnt; B.vOl += (d - dentro) * vnt; usato += d; gV += d * vnt;
     }
     B.km += gKm;
-    const p = s.tot || viaggiato ? nt : 0; B.pasti += p;
-    giorni.push({ d: g.d, gg: n != null ? GG[RI.dow(n)] : '', fest, nt, ord: h(gOrd), ext: h(gExt), viaggio: h(gV), km: gKm, pasti: p, gar: !!g.gar, att: String(g.att || '').trim() });
+    const presente = s.tot || viaggiato, pr = presente && !g.pranzoCli, ce = presente && !g.cenaCli;
+    if (presente) pagatiCli += (g.pranzoCli ? 1 : 0) + (g.cenaCli ? 1 : 0);
+    const p = ((pr ? 1 : 0) + (ce ? 1 : 0)) * nt; B.pasti += p;
+    const pasto = !presente ? '' : pr && ce ? 'pranzo e cena' : pr ? 'solo pranzo' : ce ? 'solo cena' : 'pagati dal cliente';
+    giorni.push({ d: g.d, gg: n != null ? GG[RI.dow(n)] : '', fest, nt, ord: h(gOrd), ext: h(gExt), viaggio: h(gV), km: gKm, pasti: p, pasto, gar: !!g.gar, att: String(g.att || '').trim() });
   }
   const mz = mezzoDi(r, o);
   const furgone = o.veicolo ? o.veicolo === 'furgone' : !!(mz && mz.tipo === 'furgone');
@@ -76,7 +80,7 @@ export function calcola(r, L, o) {
     ['Ore di viaggio (fino a 8 ore/giorno)', h(B.vIn), 'h', L.viaggio],
     ['Ore di viaggio (oltre 8 ore/giorno)', h(B.vOl), 'h', L.viaggioOltre],
     [(furgone ? 'Rimborso km furgone' : 'Rimborso km auto') + (mz ? ' (' + mz.testo + ')' : ''), o.km === false ? 0 : B.km, 'km', furgone ? L.kmFurgone : L.kmAuto],
-    ['Indennità pasti (giorni × tecnici)', o.pasti === false ? 0 : B.pasti, 'n.', L.pasto],
+    ['Indennità pasti (pranzo e cena × tecnici)', o.pasti === false ? 0 : B.pasti, 'n.', L.pasto],
     ...(conExtra ? [['Ore di assistenza da remoto', +o.oreRemote || 0, 'h', L.remoto], ['Ore di premontaggio/lavoro in Kimatic', +o.oreOfficina || 0, 'h', L.officina]] : []),
   ].map(([voce, qta, um, prezzo]) => ({ voce, qta, um, prezzo: +prezzo || 0, importo: eur(qta * (+prezzo || 0)) })).filter((x) => x.qta);
   const costi = [['Spese di viaggio (a costo)', o.speseViaggio], ['Alloggio e trasporti locali (a costo)', o.alloggio], ['Altre spese (a costo)', o.altre]]
@@ -87,6 +91,7 @@ export function calcola(r, L, o) {
   const ricAdd = parti.filter((x) => !x.gar), ricGar = parti.filter((x) => x.gar);
   const nGar = giorni.filter((g) => g.gar).length;
   if (nGar) avvisi.push(nGar === 1 ? '1 giornata in garanzia non addebitata' : nGar + ' giornate in garanzia non addebitate');
+  if (pagatiCli) avvisi.push(pagatiCli === 1 ? '1 pasto pagato dal cliente non addebitato' : pagatiCli + ' pasti pagati dal cliente non addebitati');
   if (ricAdd.length) avvisi.push('parti sostituite da addebitare: prezzo da listino ricambi');
   return {
     righe, totale: eur(righe.reduce((t, x) => t + x.importo, 0)),
@@ -156,8 +161,8 @@ export function pdfAddebiti(jsPDF, r, A, info) {
   } else { spazio(10); t('Nessuna attività o parte in garanzia in questo intervento.', L, y, { sz: 8.5, c: '#555555' }); y += 7; }
 
   y += 2; titolo('DETTAGLIO DELLE GIORNATE');
-  tabella([['Data', 24], ['Tecn.', 12, 'right'], ['Lavoro h', 20, 'right'], ['Extra h', 18, 'right'], ['Viaggio h', 20, 'right'], ['Km', 16, 'right'], ['Pasti', 14, 'right'], ['Garanzia', 18], ['Attività', 44]],
-    A.giorni.map((g) => [`${g.gg} ${RI.fd(g.d)}`, g.nt, nn(g.ord), nn(g.ext), nn(g.viaggio), g.km || '–', g.pasti || '–', g.gar ? 'sì' : '', g.fest ? g.fest + (g.att ? ' · ' + g.att : '') : g.att]));
+  tabella([['Data', 24], ['Tecn.', 12, 'right'], ['Lavoro h', 20, 'right'], ['Extra h', 18, 'right'], ['Viaggio h', 20, 'right'], ['Km', 16, 'right'], ['Pasti', 22, 'right'], ['Garanzia', 18], ['Attività', 36]],
+    A.giorni.map((g) => [`${g.gg} ${RI.fd(g.d)}`, g.nt, nn(g.ord), nn(g.ext), nn(g.viaggio), g.km || '–', g.pasti ? g.pasti + (g.pasto && g.pasto !== 'pranzo e cena' ? ' (' + g.pasto.replace('solo ', '') + ')' : '') : '–', g.gar ? 'sì' : '', g.fest ? g.fest + (g.att ? ' · ' + g.att : '') : g.att]));
   t('Ore in ore uomo (ore × nr. tecnici). Sabati, domeniche e festivi sono tutti a tariffa extra.', L, y, { sz: 7, c: '#666666' }); y += 6;
 
   const note = [info.note, ...A.avvisi].filter(Boolean);

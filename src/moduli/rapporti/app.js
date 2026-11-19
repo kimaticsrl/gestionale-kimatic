@@ -204,6 +204,7 @@ function vDay(g,i,dis){
     <div class="calc" id="calc${i}">${calcTxt(g)}</div></div>
    ${ritornoAperto('giorni.'+i+'.vr')?vViaggio(g,i,'vr','Viaggio di ritorno <small>· da compilare alla partenza dal cliente</small>',''):vViaggio(g,i,'vr','Viaggio di ritorno',dis)}
    <div class="blk"><label class="chk" style="margin-top:8px"><input id="d${i}nf" type="checkbox" data-k="giorni.${i}.notte" ${RI.notte(CUR,g)?'checked':''}${dis}> Notte fuori sede (indennità di trasferta)${g.notte==null?' <span class="note">· proposta automatica</span>':''}</label></div>
+   <div class="blk"><b>Pasti <small>indica quelli pagati dal cliente: gli altri si addebitano come indennità</small></b><div class="row" style="gap:16px"><label class="chk"><input id="d${i}pp" type="checkbox" data-k="giorni.${i}.pranzoCli" ${g.pranzoCli?'checked':''}${dis}> Pranzo pagato dal cliente</label><label class="chk"><input id="d${i}pc" type="checkbox" data-k="giorni.${i}.cenaCli" ${g.cenaCli?'checked':''}${dis}> Cena pagata dal cliente</label></div></div>
    <div class="blk"><b>Training</b><div class="g"><label>Dalle<input id="d${i}ta" type="time" data-k="giorni.${i}.tr.da" value="${esc(tr.da)}"${dis}></label><label>Alle<input id="d${i}tb" type="time" data-k="giorni.${i}.tr.a" value="${esc(tr.a)}"${dis}></label><label class="w2">Nome partecipante<input id="d${i}tn" data-k="giorni.${i}.tr.nome" value="${esc(tr.nome)}"${dis}></label></div></div>
    <div class="blk"><b>Attività svolte</b><textarea id="d${i}at" data-k="giorni.${i}.att" placeholder="Cosa è stato fatto oggi, problemi trovati, prove eseguite"${dis}>${esc(g.att)}</textarea></div></div>`;
 }
@@ -471,7 +472,7 @@ function vAddebito(r){
   <label>Mezzo utilizzato<select data-ak="mezzo"${ro}><option value=""${!o.mezzo?' selected':''}>${r.mezzo?'Come nel rapporto: '+esc((mezzoDi(r,{})||{}).testo||''):'— non indicato nel rapporto —'}</option>${MEZZI.map(m=>`<option value="${m.targa}"${o.mezzo===m.targa?' selected':''}>${esc(m.nome)} · ${m.targa}</option>`).join('')}<option value="altro"${o.mezzo==='altro'?' selected':''}>Altro</option></select></label>
   ${o.mezzo==='altro'?`<label>Quale mezzo<input data-ak="mezzoAltro" value="${esc(o.mezzoAltro||'')}"${ro}></label>`:''}
   <label>Tariffa km<select data-ak="veicolo"${ro}><option value=""${!o.veicolo?' selected':''}>Secondo il mezzo (${A.furgone?'furgone':'auto'})</option><option value="auto"${o.veicolo==='auto'?' selected':''}>Auto</option><option value="furgone"${o.veicolo==='furgone'?' selected':''}>Furgone</option></select></label>
-  ${chk('km','Addebita i km',true)}${chk('pasti','Addebita i pasti (non pagati dal cliente)',true)}
+  ${chk('km','Addebita i km',true)}${chk('pasti','Addebita i pasti (pranzo e cena non pagati dal cliente)',true)}
   ${num('speseViaggio','Spese di viaggio a costo (€)')}${num('alloggio','Alloggio e trasporti locali a costo (€)')}${num('altre','Altre spese a costo (€)')}
   ${num('oreRemote','Ore di assistenza da remoto')}${num('oreOfficina','Ore di lavoro in Kimatic')}
   <label class="w2">Note per la fattura<input data-ak="note" value="${esc(o.note||'')}"${ro}></label></div>
