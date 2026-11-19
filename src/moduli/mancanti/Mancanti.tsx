@@ -498,18 +498,19 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
   }
 
   // ---------- ordinamento personalizzato ----------
+  const Z = "\uffff"; // i valori mancanti vanno in fondo
   const CHIAVI: Record<string, { l: string; f: (m: Mancante) => string }> = {
     montaggio: { l: "Inizio montaggio", f: (m) => montaggioDi(m) || "9999" },
     commessa: { l: "Commessa", f: (m) => ordComm(m.commessa) },
     macchina: { l: "Macchina", f: (m) => m.matricola },
     gruppo: { l: "Gruppo (OP)", f: (m) => m.op },
     codice: { l: "Codice", f: (m) => m.codice },
-    fornitore: { l: "Fornitore", f: (m) => (m.fornitore || m.ordini[0]?.fornitore || "~").toLowerCase() },
+    fornitore: { l: "Fornitore", f: (m) => (m.fornitore || m.ordini[0]?.fornitore || Z).toLowerCase() },
     stato: { l: "Stato", f: (m) => String(STATI.findIndex((x) => x[0] === stDi(m))) },
     arrivo: { l: "Data di arrivo", f: (m) => attesaDi(m) || "9999" },
-    persona: { l: "Seguito da", f: (m) => nomeDi(personaDi(m)).toLowerCase() || "~" },
-    fase: { l: "Fase", f: (m) => (faseDi(m)?.lav || "~").toLowerCase() },
-    cella: { l: "Cella / reparto", f: (m) => (cellaOra(m) || m.cdep || "~").toLowerCase() },
+    persona: { l: "Seguito da", f: (m) => nomeDi(personaDi(m)).toLowerCase() || Z },
+    fase: { l: "Fase", f: (m) => (faseDi(m)?.lav || Z).toLowerCase() },
+    cella: { l: "Cella / reparto", f: (m) => (cellaOra(m) || m.cdep || Z).toLowerCase() },
   };
   const ordina = (L: Mancante[]) => {
     const K = ordine.filter((k) => CHIAVI[k]); if (!K.length) return L;
