@@ -71,6 +71,14 @@ fatturato si può cambiare solo il viaggio di ritorno dell'ultima giornata, con 
 `ritorno_rapporto` (migrazione 0059). Per i rapporti firmati da allora (`firma.v = 2`) il ritorno
 dell'ultima giornata è fuori dall'impronta SHA-256, quindi il controllo d'integrità resta valido.
 
+## Rapporti d'intervento: fatturazione
+
+La scheda «Da fatturare» ha un permesso a sé, **Fatturazione rapporti d'intervento** (migrazione 0060),
+così il Commerciale fattura senza gestire tutto il modulo: Legge = vede coda, importi e listini;
+Modifica = compila gli importi e segna fatturato; Gestisce = anche i prezzi dei listini. Di default:
+Commerciale Modifica, Amministrazione Gestisce. Chi gestisce Rapporti d'intervento continua a fare tutto.
+Il modulo nel menu apre la scheda; per vedere i rapporti serve anche l'accesso a Rapporti d'intervento.
+
 ## Mancanti montaggi
 
 Modulo **Mancanti montaggi** (migrazione 0048): i codici ancora da prelevare delle commesse, per commessa,
@@ -103,6 +111,7 @@ npm run dev
 node scripts/test-schema.mjs supabase/migrations/0001_base.sql   # prova le regole di accesso
 node scripts/test-rapporti.mjs                                   # prova le regole dei Rapporti d'intervento
 node scripts/test-ritorno.mjs                                    # prova il viaggio di ritorno dopo la firma
+node scripts/test-fatturazione.mjs                               # prova il permesso di fatturazione dei rapporti
 ```
 
 ## Moduli migrati

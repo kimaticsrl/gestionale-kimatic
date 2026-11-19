@@ -2,13 +2,15 @@ import { notFound } from "next/navigation";
 import Rapporti from "@/moduli/rapporti/Rapporti";
 import { utenteCorrente, type Livello } from "@/lib/dati";
 
-export default async function PaginaRapporti() {
+export default async function PaginaRapporti({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+  const { tab } = await searchParams;
   const { supabase, user, profilo } = await utenteCorrente();
-  const [{ data }, { data: lvClienti }] = await Promise.all([
+  const [{ data }, { data: lvClienti }, { data: lvFattura }] = await Promise.all([
     supabase.rpc("livello_modulo", { p_modulo: "rapporti-intervento" }),
     supabase.rpc("livello_modulo", { p_modulo: "anagrafica-clienti" }),
+    supabase.rpc("livello_modulo", { p_modulo: "fatturazione-rapporti" }),
   ]);
   const livello = (data ?? "nessuno") as Livello;
   if (livello === "nessuno") notFound();
-  return <Rapporti me={user.id} nome={profilo?.nome || ""} modifica={livello === "modifica" || livello === "gestisce"} gestisce={livello === "gestisce"} clienti={lvClienti === "gestisce"} />;
+  return <Rapporti me={user.id} nome={profilo?.nome || ""} modifica={livello === "modifica" || livello === "gestisce"} gestisce={livello === "gestisce"} clienti={lvClienti === "gestisce"} fattura={(lvFattura ?? "nessuno") as Livello} tab={tab === "fat" ? "fat" : undefined} />;
 }

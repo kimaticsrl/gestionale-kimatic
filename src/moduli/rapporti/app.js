@@ -63,6 +63,8 @@ function suggerisciArticoli(q){
 }
 const rid=()=>Math.random().toString(36).slice(2,8);
 
+/* fatturazione: chi gestisce il modulo, o chi ha il permesso «Fatturazione rapporti d'intervento» (legge = vede la coda, modifica = importi e fatture, gestisce = anche i listini) */
+let FAT_VEDE=false,FAT_MOD=false,FAT_LIST=false;
 let db=null,ME=null,ADMIN=false,CAN_EDIT=false,DL=null,BOOT=true,LOGO=null;
 const busy=()=>{const a=document.activeElement;if(!ROOT.contains(a))return false;return !!(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&a.type!=='checkbox'&&a.type!=='radio')};
 const S={rapporti:{},clienti:{},fatture:{},listini:{},addebiti:{}};
@@ -118,7 +120,7 @@ const setSync=t=>{if(SYNC)SYNC.textContent=t};
 /* ---------- navigazione ---------- */
 function tabs(){
   const nf=Object.values(S.rapporti).filter(r=>stato(r)==='dafatt').length;
-  const T=[['int','Interventi'],...(ADMIN?[['fat','Da fatturare',nf]]:[]),['cli','Clienti']];
+  const T=[['int','Interventi'],...(FAT_VEDE?[['fat','Da fatturare',nf]]:[]),['cli','Clienti']];
   TABS.innerHTML=T.map(([k,l,n])=>`<button type="button" data-tab="${k}" aria-pressed="${UI.tab===k}">${l}${n?`<span class="n">${n}</span>`:''}</button>`).join('');
 }
 TABS.addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(!b)return;flush();UI.tab=b.dataset.tab;UI.open=null;CUR=null;UI.sign=false;saveUI();render()});
@@ -127,7 +129,7 @@ function render(){
   tabs();
   const a=APP;
   if(!db){a.innerHTML='<div class="empty">Caricamento dei rapporti…</div>';return}
-  if(UI.tab==='fat'&&ADMIN)a.innerHTML=vFatt();
+  if(UI.tab==='fat'&&FAT_VEDE)a.innerHTML=vFatt();
   else if(UI.tab==='cli')a.innerHTML=vCli();
   else if(UI.open&&CUR)a.innerHTML=vEdit();
   else{UI.tab='int';a.innerHTML=vList()}
@@ -437,7 +439,7 @@ function vFatt(){
   const L=Object.values(S.rapporti).filter(r=>r.firma&&r.firma.ts).sort((a,b)=>b.firma.ts.localeCompare(a.firma.ts));
   const da=L.filter(r=>!S.fatture[r.id]),fa=L.filter(r=>S.fatture[r.id]);
   L.forEach(checkInteg);
-  const row=(r,done)=>{const t=RI.totals(r),f=S.fatture[r.id];return `<tr><td><b>${esc(r.cli.nome)}</b><br><span class="mono" style="font-size:12px;color:var(--mut)">${esc(r.num)}</span></td><td>${r.tipo==='inst'?'Installazione':'Manutenzione'}<br><span class="note">${esc(range(r))}${mezzoDi(r,S.addebiti[r.id])?' · '+esc(mezzoDi(r,S.addebiti[r.id]).testo):''}</span></td><td class="n num">${RI.hrs(t.ordU)}</td><td class="n num">${RI.hrs(t.extU)}</td><td class="n num">${RI.hrs(t.ordG+t.extG)}</td><td class="n num">${RI.hrs(t.viaggioU)}</td><td class="n num">${t.km}</td><td class="n num">${t.ricambi}</td><td class="n num"><b>${euro(addebitoDi(r).totale)}</b></td>${cellaNS(r)}<td>${INTEG[r.id]===false?'<span class="pill bad">Modificato dopo la firma</span>':RI.fd(r.firma.ts.slice(0,10))}</td><td><div class="row"><button type="button" class="sm" data-act="pdfid" data-id="${esc(r.id)}">PDF</button><button type="button" class="sm" data-act="orepdfid" data-id="${esc(r.id)}">Report ore</button><button type="button" class="sm${UI.add===r.id?' pri':''}" data-add="${esc(r.id)}">Importo</button><button type="button" class="sm" data-act="addpdf" data-id="${esc(r.id)}">Riepilogo addebiti</button><button type="button" class="sm" data-openr="${esc(r.id)}">Apri</button>${done?`<span class="note">${f.nf?'Fatt. '+esc(f.nf):''} ${f.df?RI.fd(f.df):''}</span><button type="button" class="sm" data-act="annfatt" data-id="${esc(r.id)}">Annulla</button>`:`<button type="button" class="sm pri" data-fatt="${esc(r.id)}">Segna fatturato</button>`}</div></td></tr>`};
+  const row=(r,done)=>{const t=RI.totals(r),f=S.fatture[r.id];return `<tr><td><b>${esc(r.cli.nome)}</b><br><span class="mono" style="font-size:12px;color:var(--mut)">${esc(r.num)}</span></td><td>${r.tipo==='inst'?'Installazione':'Manutenzione'}<br><span class="note">${esc(range(r))}${mezzoDi(r,S.addebiti[r.id])?' · '+esc(mezzoDi(r,S.addebiti[r.id]).testo):''}</span></td><td class="n num">${RI.hrs(t.ordU)}</td><td class="n num">${RI.hrs(t.extU)}</td><td class="n num">${RI.hrs(t.ordG+t.extG)}</td><td class="n num">${RI.hrs(t.viaggioU)}</td><td class="n num">${t.km}</td><td class="n num">${t.ricambi}</td><td class="n num"><b>${euro(addebitoDi(r).totale)}</b></td>${cellaNS(r)}<td>${INTEG[r.id]===false?'<span class="pill bad">Modificato dopo la firma</span>':RI.fd(r.firma.ts.slice(0,10))}</td><td><div class="row"><button type="button" class="sm" data-act="pdfid" data-id="${esc(r.id)}">PDF</button><button type="button" class="sm" data-act="orepdfid" data-id="${esc(r.id)}">Report ore</button><button type="button" class="sm${UI.add===r.id?' pri':''}" data-add="${esc(r.id)}">Importo</button><button type="button" class="sm" data-act="addpdf" data-id="${esc(r.id)}">Riepilogo addebiti</button><button type="button" class="sm" data-openr="${esc(r.id)}">Apri</button>${done?`<span class="note">${f.nf?'Fatt. '+esc(f.nf):''} ${f.df?RI.fd(f.df):''}</span>${FAT_MOD?`<button type="button" class="sm" data-act="annfatt" data-id="${esc(r.id)}">Annulla</button>`:''}`:FAT_MOD?`<button type="button" class="sm pri" data-fatt="${esc(r.id)}">Segna fatturato</button>`:''}</div></td></tr>`};
   const hd=`<thead><tr><th>Cliente</th><th>Intervento</th><th class="n">Ore ord.</th><th class="n">Ore extra</th><th class="n">In garanzia</th><th class="n">Viaggio</th><th class="n">Km</th><th class="n">Parti</th><th class="n">Da addebitare €</th>${CTX.noteSpese?'<th class="n">Note spese €</th>':''}<th>Firmato</th><th></th></tr></thead>`;
   const form=UI.fatt?`<div class="confirm"><b>Fatturazione di ${esc((S.rapporti[UI.fatt.id]||{}).num)}</b><div class="g"><label>Numero fattura<input id="ff-n" data-fk="nf" value="${esc(UI.fatt.nf)}"></label><label>Data fattura<input id="ff-d" type="date" data-fk="df" value="${esc(UI.fatt.df)}"></label><label class="w2">Note<input id="ff-no" data-fk="note" value="${esc(UI.fatt.note)}"></label></div><div class="row"><button type="button" class="pri" data-act="savefatt">Segna fatturato</button><button type="button" data-act="nofatt">Annulla</button></div></div>`:'';
   return `<div class="top"><h2>Da fatturare</h2><span class="note">Ore in ore uomo (ore × nr. tecnici). Le ore oltre le 8 giornaliere sono extra.</span><span class="sp"></span>${da.length?'<button type="button" data-act="xlsadd">Esporta importi (Excel)</button>':''}<button type="button" data-act="listini">Listini</button></div>${form}${UI.lst?vListini():''}${UI.add&&S.rapporti[UI.add]?vAddebito(S.rapporti[UI.add]):''}
@@ -455,7 +457,7 @@ function addebitoDi(r){
   if(!S.listini[lid])res.avvisi.push('listino non ancora caricato nel database: usati i prezzi 2024');
   return res}
 function vAddebito(r){
-  const A=addebitoDi(r),o=A.o,ro=!ADMIN?' disabled':'';
+  const A=addebitoDi(r),o=A.o,ro=!FAT_MOD?' disabled':'';
   const nomeL={EU:'Europa',EXTRA_EU:'Extra Europa'};
   const chk=(k,l,def)=>`<label class="row" style="gap:6px;align-items:center"><input type="checkbox" data-ak="${k}"${(o[k]===undefined?def:o[k])?' checked':''}${ro}> ${l}</label>`;
   const num=(k,l)=>`<label>${l}<input type="number" step="0.01" min="0" inputmode="decimal" data-ak="${k}" value="${esc(o[k]??'')}"${ro}></label>`;
@@ -474,24 +476,24 @@ function vAddebito(r){
   ${A.ricambi.length?`<p class="note"><b>Parti da addebitare</b> (prezzo da listino ricambi): ${A.ricambi.map(x=>esc((x.cod?x.cod+' ':'')+x.des+' × '+x.q)).join('; ')}</p>`:''}
   ${A.garanzia.righe.length||A.garanzia.parti.length?`<h3 style="margin:16px 0 6px">Eseguito in garanzia, non addebitato</h3><div class="tw"><table><thead><tr><th>Voce</th><th class="n">Quantità</th><th class="n">Prezzo €</th><th class="n">Valore €</th></tr></thead><tbody>${A.garanzia.righe.map(x=>`<tr><td>${esc(x.voce)}</td><td class="n num">${String(x.qta).replace('.',',')} ${x.um}</td><td class="n num">${euro(x.prezzo)}</td><td class="n num">${euro(x.importo)}</td></tr>`).join('')}</tbody><tfoot><tr><th>Valore non addebitato</th><th></th><th></th><th class="n num">${euro(A.garanzia.totale)}</th></tr></tfoot></table></div>${A.garanzia.parti.length?`<p class="note"><b>Parti in garanzia:</b> ${A.garanzia.parti.map(x=>esc((x.cod?x.cod+' ':'')+x.des+' × '+x.q)).join('; ')}</p>`:''}`:''}
   ${A.avvisi.length?`<p class="note">Da sapere: ${A.avvisi.map(esc).join('; ')}.</p>`:''}
-  <p class="note">Lavoro: prime 8 ore dei giorni feriali a tariffa ordinaria, il resto e sabati, domeniche e festivi a tariffa extra. Viaggio: prime 8 ore al giorno per tecnico a tariffa base, poi tariffa oltre 8 ore. ${ADMIN?'Le scelte si salvano da sole.':'Solo chi gestisce il modulo può cambiare le scelte.'}</p>
+  <p class="note">Lavoro: prime 8 ore dei giorni feriali a tariffa ordinaria, il resto e sabati, domeniche e festivi a tariffa extra. Viaggio: prime 8 ore al giorno per tecnico a tariffa base, poi tariffa oltre 8 ore. ${FAT_MOD?'Le scelte si salvano da sole.':'Solo chi fattura i rapporti può cambiare le scelte.'}</p>
   <div class="row"><button type="button" class="pri" data-act="addpdf" data-id="${esc(r.id)}">Riepilogo addebiti (PDF)</button><button type="button" data-act="noadd">Chiudi</button></div></section>`}
 async function salvaAddebito(id,k,v){
-  if(!ADMIN){toast('Serve il permesso di gestione del modulo');return}
+  if(!FAT_MOD){toast('Serve il permesso di fatturazione dei rapporti');return}
   const o=Object.assign({},S.addebiti[id]||{});
   if(['speseViaggio','alloggio','altre','oreRemote','oreOfficina'].includes(k))v=v===''?'':Math.max(0,+String(v).replace(',','.')||0);
   o[k]=v;o.by=ME||'';o.ts=new Date().toISOString();S.addebiti[id]=o;render();
   try{await db.doc('addebiti/'+id).set(o)}catch(e){toast('Non salvato: '+(e&&e.message||'errore'))}}
 const VOCI_L=[['ore','Ore di lavoro (feriali, fino a 8 h)'],['oreExtra','Ore extra, weekend, festivi'],['viaggio','Ore di viaggio fino a 8 h'],['viaggioOltre','Ore di viaggio oltre 8 h'],['kmAuto','Rimborso km auto'],['kmFurgone','Rimborso km furgone'],['pasto','Indennità pasto'],['remoto','Assistenza da remoto (h)'],['officina','Lavoro in Kimatic (h)']];
 function vListini(){
-  const ro=!ADMIN?' disabled':'',L=id=>Object.assign({},LISTINO_BASE,S.listini[id]||{});
+  const ro=!FAT_LIST?' disabled':'',L=id=>Object.assign({},LISTINO_BASE,S.listini[id]||{});
   return `<section class="panel"><h2>Listini assistenza <small>prezzi unitari in €, IVA esclusa</small></h2>
   <div class="tw"><table><thead><tr><th>Voce</th><th class="n">Europa${L('EU').daVerificare?' <span class="pill warn">da verificare</span>':''}</th><th class="n">Extra Europa</th></tr></thead><tbody>
   ${VOCI_L.map(([k,l])=>`<tr><td>${l}</td>${['EU','EXTRA_EU'].map(id=>`<td class="n"><input type="number" step="0.01" min="0" style="width:90px;text-align:right" data-lk="${id}.${k}" value="${L(id)[k]}"${ro}></td>`).join('')}</tr>`).join('')}
   </tbody></table></div><p class="note">Viaggi, alloggio e trasporti locali si addebitano a costo. Il listino si sceglie dal paese del cliente (Italia e Unione europea → Europa), e si può cambiare per il singolo rapporto.${S.listini.EU?'':' <b>I listini non sono ancora nel database: esegui lo SQL 0021.</b>'}</p>
   <div class="row"><button type="button" data-act="listini">Chiudi</button></div></section>`}
 async function salvaListino(lk,v){
-  if(!ADMIN){toast('Serve il permesso di gestione del modulo');return}
+  if(!FAT_LIST){toast('Serve il permesso di gestire i listini');return}
   const[id,k]=lk.split('.');const L=Object.assign({},LISTINO_BASE,S.listini[id]||{});
   L[k]=Math.max(0,+String(v).replace(',','.')||0);if(id==='EU')delete L.daVerificare;S.listini[id]=L;render();
   try{await db.doc('listini/'+id).set(L);toast('Listino aggiornato')}catch(e){toast('Non salvato: '+(e&&e.message||'errore'))}}
@@ -565,7 +567,7 @@ function refresh(){
 }
 
 /* ---------- avvio nel gestionale ---------- */
-ME=CTX.me;ADMIN=CTX.gestisce;CAN_EDIT=CTX.modifica;LOGO=CTX.logo;db=CTX.db;DL=CTX.downloads;BOOT=false;
+ME=CTX.me;ADMIN=CTX.gestisce;{const L=['nessuno','legge','modifica','gestisce'],f=ADMIN?3:Math.max(0,L.indexOf(CTX.fattura||'nessuno'));FAT_VEDE=f>=1;FAT_MOD=f>=2;FAT_LIST=f>=3}if(CTX.tab==='fat'&&FAT_VEDE){UI.tab='fat';UI.open=null}CAN_EDIT=CTX.modifica;LOGO=CTX.logo;db=CTX.db;DL=CTX.downloads;BOOT=false;
 render();
 db.collection('rapporti').onSnapshot(qs=>{const o={};qs.docs.forEach(d=>{o[d.id]=Object.assign({id:d.id},d.data())});S.rapporti=o;GOT.r=1;
   if(CUR&&o[CUR.id]&&!DIRTY&&!SAVING&&!UI.sign&&!busy()){const f=o[CUR.id];if(canon(f)!==canon(Object.assign({},CUR,{id:CUR.id}))){CUR=JSON.parse(JSON.stringify(f));checkInteg(CUR)}}
