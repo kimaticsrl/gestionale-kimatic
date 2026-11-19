@@ -36,8 +36,10 @@ const costruttivo = (c: string) => /^(1[0-2]|2[01]|90)\./.test(c);
 const assieme = (c: string) => /^(21\.50[0-5]|1[0-2]\.)/.test(c);
 export const gruppo = (c: string) => /^21\.50[0-5]/.test(c);
 const oaFornitore = (m: Mancante) => m.ordini.some((o) => !/grezz/i.test(o.tipo || ""));
-// fase di un'OP già fatta (gli stati di SAM: chiusa, terminata, evasa, completata…)
-const FASE_CHIUSA = /^(c|ch|t|e)$|chius|termin|evas|complet|finit/i;
+// fase di un'OP già fatta: in SAM «Chiusa», o «Rientrata» dal terzista (le altre: Da Iniziare, In Lavorazione, Da Spedire)
+const FASE_CHIUSA = /chius|rientrat|termin|evas/i;
+// stato dell'OP in SAM: C = chiusa
+const OP_CHIUSA = (s: string) => /^c$|chius/i.test(s.trim());
 export function statoDi(m: Mancante, haOp = false, cellaOp = ""): Stato {
   if (m.qta != null && m.giac_mp != null && m.giac_mp >= m.qta && m.qta > 0) return "magazzino";
   if (m.cdep) return "cdep";
@@ -151,10 +153,14 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
   const macchinaDi = (m: Mancante) => { const P = piano[norm(m.commessa)]; return P?.macchine.find((x) => x.code && x.code === m.op) || P?.macchine.find((x) => x.code && x.code === m.matricola) || null; };
   const montaggioDi = (m: Mancante) => { const x = macchinaDi(m); return (x && !x.done && x.s) || montaggioComm(m.commessa); };
   // OP di produzione del codice (prima quella della stessa commessa) e fase in corso
-  const opDi = (m: Mancante) => { const L = ops.get(m.codice); return L ? (L.find((o) => norm(o.commessa) === norm(m.commessa)) || L[0]) : null; };
+  const opDi = (m: Mancante) => {
+    const L = ops.get(m.codice); if (!L) return null;
+    const stessa = L.filter((o) => norm(o.commessa) === norm(m.commessa));
+    return stessa.find((o) => !OP_CHIUSA(o.stato)) || L.find((o) => !OP_CHIUSA(o.stato)) || stessa[0] || L[0];
+  };
   const faseDi = (m: Mancante) => { const o = opDi(m); return o ? (o.fasi.find((f) => !FASE_CHIUSA.test(f.stato)) || null) : null; };
   const cellaOra = (m: Mancante) => m.cella || faseDi(m)?.cella || "";
-  const stDi = (m: Mancante) => statoDi(m, ops.has(m.codice), faseDi(m)?.cella || "");
+  const stDi = (m: Mancante) => { const o = opDi(m); return statoDi(m, !!o && !OP_CHIUSA(o.stato), faseDi(m)?.cella || ""); };
   const ritDi = (m: Mancante) => ritardo(m, montaggioDi(m), stDi(m));
   const clienteDi = (c: string) => piano[norm(c)]?.cliente || comm[c]?.cliente || "";
   const nelPiano = (c: string) => !!piano[norm(c)] && !piano[norm(c)].chiusa;
