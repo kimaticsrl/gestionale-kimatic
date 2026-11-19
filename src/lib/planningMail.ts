@@ -110,17 +110,21 @@ export async function preparaPlanning(sb: SupabaseClient, oggiS: string) {
       }
     }
   }
+  const numDi = new Map(commesse.map((c) => [c.id, String(c.dati.num || "")]));
   const ag = new Map<string, Record<string, unknown>>();
   agenda.forEach((a) => { const d = a.dati; if (d.d && d.p) ag.set(`${d.p}|${d2n(String(d.d))}`, d); });
 
   // la giornata di una persona: assenza, attività del planning e fasi in corso
   const giornata = (pid: string, d: number): { assente: boolean; voci: Voce[] } => {
-    const per = P.get(pid), n = ag.get(`${pid}|${d}`) as { b?: unknown; k?: string; t?: string; h1?: string; h2?: string; ore?: number; st?: string } | undefined;
+    const per = P.get(pid), n = ag.get(`${pid}|${d}`) as { b?: unknown; k?: string; t?: string; h1?: string; h2?: string; ore?: number; st?: string; a?: { c?: string; f?: string; h?: number }[] } | undefined;
     if (per?.att === false || (per?.fine && d2n(per.fine) != null && d > d2n(per.fine)!)) return { assente: true, voci: [] };
     if (n?.b && ASSENZE.includes(n.k || "")) return { assente: true, voci: [] };
     const voci: Voce[] = [];
     if (n?.b) voci.push({ testo: `${n.k || "Impegno"}${n.t ? ": " + n.t : ""} (giornata intera)` });
     else if (n && (n.st === "c" || n.st === "d") && (n.t || n.h1)) voci.push({ testo: `${n.h1 ? n.h1 + (n.h2 ? "–" + n.h2 : "") + " " : ""}${n.t || "Attività"}${+(n.ore || 0) > 0 ? " · " + String(n.ore).replace(".", ",") + " h" : ""}${n.st === "d" ? " (da confermare)" : ""}` });
+    // ore scritte a mano su una commessa (senza fase: quelle con la fase sono già tra le fasi)
+    if (n && !n.b && Array.isArray(n.a)) for (const a of n.a) if (a && a.c && !(a.f && FASI[a.f]) && +(a.h || 0) > 0)
+      voci.push({ testo: `${numDi.get(a.c) || "commessa"}${n.t ? " (" + n.t + ")" : ""} · ${String(a.h).replace(".", ",")} h` });
     for (const f of fasi) {
       if (fatta(f.p)) continue;
       const s = d2n(f.p.s), e = d2n(f.p.e); if (s == null || e == null || d < s || d > e) continue;
