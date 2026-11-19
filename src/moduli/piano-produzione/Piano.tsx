@@ -1,4 +1,5 @@
 "use client";
+import { MEZZI } from "@/moduli/rapporti/addebito.js";
 import { useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { creaClaude } from "@/moduli/offerte-bmtek/shim";
@@ -52,6 +53,8 @@ export default function Piano({ livello, utente, ruoli, soloCliente = false, sch
       soloCliente,
       nome: utente.nome,
       pianifica,
+      // mezzi aziendali per le trasferte (gli stessi dei rapporti d'intervento)
+      mezzi: MEZZI,
       // organigramma: solo direzione e amministratori del gestionale
       direzione: !!utente.admin || ruoli.includes("direzione"),
       persona: "",
