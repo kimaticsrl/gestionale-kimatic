@@ -38,10 +38,13 @@ export const gruppo = (c: string) => /^21\.50[0-5]/.test(c);
 const oaFornitore = (m: Mancante) => m.ordini.some((o) => !/grezz/i.test(o.tipo || ""));
 // fase di un'OP già fatta: in SAM «Chiusa», o «Rientrata» dal terzista (le altre: Da Iniziare, In Lavorazione, Da Spedire)
 const FASE_CHIUSA = /chius|rientrat|termin|evas/i;
-// OP di SAM: finita quando la quantità prodotta arriva a quella ordinata; «da lanciare» se è in stato A o C
-// e nessuna fase è iniziata (non è ancora uscita in produzione, quindi il materiale non è stato prelevato)
-const opFinita = (o: OpSam) => (o.qta ?? 0) > 0 && (o.prod ?? 0) >= (o.qta ?? 0);
-const opDaLanciare = (o: OpSam) => /^[ac]$/i.test(o.stato.trim()) && !o.fasi.some((f) => /chius|rientrat|lavoraz/i.test(f.stato));
+// stati delle OP in SAM: P proposto, C confermato, M movimentato, E evaso, A annullato
+const STATO_OP: Record<string, string> = { P: "proposto", C: "confermato", M: "movimentato", E: "evaso", A: "annullato" };
+const statoOp = (o: OpSam) => STATO_OP[o.stato.trim().toUpperCase()] || o.stato;
+// finita: evasa, annullata o con tutta la quantità prodotta
+const opFinita = (o: OpSam) => /^[ea]$/i.test(o.stato.trim()) || ((o.qta ?? 0) > 0 && (o.prod ?? 0) >= (o.qta ?? 0));
+// proposta o confermata: non ancora movimentata, quindi il materiale non è stato prelevato
+const opDaLanciare = (o: OpSam) => /^[pc]$/i.test(o.stato.trim());
 const numOp = (op: string) => { const [n, a] = op.split("/"); return (a || "0").padStart(4, "0") + (n || "").padStart(8, "0"); };
 type Materiale = "" | "non prelevato" | "da prelevare" | "prelevato";
 export function statoDi(m: Mancante, haOp = false, cellaOp = ""): Stato {
@@ -286,18 +289,20 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
     const F = figliDi(m), o = opDi(m), d = distinte[m.matricola + "|" + m.codice];
     if (F.length) return <span className="dup fg" title={`Figli del gruppo ancora da prelevare (${F.length}):\n` + F.map((x) => `${x.codice} ${x.descr} · q.tà ${q2(x.qta)} · ${nomeStato(stDi(x))}`).join("\n")}><i>{F.length} figli mancanti</i></span>;
     const elenco = d ? `\n\nDistinta (Controllo di gestione, OP ${d.op}):\n` + d.righe.map((r) => `${r[0]} ${r[1]} · q.tà ${r[2] ?? ""}`).join("\n") : "";
-    if (o && opDaLanciare(o)) return <span className="dup no" title={`OP ${o.op} non ancora lanciata (stato ${o.stato}, nessuna fase iniziata): i componenti non sono ancora stati prelevati.` + elenco}><i>figli non prelevati</i></span>;
+    const evasa = !o && (ops.get(m.codice) || []).find((x) => /^e$/i.test(x.stato.trim()));
+    if (evasa) return <span className="dup ok" title={`OP ${evasa.op} evasa: il gruppo è stato prodotto (prodotti ${q2(evasa.prod ?? 0)} di ${q2(evasa.qta)}).` + elenco}><i>OP evasa</i></span>;
+    if (o && opDaLanciare(o)) return <span className="dup no" title={`OP ${o.op} ${statoOp(o)}, non ancora movimentata: i componenti non sono ancora stati prelevati.` + elenco}><i>figli non prelevati</i></span>;
     return o
-      ? <span className="dup ok" title={`OP ${o.op}${o.stato ? " (" + o.stato + ")" : ""}: nessun figlio da prelevare, quindi i componenti sono già stati prelevati.` + elenco}><i>figli prelevati</i></span>
+      ? <span className="dup ok" title={`OP ${o.op} (${statoOp(o)}): nessun figlio da prelevare, quindi i componenti sono già stati prelevati.` + elenco}><i>figli prelevati</i></span>
       : <span className="dup no" title={"Nel file di SAM non ci sono figli di questo gruppo e non risulta un'OP di produzione: i componenti sono già tutti prelevati oppure l'OP del gruppo non è ancora stata lanciata." + (elenco || "\n\nDistinta non trovata nel Controllo di gestione.")}><i>{d ? `figli: ${d.righe.length} in distinta` : "figli non nel file"}</i></span>;
   };
   const segnoOp = (m: Mancante) => {
     const o = opDi(m); if (!o) return null;
     const f = faseDi(m), mat = materialeDi(m), altre = (ops.get(m.codice) || []).filter((x) => x !== o);
-    const spiega = mat === "non prelevato" ? "OP non ancora lanciata in produzione (stato " + o.stato + ", nessuna fase iniziata): il materiale non è stato prelevato, il pezzo non si può lavorare."
+    const spiega = mat === "non prelevato" ? "OP " + statoOp(o) + ", non ancora movimentata: il materiale non è stato prelevato, il pezzo non si può lavorare."
       : mat === "da prelevare" ? "Nel file ci sono ancora componenti da prelevare per questa OP." : "Materiale dell'OP prelevato.";
-    return <small title={`OP ${o.op}${o.commessa ? " · commessa " + o.commessa : ""}${o.stato ? " · stato " + o.stato : ""} · prodotti ${q2(o.prod ?? 0)} di ${q2(o.qta)}\n${spiega}\n` + o.fasi.map((x) => `${x === f ? "▸ " : "   "}${x.seq ?? ""} ${x.lav}${x.cella ? " · " + x.cella : ""}${x.stato ? " · " + x.stato : ""}${x.scad ? " · " + fd(x.scad) : ""}`).join("\n")
-      + (altre.length ? "\n\nAltre OP dello stesso codice: " + altre.map((x) => `${x.op} (${x.stato}${opFinita(x) ? ", finita" : ""})`).join(", ") : "")}>
+    return <small title={`OP ${o.op}${o.commessa ? " · commessa " + o.commessa : ""}${o.stato ? " · " + statoOp(o) : ""} · prodotti ${q2(o.prod ?? 0)} di ${q2(o.qta)}\n${spiega}\n` + o.fasi.map((x) => `${x === f ? "▸ " : "   "}${x.seq ?? ""} ${x.lav}${x.cella ? " · " + x.cella : ""}${x.stato ? " · " + x.stato : ""}${x.scad ? " · " + fd(x.scad) : ""}`).join("\n")
+      + (altre.length ? "\n\nAltre OP dello stesso codice: " + altre.map((x) => `${x.op} (${statoOp(x)})`).join(", ") : "")}>
       OP {o.op}{f ? ` · ${f.lav.toLowerCase()}` : ""}{mat && <span className={"mat m-" + mat.replace(" ", "-")}>{mat === "non prelevato" ? "materiale non prelevato" : mat === "da prelevare" ? "materiale da prelevare" : "materiale prelevato"}</span>}</small>;
   };
   const segnoRipetuto = (m: Mancante) => {
