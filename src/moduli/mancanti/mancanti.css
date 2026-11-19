@@ -114,10 +114,10 @@
 .mc table.tm.fit td.nt{min-width:0}
 .mc table.tm.fit td input,.mc table.tm.fit td select:not(.x){width:100%;min-width:0}
 .mc table.tm.fit td.chi select{width:22px;min-width:22px}
-.mc table.tm.fit .c-mac{width:14%}.mc table.tm.fit .c-cod{width:21%}.mc table.tm.fit .c-q{width:4%}.mc table.tm.fit .c-g{width:5%}
-.mc table.tm.fit .c-st{width:14%}.mc table.tm.fit .c-for{width:13%}.mc table.tm.fit .c-att{width:7%}.mc table.tm.fit .c-chi{width:3%}
-.mc table.tm.fit .c-prev{width:8%}.mc table.tm.fit .c-nt{width:11%}
-.mc table.tm.fit.con-comm .c-comm{width:9%}.mc table.tm.fit.con-comm .c-mac{width:11%}.mc table.tm.fit.con-comm .c-cod{width:18%}.mc table.tm.fit.con-comm .c-nt{width:8%}
+.mc table.tm.fit .c-mac{width:11%}.mc table.tm.fit .c-cod{width:25%}.mc table.tm.fit .c-q{width:4%}.mc table.tm.fit .c-g{width:5%}
+.mc table.tm.fit .c-st{width:15%}.mc table.tm.fit .c-for{width:12%}.mc table.tm.fit .c-att{width:7%}.mc table.tm.fit .c-chi{width:3%}
+.mc table.tm.fit .c-prev{width:8%}.mc table.tm.fit .c-nt{width:10%}
+.mc table.tm.fit.con-comm .c-comm{width:8%}.mc table.tm.fit.con-comm .c-mac{width:9%}.mc table.tm.fit.con-comm .c-cod{width:22%}.mc table.tm.fit.con-comm .c-nt{width:7%}
 .mc table.tm.fit.con-comm.senza-mac .c-cod{width:22%}.mc table.tm.fit.con-comm.senza-mac .c-nt{width:17%}
 .mc table.tm.fit .c-g small,.mc table.tm.fit td.n small{display:inline;margin-left:3px}
 .mc .ult{display:block;font-size:13px;color:var(--fg)}
