@@ -11,7 +11,6 @@
 .mc .r{color:var(--sco);font-weight:600}
 .mc .carte{display:flex;flex-direction:column;gap:10px}
 .mc .carta{padding:0;overflow:hidden}
-.mc .carta.nasc{opacity:.6}
 .mc .testa{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;flex-wrap:wrap}
 .mc .testa:hover{background:var(--bg)}
 .mc .testa h2{margin:0;font-size:17px}

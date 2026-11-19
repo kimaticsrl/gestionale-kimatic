@@ -243,7 +243,8 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
   const coloreDi = (m: Mancante) => (stDi(m) === "magazzino" ? colori.giacenti : (() => { const p = personaDi(m); return p ? colori[p] : undefined; })());
   const nomeDi = (id: string | null) => persone.find((p) => p.id === id)?.nome || "";
   const aperti = righe.filter((m) => m.aperto);
-  const visibileComm = (c: string) => nascoste || (nelPiano(c) && !comm[c]?.nascosta);
+  // si vedono tutte le commesse aperte del Piano produzione (non si nascondono più a mano)
+  const visibileComm = (c: string) => nascoste || nelPiano(c);
   // lo stesso codice aperto su più righe (altre macchine/OP della commessa) o su più commesse
   const perCodice = useMemo(() => {
     const M = new Map<string, Mancante[]>();
@@ -509,7 +510,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
           const macchine = [...new Set(tutti.map((m) => m.macchina || m.matricola))];
           const ap = aperta === c || (filtroComm.length === 1 && filtroComm[0] === c);
           return (
-            <section key={c} className={"box carta" + (ap ? " aperta" : "") + (C?.nascosta ? " nasc" : "")}>
+            <section key={c} className={"box carta" + (ap ? " aperta" : "")}>
               <div className="testa" onClick={() => setAperta(ap ? "" : c)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") setAperta(ap ? "" : c); }} aria-expanded={ap}>
                 <div><h2>{c}{clienteDi(c) && <span> · {clienteDi(c)}</span>}</h2>
                   <p className="nota">{macchine.slice(0, 3).join(" · ")}{macchine.length > 3 ? ` e altre ${macchine.length - 3}` : ""}</p></div>
@@ -527,7 +528,6 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
                   <label className="f w">Note sulla commessa<input defaultValue={C?.note || ""} disabled={!modifica} onBlur={(e) => e.target.value !== (C?.note || "") && salvaComm(c, { note: e.target.value })} /></label>
                   <div className="row" style={{ alignItems: "flex-end", gap: 8 }}>
                     <button className="btn sec" onClick={() => esporta(L, "Mancanti " + c)}>Excel</button>
-                    {modifica && <button className="btn sec" onClick={() => salvaComm(c, { nascosta: !C?.nascosta })}>{C?.nascosta ? "Rimetti nel quadro" : "Togli dal quadro"}</button>}
                   </div>
                 </div>
                 {raggruppa(L, (m) => `${m.matricola}  ${m.macchina}`).map(([k, G]) => {
@@ -657,7 +657,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
           <Multi etichetta="Stati" tutti="Tutti gli stati" scelti={filtroStato} cambia={setFiltroStato} voci={STATI.map(([k, l]) => ({ v: k, l, n: base.filter((m) => stDi(m) === k).length }))} />
           <label className="ck"><input type="checkbox" checked={soloRitardi} onChange={(e) => setSoloRitardi(e.target.checked)} /> Solo in ritardo</label>
           <label className="ck" title="Codici mancanti su più righe della stessa commessa o su più commesse"><input type="checkbox" checked={soloRipetuti} onChange={(e) => setSoloRipetuti(e.target.checked)} /> Solo codici ripetuti</label>
-          <label className="ck"><input type="checkbox" checked={nascoste} onChange={(e) => setNascoste(e.target.checked)} /> Anche commesse fuori dal Piano produzione o tolte dal quadro</label>
+          <label className="ck"><input type="checkbox" checked={nascoste} onChange={(e) => setNascoste(e.target.checked)} /> Anche commesse fuori dal Piano produzione</label>
         </div>
         <div className="leg">{STATI.map(([k, l, d]) => <span key={k} title={d}><i className={"b-" + k} />{l}</span>)}<span><i className="b-rit" />in ritardo: data passata o dopo l&apos;inizio montaggio</span></div>
         {Object.keys(colori).length > 0 && <div className="leg">{colori.giacenti && <span><i style={{ background: colori.giacenti }} />giacenti disponibili</span>}{persone.filter((p) => colori[p.id]).map((p) => <span key={p.id}><i style={{ background: colori[p.id] }} />{p.nome}</span>)}</div>}
