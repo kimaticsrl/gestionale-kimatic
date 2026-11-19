@@ -286,6 +286,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
     const F = figliDi(m), o = opDi(m), d = distinte[m.matricola + "|" + m.codice];
     if (F.length) return <span className="dup fg" title={`Figli del gruppo ancora da prelevare (${F.length}):\n` + F.map((x) => `${x.codice} ${x.descr} · q.tà ${q2(x.qta)} · ${nomeStato(stDi(x))}`).join("\n")}><i>{F.length} figli mancanti</i></span>;
     const elenco = d ? `\n\nDistinta (Controllo di gestione, OP ${d.op}):\n` + d.righe.map((r) => `${r[0]} ${r[1]} · q.tà ${r[2] ?? ""}`).join("\n") : "";
+    if (o && opDaLanciare(o)) return <span className="dup no" title={`OP ${o.op} non ancora lanciata (stato ${o.stato}, nessuna fase iniziata): i componenti non sono ancora stati prelevati.` + elenco}><i>figli non prelevati</i></span>;
     return o
       ? <span className="dup ok" title={`OP ${o.op}${o.stato ? " (" + o.stato + ")" : ""}: nessun figlio da prelevare, quindi i componenti sono già stati prelevati.` + elenco}><i>figli prelevati</i></span>
       : <span className="dup no" title={"Nel file di SAM non ci sono figli di questo gruppo e non risulta un'OP di produzione: i componenti sono già tutti prelevati oppure l'OP del gruppo non è ancora stata lanciata." + (elenco || "\n\nDistinta non trovata nel Controllo di gestione.")}><i>{d ? `figli: ${d.righe.length} in distinta` : "figli non nel file"}</i></span>;
