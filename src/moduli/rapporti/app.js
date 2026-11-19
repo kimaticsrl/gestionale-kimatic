@@ -237,7 +237,20 @@ async function calcolaKm(p,silenzioso){
     if(!silenzioso)toast(`${j.km} km fino a: ${j.arrivo}`);
   }catch(e){if(!silenzioso)toast('Km non calcolati: '+(e&&e.message||'errore'))}
 }
-function calcTxt(g){const s=RI.split(g),nt=Math.max(1,+g.nt||1);if(!s.tot)return'Inserisci le fasce orarie di lavoro.';return `<span>Totale <b>${H(s.tot)}</b></span><span>Ordinarie <b>${H(s.tOrd)}</b></span>${s.tExt?`<span class="x">Extra (oltre 8 h) <b>${H(s.tExt)}</b></span>`:''}${nt>1?`<span>Ore uomo <b>${H(s.tot*nt)}</b></span>`:''}`}
+/* ---------- pausa obbligatoria: oltre 6 ore di lavoro nella giornata, almeno 15 minuti di pausa ---------- */
+const PAUSA_SOGLIA=360,PAUSA_MIN=15;
+function fasceOk(g){return (g.f||[]).map(f=>({f,a:RI.tm(f.da),d:RI.DUR(f.da,f.a)})).filter(x=>x.a!=null&&x.d>0)}
+/* vero se la giornata supera le 6 ore e tra le fasce non c'è una pausa di almeno 15 minuti */
+function pausaManca(g){const L=fasceOk(g),tot=L.reduce((s,x)=>s+x.d,0);if(tot<=PAUSA_SOGLIA)return false;
+  for(let i=1;i<L.length;i++){const fine=(L[i-1].a+L[i-1].d)%1440,gap=(L[i].a-fine+1440)%1440;if(gap>=PAUSA_MIN)return false}return true}
+/* inserisce 15 minuti di pausa al compimento delle 6 ore di lavoro: la fascia si divide in due */
+function forzaPausa(g){const L=fasceOk(g);let prima=0;
+  for(let i=0;i<L.length;i++){const x=L[i];if(prima+x.d>PAUSA_SOGLIA){const p=x.a+(PAUSA_SOGLIA-prima),fine=x.a+x.d,j=g.f.indexOf(x.f);
+      if(p+PAUSA_MIN<fine)g.f.splice(j,1,{da:x.f.da,a:RI.hm(p)},{da:RI.hm(p+PAUSA_MIN),a:x.f.a});
+      else{x.f.a=RI.hm(p);const n=L[i+1];if(n&&(n.a-p+1440)%1440<PAUSA_MIN)n.f.da=RI.hm(p+PAUSA_MIN)}
+      g.pausaAuto=true;return true}
+    prima+=x.d}return false}
+function calcTxt(g){const s=RI.split(g),nt=Math.max(1,+g.nt||1);if(!s.tot)return'Inserisci le fasce orarie di lavoro.';return `<span>Totale <b>${H(s.tot)}</b></span><span>Ordinarie <b>${H(s.tOrd)}</b></span>${s.tExt?`<span class="x">Extra (oltre 8 h) <b>${H(s.tExt)}</b></span>`:''}${nt>1?`<span>Ore uomo <b>${H(s.tot*nt)}</b></span>`:''}${pausaManca(g)?`<span class="x" style="flex-basis:100%"><b>Pausa obbligatoria:</b> oltre 6 ore di lavoro devi segnare almeno 15 minuti di pausa (dividi le fasce orarie, es. 12:00 – 12:15 fuori dalle fasce). Se non la segni, alla chiusura dell'intervento la inserisco io alle 6 ore di lavoro.</span>`:g.pausaAuto?`<span class="note" style="flex-basis:100%">Pausa di 15 minuti inserita automaticamente (non era stata segnata).</span>`:''}`}
 
 /* ---------- binding dei campi ---------- */
 function setK(o,k,v){const p=k.split('.');let x=o;for(let i=0;i<p.length-1;i++){const q=p[i];if(x[q]==null)x[q]=/^\d+$/.test(p[i+1])?[]:{};x=x[q]}x[p[p.length-1]]=v}
@@ -265,7 +278,7 @@ function onField(e){
   if(k==='lingua'||k==='mezzo'){queueSave();render();return}
   const mc=/^ric\.(\d+)\.cod$/.exec(k);if(mc){if(e.type==='input')suggerisciArticoli(v);else{queueSave();compilaParte(+mc[1],String(v));return}}
   if(k==='matr'&&e.type==='change'){const c=S.clienti[CUR.cli.id];const m=c&&(c.commesse||[]).flatMap(x=>x.macchine||[]).find(m=>m.matr===v);if(m&&!CUR.macDesc){CUR.macDesc=m.desc;const f=$('#f-mde');if(f)f.value=m.desc}}
-  const mi=/^giorni\.(\d+)\.(f|nt|d)/.exec(k);if(mi){const c=$('#calc'+mi[1]);if(c)c.innerHTML=calcTxt(CUR.giorni[+mi[1]]);if(mi[2]==='d'&&e.type==='change')render()}
+  const mi=/^giorni\.(\d+)\.(f|nt|d)/.exec(k);if(mi){if(mi[2]==='f')delete CUR.giorni[+mi[1]].pausaAuto;const c=$('#calc'+mi[1]);if(c)c.innerHTML=calcTxt(CUR.giorni[+mi[1]]);if(mi[2]==='d'&&e.type==='change')render()}
   if(e.type==='input'||el.type==='checkbox'||el.type==='radio'||el.type==='date'||el.type==='time')queueSave();
 }
 
@@ -278,7 +291,7 @@ ROOT.addEventListener('click',async e=>{
   if(d.fatt){UI.fatt={id:d.fatt,nf:'',df:today(),note:''};render();return}
   if(d.add){UI.add=UI.add===d.add?null:d.add;UI.lst=false;render();if(UI.add){const p=ROOT.querySelector('#addebito');if(p)p.scrollIntoView({behavior:'smooth',block:'start'})}return}
   if((locked()||!CAN_EDIT)&&CUR&&(d.addf||d.delf||d.delday||d.delric||d.ora||d.km)&&!ritornoAperto(d.ora||d.km)){return}
-  if(d.ora&&CUR){if(locked())RIT=true;adesso(d.ora);const m=/^(giorni\.\d+\.(?:v|vr))\.da$/.exec(d.ora);if(m){const g=CUR.giorni[+d.ora.split('.')[1]],v=g[d.ora.split('.')[2]]||{};if(!v.km)calcolaKm(m[1],true)}queueSave();render();return}
+  if(d.ora&&CUR){if(locked())RIT=true;{const m=/^giorni\.(\d+)\.f\./.exec(d.ora);if(m)delete CUR.giorni[+m[1]].pausaAuto}adesso(d.ora);const m=/^(giorni\.\d+\.(?:v|vr))\.da$/.exec(d.ora);if(m){const g=CUR.giorni[+d.ora.split('.')[1]],v=g[d.ora.split('.')[2]]||{};if(!v.km)calcolaKm(m[1],true)}queueSave();render();return}
   if(d.km&&CUR){calcolaKm(d.km);return}
   if(d.addf){const g=CUR.giorni[+d.addf];const last=(g.f||[]).slice(-1)[0];(g.f??=[]).push({da:last&&last.a?last.a:'',a:''});queueSave();render();return}
   if(d.delf){const[i,j]=d.delf.split('.').map(Number);CUR.giorni[i].f.splice(j,1);queueSave();render();return}
@@ -289,7 +302,7 @@ ROOT.addEventListener('click',async e=>{
     case'back':flush();togliBozzaFirme();UI.open=null;CUR=null;UI.sign=false;saveUI();render();break;
     case'addday':{const L=CUR.giorni,last=L.slice(-1)[0];let nd=today();if(last&&last.d){const n=RI.d2n(last.d);if(n!=null)nd=RI.n2s(n+1)}if(L.some(g=>g.d===nd)&&!L.some(g=>g.d===today()))nd=today();L.push({id:rid(),d:nd,v:{},vr:{},tr:{},f:last&&last.f?last.f.map(f=>({da:f.da,a:f.a})):[{da:'08:00',a:'12:00'},{da:'13:00',a:'17:00'}],nt:last?last.nt:'1',gar:last?last.gar:false,att:''});queueSave();render();break}
     case'addric':(CUR.ric??=[]).push({cod:'',des:'',q:'1',gar:false});queueSave();render();break;
-    case'firma':flush();UI.sign=true;render();ROOT.querySelector('.confirm').scrollIntoView({behavior:'smooth',block:'start'});break;
+    case'firma':{const D=(CUR.giorni||[]).filter(pausaManca);D.forEach(forzaPausa);if(D.length){DIRTY=true;toast('Pausa obbligatoria non segnata: inserita da me 15 minuti di pausa in '+(D.length===1?'1 giornata':D.length+' giornate')+'. Controlla le fasce orarie prima della firma.')}}flush();UI.sign=true;render();ROOT.querySelector('.confirm').scrollIntoView({behavior:'smooth',block:'start'});break;
     case'nofirma':UI.sign=false;togliBozzaFirme();render();break;
     case'conferma':await doSign(b);break;
     case'pdf':await doPdf(CUR);break;
