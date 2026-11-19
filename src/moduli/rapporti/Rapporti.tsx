@@ -5,14 +5,14 @@ import "./rapporti.css";
 import ReportOre from "./ReportOre";
 
 // fattura: livello sul permesso «Fatturazione rapporti d'intervento»; tab: scheda da aprire (es. «fat»)
-type Props = { me: string; nome: string; modifica: boolean; gestisce: boolean; clienti: boolean; fattura: string; tab?: string };
+type Props = { me: string; nome: string; modifica: boolean; gestisce: boolean; clienti: boolean; vediClienti: boolean; fattura: string; tab?: string };
 
 async function logoBmtek(): Promise<string> {
   const blob = await (await fetch("/logo/bmtek")).blob();
   return new Promise((ok) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.readAsDataURL(blob); });
 }
 
-export default function Rapporti({ me, nome, modifica, gestisce, clienti, fattura, tab }: Props) {
+export default function Rapporti({ me, nome, modifica, gestisce, clienti, vediClienti, fattura, tab }: Props) {
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -23,7 +23,7 @@ export default function Rapporti({ me, nome, modifica, gestisce, clienti, fattur
       if (annullato || !root.current) return;
       const sb = supabaseBrowser();
       ferma = avvia(root.current, {
-        me, nome, modifica, gestisce, clienti, fattura, tab, logo,
+        me, nome, modifica, gestisce, clienti, vediClienti, fattura, tab, logo,
         db: creaDb(sb),
         // anagrafica articoli (da SAM): descrizione delle parti sostituite dal codice
         async articolo(cod: string) {
@@ -73,7 +73,7 @@ export default function Rapporti({ me, nome, modifica, gestisce, clienti, fattur
       });
     })();
     return () => { annullato = true; ferma?.(); };
-  }, [me, nome, modifica, gestisce, clienti, fattura, tab]);
+  }, [me, nome, modifica, gestisce, clienti, vediClienti, fattura, tab]);
 
   return (
     <div className="ri" ref={root} style={{ position: "relative" }}>

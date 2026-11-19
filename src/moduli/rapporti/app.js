@@ -68,9 +68,9 @@ let FAT_VEDE=false,FAT_MOD=false,FAT_LIST=false;
 let db=null,ME=null,ADMIN=false,CAN_EDIT=false,DL=null,BOOT=true,LOGO=null;
 const busy=()=>{const a=document.activeElement;if(!ROOT.contains(a))return false;return !!(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&a.type!=='checkbox'&&a.type!=='radio')};
 const S={rapporti:{},clienti:{},fatture:{},listini:{},addebiti:{}};
-const UI={tab:'int',filt:'aperti',q:'',open:null,cli:null,cq:'',sign:false,cliEdit:null,fatt:null,add:null,lst:false};
-try{Object.assign(UI,JSON.parse(localStorage.getItem('ri_ui')||'{}'));UI.sign=false;UI.cliEdit=null;UI.fatt=null}catch(e){}
-const saveUI=()=>{try{localStorage.setItem('ri_ui',JSON.stringify({tab:UI.tab,filt:UI.filt,open:UI.open,cli:UI.cli}))}catch(e){}};
+const UI={tab:'int',filt:'aperti',q:'',open:null,sign:false,fatt:null,add:null,lst:false};
+try{Object.assign(UI,JSON.parse(localStorage.getItem('ri_ui')||'{}'));UI.sign=false;UI.fatt=null;if(UI.tab==='cli')UI.tab='int'}catch(e){}
+const saveUI=()=>{try{localStorage.setItem('ri_ui',JSON.stringify({tab:UI.tab,filt:UI.filt,open:UI.open}))}catch(e){}};
 let CUR=null,DIRTY=false,SAVING=false,ST=null,RIT=false;
 
 /* ---------- stato del rapporto ---------- */
@@ -120,7 +120,7 @@ const setSync=t=>{if(SYNC)SYNC.textContent=t};
 /* ---------- navigazione ---------- */
 function tabs(){
   const nf=Object.values(S.rapporti).filter(r=>stato(r)==='dafatt').length;
-  const T=[['int','Interventi'],...(FAT_VEDE?[['fat','Da fatturare',nf]]:[]),['cli','Clienti']];
+  const T=[['int','Interventi'],...(FAT_VEDE?[['fat','Da fatturare',nf]]:[])];
   TABS.innerHTML=T.map(([k,l,n])=>`<button type="button" data-tab="${k}" aria-pressed="${UI.tab===k}">${l}${n?`<span class="n">${n}</span>`:''}</button>`).join('');
 }
 TABS.addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(!b)return;flush();UI.tab=b.dataset.tab;UI.open=null;CUR=null;UI.sign=false;saveUI();render()});
@@ -130,7 +130,6 @@ function render(){
   const a=APP;
   if(!db){a.innerHTML='<div class="empty">Caricamento dei rapporti…</div>';return}
   if(UI.tab==='fat'&&FAT_VEDE)a.innerHTML=vFatt();
-  else if(UI.tab==='cli')a.innerHTML=vCli();
   else if(UI.open&&CUR)a.innerHTML=vEdit();
   else{UI.tab='int';a.innerHTML=vList()}
   if(UI.open&&CUR&&UI.sign)initPads();
@@ -175,7 +174,7 @@ function vEdit(){
     <label>Lingua del modulo<select id="f-lin" data-k="lingua"${dis}>${LINGUE.map(([k,l])=>`<option value="${k}"${(r.lingua||'IT')===k?' selected':''}>${l}</option>`).join('')}</select>${r.linguaAuto&&r.linguaAuto===r.lingua?'<span class="note">proposta dal cliente</span>':''}</label>
    </div>
    <datalist id="dl-cli">${cliOpts()}</datalist><datalist id="dl-mac">${macOpts()}</datalist>
-   ${r.cli.nome&&!r.cli.id?`<p class="note" style="margin:8px 0 0">Cliente non presente in anagrafica: i dati restano su questo rapporto. ${CTX.clienti?'Puoi aggiungerlo dalla sezione Clienti.':'Chi gestisce l\'Anagrafica clienti può aggiungerlo.'}</p>`:''}
+   ${r.cli.nome&&!r.cli.id?`<p class="note" style="margin:8px 0 0">Cliente non presente nell'Anagrafica clienti: i dati restano su questo rapporto. ${CTX.clienti?`<a href="/moduli/anagrafica-clienti?nuovo=${encodeURIComponent(r.cli.nome)}" target="_blank" rel="noopener">Aggiungilo all'Anagrafica clienti ↗</a>, poi sceglilo di nuovo qui.`:'Chi gestisce l\'Anagrafica clienti può aggiungerlo.'}</p>`:r.cli.id&&CTX.vediClienti?`<p class="note" style="margin:8px 0 0"><a href="/moduli/anagrafica-clienti?c=${encodeURIComponent(r.cli.id)}" target="_blank" rel="noopener">Scheda del cliente nell'Anagrafica clienti ↗</a></p>`:''}
   </section>`;
   const days=(r.giorni||[]).map((g,i)=>vDay(g,i,dis)).join('');
   const giorn=`<section class="panel"><h2>Giornate <small>una scheda per ogni giorno di trasferta, da compilare a fine giornata</small></h2><div style="display:flex;flex-direction:column;gap:12px">${days||'<div class="empty">Nessuna giornata.</div>'}</div>${ro?'':`<div class="row" style="margin-top:12px"><button type="button" data-act="addday">+ Aggiungi giornata</button></div>`}</section>`;
@@ -248,8 +247,6 @@ ROOT.addEventListener('input',onField);ROOT.addEventListener('change',onField);
 function onField(e){
   const el=e.target;
   if(el.id==='q'){UI.q=el.value;const p=el.selectionStart;render();const q=$('#q');q.focus();q.setSelectionRange(p,p);return}
-  if(el.id==='cq'){UI.cq=el.value;const p=el.selectionStart;render();const q=$('#cq');q.focus();q.setSelectionRange(p,p);return}
-  if(el.dataset.ck&&UI.cliEdit){UI.cliEdit[el.dataset.ck]=el.value;return}
   if(el.dataset.fk&&UI.fatt){UI.fatt[el.dataset.fk]=el.value;return}
   if(el.dataset.ak&&UI.add){if(e.type==='change')salvaAddebito(UI.add,el.dataset.ak,el.type==='checkbox'?el.checked:el.value);return}
   if(el.dataset.lk){if(e.type==='change')salvaListino(el.dataset.lk,el.value);return}
@@ -278,7 +275,6 @@ ROOT.addEventListener('click',async e=>{
   if(d.filt){UI.filt=d.filt;saveUI();render();return}
   if(d.openr){openR(d.openr);return}
   if(d.clr){const c=document.getElementById(d.clr);c.getContext('2d').clearRect(0,0,c.width,c.height);c.dataset.ink='';salvaBozzaFirme();return}
-  if(d.opencli){UI.cli=d.opencli;UI.cliEdit=null;saveUI();render();return}
   if(d.fatt){UI.fatt={id:d.fatt,nf:'',df:today(),note:''};render();return}
   if(d.add){UI.add=UI.add===d.add?null:d.add;UI.lst=false;render();if(UI.add){const p=ROOT.querySelector('#addebito');if(p)p.scrollIntoView({behavior:'smooth',block:'start'})}return}
   if((locked()||!CAN_EDIT)&&CUR&&(d.addf||d.delf||d.delday||d.delric||d.ora||d.km)&&!ritornoAperto(d.ora||d.km)){return}
@@ -312,10 +308,6 @@ ROOT.addEventListener('click',async e=>{
     case'addpdf':await doAddPdf(S.rapporti[d.id]);break;
     case'nspdf':await doNsPdf(d.id);break;
     case'annfatt':if(!confirmTwice(b,'Tocca di nuovo per rimetterlo tra i da fatturare'))return;try{await db.doc('fatture/'+d.id).delete();toast('Rimesso tra i da fatturare')}catch(err){toast('Operazione non riuscita')}break;
-    case'newcli':UI.cliEdit={id:'',nome:'',indirizzo:'',contatto:'',email:'',telefono:'',piva:'',lingua:'',note:''};render();break;
-    case'editcli':{const c=S.clienti[UI.cli];UI.cliEdit=Object.assign({id:UI.cli},{nome:'',indirizzo:'',contatto:'',email:'',telefono:'',piva:'',lingua:'',note:''},c);render();break}
-    case'savecli':await saveCli();break;
-    case'nocli':UI.cliEdit=null;render();break;
   }
 });
 function confirmTwice(b,msg){if(b.dataset.armed&&Date.now()-b.dataset.armed<5000)return true;b.dataset.armed=Date.now();toast(msg);return false}
@@ -535,26 +527,6 @@ async function esportaAddebiti(){
     await DL.save({filename:'Da fatturare '+today()+'.xlsx',data:new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})})}
   catch(e){if(e&&e.code==='declined')return;toast('Non riesco a creare il file: '+(e&&e.message||'errore'))}}
 async function saveFatt(){const f=UI.fatt;if(!f)return;try{await db.doc('fatture/'+f.id).set({stato:'fatturato',nf:f.nf.trim(),df:f.df,note:f.note.trim(),by:ME||'',ts:new Date().toISOString()});UI.fatt=null;toast('Segnato come fatturato')}catch(e){toast('Non salvato: serve il permesso di modifica del modulo')}render()}
-
-/* ---------- clienti ---------- */
-function vCli(){
-  const q=UI.cq.trim().toLowerCase();
-  const L=Object.entries(S.clienti).filter(([,c])=>!q||[c.nome,c.contatto,c.indirizzo,...(c.commesse||[]).flatMap(k=>[k.num,...(k.macchine||[]).map(m=>m.matr)])].join(' ').toLowerCase().includes(q)).sort((a,b)=>a[1].nome.localeCompare(b[1].nome,'it'));
-  const c=S.clienti[UI.cli],E=UI.cliEdit;
-  let det;
-  if(E){det=`<section class="panel"><h2>${E.id?'Modifica cliente':'Nuovo cliente'}</h2><div class="g">${[['nome','Ragione sociale','w2'],['indirizzo','Indirizzo','w2'],['contatto','Persona di riferimento'],['email','E-mail'],['telefono','Telefono'],['piva','P.IVA / VAT'],['lingua','Lingua documenti']].map(([k,l,w])=>`<label class="${w||''}">${l}<input id="ce-${k}" data-ck="${k}" value="${esc(E[k])}"></label>`).join('')}<label class="wf">Note<textarea id="ce-note" data-ck="note">${esc(E.note)}</textarea></label></div><div class="row" style="margin-top:12px"><button type="button" class="pri" data-act="savecli">Salva</button><button type="button" data-act="nocli">Annulla</button></div></section>`}
-  else if(c){const used=Object.values(S.rapporti).filter(r=>r.cli&&r.cli.id===UI.cli);
-   det=`<section class="panel"><h2>${esc(c.nome)} <small>${(c.fonti||[]).map(esc).join(' · ')}</small></h2><div class="g">${[['Indirizzo',c.indirizzo],['Persona di riferimento',c.contatto],['E-mail',c.email],['Telefono',c.telefono],['P.IVA / VAT',c.piva],['Lingua',c.lingua]].map(([l,v])=>`<div class="lab">${l}<span style="color:var(--fg);font-size:15px">${v?esc(v):'<span class="note">—</span>'}</span></div>`).join('')}</div>${c.note?`<p>${esc(c.note)}</p>`:''}${CTX.clienti?'<div class="row" style="margin-top:12px"><button type="button" data-act="editcli">Modifica</button></div>':''}</section>
-   <section class="panel"><h2>Commesse e matricole</h2>${(c.commesse||[]).length?`<div class="mac">${c.commesse.map(k=>`<div><b class="mono">${esc(k.num)}</b>${k.chiusa?'<span class="pill">chiusa</span>':''}<span class="note">${(k.macchine||[]).length} matricole</span></div>${(k.macchine||[]).length?`<div style="padding-left:12px">${k.macchine.map(m=>`<span class="pill acc" title="${esc(m.desc)}"><span class="mono">${esc(m.matr)}</span> ${esc(m.desc.slice(0,28))}</span>`).join('')}</div>`:''}`).join('')}</div>`:'<p class="note" style="margin:0">Nessuna commessa nel Piano produzione.</p>'}</section>
-   <section class="panel"><h2>Interventi <small>${used.length}</small></h2>${used.length?used.map(r=>`<button type="button" class="sm" data-openr="${esc(r.id)}" style="margin:0 6px 6px 0">${esc(r.num)} · ${esc(range(r))}</button>`).join(''):'<p class="note" style="margin:0">Nessun intervento registrato.</p>'}</section>`}
-  else det=`<div class="empty">Scegli un cliente dall'elenco.</div>`;
-  return `<div class="top"><h2>Clienti</h2><span class="note">${Object.keys(S.clienti).length} clienti, presi da Offerte BMTEK e Piano produzione</span><span class="sp"></span>${CTX.clienti?'<button type="button" class="pri" data-act="newcli">Nuovo cliente</button>':''}</div>
-  <div class="cli"><div class="panel" style="display:flex;flex-direction:column;gap:8px"><input id="cq" type="search" placeholder="Cerca nome, commessa, matricola…" value="${esc(UI.cq)}" aria-label="Cerca cliente"><div class="clist">${L.map(([id,c])=>`<button type="button" data-opencli="${esc(id)}" aria-current="${UI.cli===id}"><b>${esc(c.nome)}</b><small>${(c.commesse||[]).length} commesse${c.contatto?' · '+esc(c.contatto):''}</small></button>`).join('')||'<p class="note">Nessun cliente.</p>'}</div></div><div style="display:flex;flex-direction:column;gap:14px;min-width:0">${det}</div></div>`;
-}
-async function saveCli(){const E=UI.cliEdit;if(!E||!E.nome.trim()){toast('Serve la ragione sociale');return}
-  const id=E.id||E.nome.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||('c'+rid());
-  const prev=S.clienti[id]||{};const doc=Object.assign({},prev,{nome:E.nome.trim(),indirizzo:E.indirizzo.trim(),contatto:E.contatto.trim(),email:E.email.trim(),telefono:E.telefono.trim(),piva:E.piva.trim(),lingua:E.lingua.trim(),note:(E.note||'').trim(),fonti:prev.fonti||['Inserito a mano'],commesse:prev.commesse||[]});
-  try{await db.doc('clienti/'+id).set(doc);UI.cli=id;UI.cliEdit=null;saveUI();toast('Cliente salvato')}catch(e){toast('Non salvato: serve il permesso di modifica del modulo')}render()}
 
 /* ---------- avvio ---------- */
 let GOT={r:0,c:0};

@@ -12,5 +12,5 @@ export default async function PaginaRapporti({ searchParams }: { searchParams: P
   ]);
   const livello = (data ?? "nessuno") as Livello;
   if (livello === "nessuno") notFound();
-  return <Rapporti me={user.id} nome={profilo?.nome || ""} modifica={livello === "modifica" || livello === "gestisce"} gestisce={livello === "gestisce"} clienti={lvClienti === "gestisce"} fattura={(lvFattura ?? "nessuno") as Livello} tab={tab === "fat" ? "fat" : undefined} />;
+  return <Rapporti me={user.id} nome={profilo?.nome || ""} modifica={livello === "modifica" || livello === "gestisce"} gestisce={livello === "gestisce"} clienti={lvClienti === "gestisce"} vediClienti={!!lvClienti && lvClienti !== "nessuno"} fattura={(lvFattura ?? "nessuno") as Livello} tab={tab === "fat" ? "fat" : undefined} />;
 }
