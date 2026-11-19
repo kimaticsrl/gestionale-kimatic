@@ -93,7 +93,6 @@ export const RI = (function () {
     qty:     ['Q.tà', 'Q.ty', 'Qté', 'Cant.'],
     partGar: ['Parte in garanzia', 'Part in warranty', 'Pièce sous garantie', 'Pieza en garantía'],
     acc:     ['La firma sul presente documento implica l’accettazione senza riserve dei lavori eseguiti', 'The signature on the present document implies the acceptance without reservations of the performed jobs', 'La signature du présent document implique l’acceptation sans réserve des travaux effectués', 'La firma del presente documento implica la aceptación sin reservas de los trabajos realizados'],
-    fatt:    ['Il servizio corrisposto sarà fatturato a fine mese', 'The offered service will be invoiced at the end of the month', 'Le service rendu sera facturé à la fin du mois', 'El servicio prestado se facturará a final de mes'],
     rit:     ['Il rapporto verrà aggiornato con il viaggio di ritorno dopo la partenza dal cliente', 'The report will be updated with the return trip after leaving the customer', 'Le rapport sera mis à jour avec le voyage de retour après le départ de chez le client', 'El informe se actualizará con el viaje de regreso tras la salida del cliente'],
     elettr:  ['Firma elettronica raccolta su dispositivo il {a} alle {b} – impronta del rapporto SHA-256: ', 'Electronic signature collected on device on {a} at {b} – report fingerprint SHA-256: ', 'Signature électronique recueillie sur appareil le {a} à {b} – empreinte du rapport SHA-256 : ', 'Firma electrónica recogida en dispositivo el {a} a las {b} – huella del informe SHA-256: '],
   };
@@ -230,7 +229,7 @@ export const RI = (function () {
     box(L, 4, CW, 6); txt(fit(X.P('desc'), CW - 4, 8.5), W / 2, 8.2, { b: 1, al: 'center', sz: 8.5 });
     const ric = (r.ric || []).filter(x => x.cod || x.des);
     const ricRows = Math.max(9, ric.length);
-    const ricTop = 200 - 22 - 15 - 5 - ricRows * 4.5;
+    const ricTop = 200 - 22 - 12 - 5 - ricRows * 4.5;
     // testo descrizione
     const lines = [];
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
@@ -253,12 +252,11 @@ export const RI = (function () {
       const x = ric[i]; if (x) { txt(fit([x.cod, x.des].filter(Boolean).join('  –  '), c1 - L - 4, 8), L + 2, y + 3.3, { sz: 8 }); txt(x.q, (c1 + c2) / 2, y + 3.3, { al: 'center', sz: 8 }); txt(X.solo(x.gar ? 'yes' : 'no'), (c2 + R) / 2, y + 3.3, { al: 'center', sz: 8 }); }
       y += 4.5;
     }
-    signRow(y, 200 - 15 - y);
-    y = 200 - 15; box(L, y, CW, 15);
+    signRow(y, 200 - 12 - y);
+    y = 200 - 12; box(L, y, CW, 12);
     txt(fit(X.P('acc', '  /  '), CW - 3, 6.3), L + 1.5, y + 3.4, { sz: 6.3 });
-    txt(fit(X.P('fatt', '  /  '), CW - 3, 6.3), L + 1.5, y + 6.8, { sz: 6.3 });
-    txt(fit(X.P('rit', '  /  '), CW - 3, 6.3), L + 1.5, y + 10.2, { sz: 6.3 });
-    if (r.firma && r.firma.hash) txt(X.F('elettr', fd(r.firma.ts.slice(0, 10)), r.firma.ts.slice(11, 16)) + r.firma.hash, L + 1.5, y + 13.6, { sz: 5.6, c: '#444444' });
+    txt(fit(X.P('rit', '  /  '), CW - 3, 6.3), L + 1.5, y + 6.8, { sz: 6.3 });
+    if (r.firma && r.firma.hash) txt(X.F('elettr', fd(r.firma.ts.slice(0, 10)), r.firma.ts.slice(11, 16)) + r.firma.hash, L + 1.5, y + 10.4, { sz: 5.6, c: '#444444' });
     footer();
     // eventuale pagina di continuazione
     if (lines.length > avail) {
