@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { daTabella, type Ordine, type OpSam } from "./sam";
 import "./mancanti.css";
@@ -75,6 +75,47 @@ const ordComm = (c: string) => { const [n, a] = c.split("/"); return `${a || ""}
 const pezzi = (v: string) => v.split(/\s+/).filter(Boolean);
 const trova = (m: Mancante, q: string) => !q || pezzi(q.toLowerCase()).every((p) => [m.codice, m.descr, m.macchina, m.matricola, m.op, m.op_descr, m.fornitore, m.cella, m.cdep, m.nota, m.commessa, ...m.ordini.map((o) => o.num + " " + o.fornitore)].join(" ").toLowerCase().includes(p));
 
+/** Menu a tendina con più scelte: caselle da spuntare e ricerca. */
+function Multi({ etichetta, tutti, voci, scelti, cambia, largo }: {
+  etichetta: string; tutti: string; voci: { v: string; l: string; n?: number }[]; scelti: string[]; cambia: (v: string[]) => void; largo?: boolean;
+}) {
+  const [aperto, setAperto] = useState(false);
+  const [cerca, setCerca] = useState("");
+  const rif = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!aperto) return;
+    const fuori = (e: MouseEvent) => { if (rif.current && !rif.current.contains(e.target as Node)) setAperto(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setAperto(false); };
+    document.addEventListener("mousedown", fuori); document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", fuori); document.removeEventListener("keydown", esc); };
+  }, [aperto]);
+  const vis = cerca ? voci.filter((x) => x.l.toLowerCase().includes(cerca.toLowerCase())) : voci;
+  const testo = !scelti.length ? tutti : scelti.length === 1 ? (voci.find((x) => x.v === scelti[0])?.l || scelti[0]) : `${etichetta}: ${scelti.length} scelti`;
+  const inverti = (v: string) => cambia(scelti.includes(v) ? scelti.filter((x) => x !== v) : [...scelti, v]);
+  return (
+    <div className={"multi" + (scelti.length ? " on" : "")} ref={rif}>
+      <button type="button" className="multi-b" aria-haspopup="listbox" aria-expanded={aperto} aria-label={etichetta} title={scelti.map((v) => voci.find((x) => x.v === v)?.l || v).join("\n")} onClick={() => setAperto((a) => !a)}>
+        <span>{testo}</span><b aria-hidden>▾</b>
+      </button>
+      {aperto && (
+        <div className={"multi-p" + (largo ? " largo" : "")} role="listbox" aria-multiselectable>
+          {voci.length > 8 && <input type="search" autoFocus placeholder="Cerca…" value={cerca} onChange={(e) => setCerca(e.target.value)} />}
+          <div className="multi-a">
+            <button type="button" onClick={() => cambia([...new Set([...scelti, ...vis.map((x) => x.v)])])}>Seleziona {cerca ? "trovati" : "tutti"}</button>
+            <button type="button" onClick={() => cambia([])} disabled={!scelti.length}>Nessuno</button>
+          </div>
+          <ul>
+            {vis.map((x) => (
+              <li key={x.v}><label><input type="checkbox" checked={scelti.includes(x.v)} onChange={() => inverti(x.v)} /><span>{x.l}</span>{x.n != null && <small>{x.n}</small>}</label></li>
+            ))}
+            {!vis.length && <li className="nota">Nessuna voce</li>}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Mancanti({ me, gestisce, modifica }: Props) {
   const sb = useMemo(() => supabaseBrowser(), []);
   const [righe, setRighe] = useState<Mancante[]>([]);
@@ -85,7 +126,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
   const [vista, setVista] = useState<"commesse" | "fornitori" | "reparti" | "prelevati" | "assegnazioni">("commesse");
   const [aperta, setAperta] = useState<string>("");          // commessa / fornitore / reparto aperto
   const [q, setQ] = useState("");
-  const [filtroStato, setFiltroStato] = useState<string>("");
+  const [filtroStato, setFiltroStato] = useState<string[]>([]);
   const [soloRitardi, setSoloRitardi] = useState(false);
   const [soloRipetuti, setSoloRipetuti] = useState(false);
   const [nascoste, setNascoste] = useState(false);
@@ -96,10 +137,10 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
   const [colori, setColori] = useState<Record<string, string>>({});
   const [ops, setOps] = useState<Map<string, OpSam[]>>(new Map());
   const [distinte, setDistinte] = useState<Record<string, { op: string; righe: [string, string, number | null][] }>>({});
-  const [filtroComm, setFiltroComm] = useState("");
-  const [filtroForn, setFiltroForn] = useState("");
-  const [filtroPers, setFiltroPers] = useState("");
-  const [lista, setLista] = useState("");
+  const [filtroComm, setFiltroComm] = useState<string[]>([]);
+  const [filtroForn, setFiltroForn] = useState<string[]>([]);
+  const [filtroPers, setFiltroPers] = useState<string[]>([]);
+  const [liste, setListe] = useState<string[]>([]);
 
   async function carica() {
     const tutte: Mancante[] = [];
@@ -210,11 +251,14 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
     gruppi: { l: "Gruppi 21.5… senza figli nel file", f: (m) => gruppo(m.codice) && !figliDi(m).length },
   };
   const base = aperti.filter((m) => visibileComm(m.commessa));
-  const filtrati = base.filter((m) => trova(m, q) && (!filtroStato || stDi(m) === filtroStato) && (!soloRitardi || ritDi(m)) && (!soloRipetuti || ripetuto(m))
-    && (!filtroComm || m.commessa === filtroComm) && (!filtroForn || fornitoriDi(m).includes(filtroForn))
-    && (!filtroPers || (filtroPers === "-" ? !personaDi(m) : personaDi(m) === filtroPers)) && (!lista || !LISTE[lista] || LISTE[lista].f(m)));
-  const filtroAttivo = !!(q || filtroStato || soloRitardi || soloRipetuti || filtroComm || filtroForn || filtroPers || lista);
-  const nomeLista = () => ["Mancanti", lista && LISTE[lista]?.l, filtroComm, filtroForn, filtroPers && (filtroPers === "-" ? "senza persona" : nomeDi(filtroPers)), filtroStato && nomeStato(filtroStato)].filter(Boolean).join(" - ");
+  // dentro lo stesso filtro le scelte valgono in «oppure» (questo fornitore o quell'altro), tra filtri diversi in «e»
+  const filtrati = base.filter((m) => trova(m, q) && (!filtroStato.length || filtroStato.includes(stDi(m))) && (!soloRitardi || ritDi(m)) && (!soloRipetuti || ripetuto(m))
+    && (!filtroComm.length || filtroComm.includes(m.commessa)) && (!filtroForn.length || fornitoriDi(m).some((f) => filtroForn.includes(f)))
+    && (!filtroPers.length || filtroPers.includes(personaDi(m) || "-")) && (!liste.length || liste.some((k) => LISTE[k]?.f(m))));
+  const filtroAttivo = !!(q || filtroStato.length || soloRitardi || soloRipetuti || filtroComm.length || filtroForn.length || filtroPers.length || liste.length);
+  const elenco = (L: string[], tanti: string, f: (v: string) => string = (v) => v) => (L.length > 3 ? `${L.length} ${tanti}` : L.map(f).join(", "));
+  const nomeLista = () => ["Mancanti", elenco(liste, "liste", (k) => LISTE[k]?.l || k), elenco(filtroComm, "commesse"), elenco(filtroForn, "fornitori"),
+    elenco(filtroPers, "persone", (p) => (p === "-" ? "senza persona" : nomeDi(p))), elenco(filtroStato, "stati", (x) => nomeStato(x))].filter(Boolean).join(" - ");
   const segnoFigli = (m: Mancante) => {
     if (!assieme(m.codice)) return null;
     const F = figliDi(m), o = opDi(m), d = distinte[m.matricola + "|" + m.codice];
@@ -314,7 +358,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
       .map(([header, width]) => ({ header: String(header), width: Number(width) }));
     ws.getRow(1).font = { bold: true };
     const nomeP = Object.fromEntries(persone.map((p) => [p.id, p.nome]));
-    const ordinati = lista === "sollecitare" ? [...L].sort((a, b) => (a.fornitore || "~").localeCompare(b.fornitore || "~") || (attesa(a) || "9999").localeCompare(attesa(b) || "9999")) : L;
+    const ordinati = liste.includes("sollecitare") || filtroForn.length ? [...L].sort((a, b) => (a.fornitore || "~").localeCompare(b.fornitore || "~") || (attesa(a) || "9999").localeCompare(attesa(b) || "9999")) : L;
     for (const m of ordinati) {
       const rit = ritDi(m), mo = montaggioDi(m), o = opDi(m), f = faseDi(m), F = assieme(m.codice) ? figliDi(m) : null;
       const row = ws.addRow([m.commessa, clienteDi(m.commessa), mo ? new Date(mo + "T12:00:00") : "", m.matricola, m.macchina, m.op, m.op_descr, m.codice, m.descr, m.qta, m.giac_mp,
@@ -369,7 +413,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
 
   // ---------- viste ----------
   const commesse = [...new Set(aperti.map((m) => m.commessa))].filter(visibileComm)
-    .filter((c) => !filtroComm || c === filtroComm)
+    .filter((c) => !filtroComm.length || filtroComm.includes(c))
     .sort((a, b) => (montaggioComm(a) || "9999").localeCompare(montaggioComm(b) || "9999") || ordComm(b).localeCompare(ordComm(a)));
   const raggruppa = (L: Mancante[], k: (m: Mancante) => string) => { const g = new Map<string, Mancante[]>(); L.forEach((m) => g.set(k(m), [...(g.get(k(m)) || []), m])); return [...g.entries()]; };
 
@@ -382,7 +426,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
           if (!L.length && filtroAttivo) return null;
           const rit = tutti.filter((m) => ritDi(m)).length, prel = righe.filter((m) => !m.aperto && m.commessa === c).length;
           const macchine = [...new Set(tutti.map((m) => m.macchina || m.matricola))];
-          const ap = aperta === c || filtroComm === c;
+          const ap = aperta === c || (filtroComm.length === 1 && filtroComm[0] === c);
           return (
             <section key={c} className={"box carta" + (ap ? " aperta" : "") + (C?.nascosta ? " nasc" : "")}>
               <div className="testa" onClick={() => setAperta(ap ? "" : c)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") setAperta(ap ? "" : c); }} aria-expanded={ap}>
@@ -514,15 +558,19 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
           {([["commesse", "Per commessa"], ["fornitori", "Per fornitore"], ["reparti", "Per reparto"], ["prelevati", "Prelevati"], ["assegnazioni", "Assegnazioni e colori"]] as const).map(([k, l]) => <button key={k} role="tab" aria-selected={vista === k} aria-pressed={vista === k} onClick={() => { setVista(k); setAperta(""); }}>{l}</button>)}
         </div>
         <div className="row filtri" style={{ gap: 8, flexWrap: "wrap" }}>
-          <select value={lista} onChange={(e) => setLista(e.target.value)} aria-label="Lista" className={lista ? "on" : ""}><option value="">Liste pronte…</option>{Object.entries(LISTE).map(([k, x]) => <option key={k} value={k}>{x.l} ({base.filter(x.f).length})</option>)}</select>
-          <select value={filtroComm} onChange={(e) => { setFiltroComm(e.target.value); setAperta(""); }} aria-label="Commessa" className={filtroComm ? "on" : ""}><option value="">Tutte le commesse</option>{[...new Set(base.map((m) => m.commessa))].sort((a, b) => (montaggioComm(a) || "9999").localeCompare(montaggioComm(b) || "9999") || ordComm(b).localeCompare(ordComm(a))).map((c) => <option key={c} value={c}>{c}{clienteDi(c) ? " · " + clienteDi(c) : ""}{montaggioComm(c) ? " · mont. " + fd(montaggioComm(c)) : ""}</option>)}</select>
-          <select value={filtroForn} onChange={(e) => setFiltroForn(e.target.value)} aria-label="Fornitore" className={filtroForn ? "on" : ""} style={{ maxWidth: 240 }}><option value="">Tutti i fornitori</option>{(() => { const c = new Map<string, number>(); base.forEach((m) => fornitoriDi(m).forEach((f) => c.set(f, (c.get(f) || 0) + 1))); return [...c.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([f, n]) => <option key={f} value={f}>{f} ({n})</option>); })()}</select>
-          <select value={filtroPers} onChange={(e) => setFiltroPers(e.target.value)} aria-label="Chi lo segue" className={filtroPers ? "on" : ""}><option value="">Seguiti da tutti</option>{persone.map((p) => <option key={p.id} value={p.id}>{p.nome} ({base.filter((m) => personaDi(m) === p.id).length})</option>)}<option value="-">— nessuno ({base.filter((m) => !personaDi(m)).length})</option></select>
-          {filtroAttivo && <button type="button" className="btn sec" onClick={() => { setQ(""); setFiltroStato(""); setSoloRitardi(false); setSoloRipetuti(false); setFiltroComm(""); setFiltroForn(""); setFiltroPers(""); setLista(""); }}>Togli filtri</button>}
+          <Multi etichetta="Liste" tutti="Liste pronte…" largo voci={Object.entries(LISTE).map(([k, x]) => ({ v: k, l: x.l, n: base.filter(x.f).length }))} scelti={liste} cambia={setListe} />
+          <Multi etichetta="Commesse" tutti="Tutte le commesse" largo scelti={filtroComm} cambia={(v) => { setFiltroComm(v); setAperta(""); }}
+            voci={[...new Set(base.map((m) => m.commessa))].sort((a, b) => (montaggioComm(a) || "9999").localeCompare(montaggioComm(b) || "9999") || ordComm(b).localeCompare(ordComm(a)))
+              .map((c) => ({ v: c, l: c + (clienteDi(c) ? " · " + clienteDi(c) : "") + (montaggioComm(c) ? " · mont. " + fd(montaggioComm(c)) : ""), n: base.filter((m) => m.commessa === c).length }))} />
+          <Multi etichetta="Fornitori" tutti="Tutti i fornitori" largo scelti={filtroForn} cambia={setFiltroForn}
+            voci={(() => { const c = new Map<string, number>(); base.forEach((m) => fornitoriDi(m).forEach((f) => c.set(f, (c.get(f) || 0) + 1))); return [...c.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([f, n]) => ({ v: f, l: f, n })); })()} />
+          <Multi etichetta="Seguiti da" tutti="Seguiti da tutti" scelti={filtroPers} cambia={setFiltroPers}
+            voci={[...persone.map((p) => ({ v: p.id, l: p.nome, n: base.filter((m) => personaDi(m) === p.id).length })), { v: "-", l: "— nessuno", n: base.filter((m) => !personaDi(m)).length }]} />
+          {filtroAttivo && <button type="button" className="btn sec" onClick={() => { setQ(""); setFiltroStato([]); setSoloRitardi(false); setSoloRipetuti(false); setFiltroComm([]); setFiltroForn([]); setFiltroPers([]); setListe([]); }}>Togli filtri</button>}
         </div>
         <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
           <input type="search" placeholder="Cerca codice, descrizione, fornitore, OA, nota…" value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: "1 1 260px" }} aria-label="Cerca" />
-          <select value={filtroStato} onChange={(e) => setFiltroStato(e.target.value)} aria-label="Stato"><option value="">Tutti gli stati</option>{STATI.map(([k, l]) => <option key={k} value={k}>{l} ({aperti.filter((m) => visibileComm(m.commessa) && stDi(m) === k).length})</option>)}</select>
+          <Multi etichetta="Stati" tutti="Tutti gli stati" scelti={filtroStato} cambia={setFiltroStato} voci={STATI.map(([k, l]) => ({ v: k, l, n: base.filter((m) => stDi(m) === k).length }))} />
           <label className="ck"><input type="checkbox" checked={soloRitardi} onChange={(e) => setSoloRitardi(e.target.checked)} /> Solo in ritardo</label>
           <label className="ck" title="Codici mancanti su più righe della stessa commessa o su più commesse"><input type="checkbox" checked={soloRipetuti} onChange={(e) => setSoloRipetuti(e.target.checked)} /> Solo codici ripetuti</label>
           <label className="ck"><input type="checkbox" checked={nascoste} onChange={(e) => setNascoste(e.target.checked)} /> Anche commesse fuori dal Piano produzione o tolte dal quadro</label>
