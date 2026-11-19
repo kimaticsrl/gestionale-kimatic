@@ -116,10 +116,11 @@ export async function preparaPlanning(sb: SupabaseClient, oggiS: string) {
 
   // la giornata di una persona: assenza, attività del planning e fasi in corso
   const giornata = (pid: string, d: number): { assente: boolean; voci: Voce[] } => {
-    const per = P.get(pid), n = ag.get(`${pid}|${d}`) as { b?: unknown; k?: string; t?: string; h1?: string; h2?: string; ore?: number; st?: string; a?: { c?: string; f?: string; h?: number }[] } | undefined;
+    const per = P.get(pid), n = ag.get(`${pid}|${d}`) as { b?: unknown; k?: string; t?: string; h1?: string; h2?: string; ore?: number; pa?: number; st?: string; a?: { c?: string; f?: string; h?: number }[] } | undefined;
     if (per?.att === false || (per?.fine && d2n(per.fine) != null && d > d2n(per.fine)!)) return { assente: true, voci: [] };
     if (n?.b && ASSENZE.includes(n.k || "")) return { assente: true, voci: [] };
     const voci: Voce[] = [];
+    if (n && !n.b && +(n.pa || 0) > 0) voci.push({ testo: `Assente ${String(n.pa).replace(".", ",")} h${n.h1 ? " (" + n.h1 + (n.h2 ? "–" + n.h2 : "") + ")" : ""}` });
     if (n?.b) voci.push({ testo: `${n.k || "Impegno"}${n.t ? ": " + n.t : ""} (giornata intera)` });
     else if (n && (n.st === "c" || n.st === "d") && (n.t || n.h1)) voci.push({ testo: `${n.h1 ? n.h1 + (n.h2 ? "–" + n.h2 : "") + " " : ""}${n.t || "Attività"}${+(n.ore || 0) > 0 ? " · " + String(n.ore).replace(".", ",") + " h" : ""}${n.st === "d" ? " (da confermare)" : ""}` });
     // ore scritte a mano su una commessa (senza fase: quelle con la fase sono già tra le fasi)
