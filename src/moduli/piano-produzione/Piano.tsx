@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { creaClaude } from "@/moduli/offerte-bmtek/shim";
 
-type Utente = { id: string; nome: string; email: string };
+type Utente = { id: string; nome: string; email: string; admin?: boolean };
 type Snap = { docs: { id: string; data: () => Record<string, unknown> }[] };
 type Db = {
   collection: (c: string) => { onSnapshot: (ok: (s: Snap) => void, err?: (e: unknown) => void) => () => void } & Record<string, unknown>;
@@ -52,6 +52,8 @@ export default function Piano({ livello, utente, ruoli, soloCliente = false, sch
       soloCliente,
       nome: utente.nome,
       pianifica,
+      // organigramma: solo direzione e amministratori del gestionale
+      direzione: !!utente.admin || ruoli.includes("direzione"),
       persona: "",
       // Anagrafica clienti del gestionale (lettura per tutti gli utenti attivi)
       clienti: async () => {
