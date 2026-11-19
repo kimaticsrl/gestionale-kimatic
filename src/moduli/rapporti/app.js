@@ -32,10 +32,10 @@ const conMail=r=>{const m=r.cli&&(r.cli.email||(S.clienti[r.cli.id]||{}).email);
 const LINGUE=[['IT','Italiano'],['EN','Inglese'],['FR','Francese'],['ES','Spagnolo']];
 /* testi che legge il cliente al momento della firma */
 const FIRMA={
-  IT:{testo:"Mostra al cliente il riepilogo (puoi aprire l'anteprima PDF). Con la firma il cliente accetta senza riserve i lavori eseguiti; il servizio sarà fatturato a fine mese.",tec:'Nome del tecnico che firma',cli:'Nome e cognome di chi firma per il cliente',canc:'Cancella'},
-  EN:{testo:'Please check the summary (the PDF preview is available). By signing, the customer accepts the performed jobs without reservations; the service will be invoiced at the end of the month.',tec:'Name of the technician signing',cli:'Full name of the person signing for the customer',canc:'Clear'},
-  FR:{testo:"Veuillez vérifier le récapitulatif (l'aperçu PDF est disponible). Par sa signature, le client accepte sans réserve les travaux effectués ; le service sera facturé à la fin du mois.",tec:'Nom du technicien qui signe',cli:'Nom et prénom du signataire pour le client',canc:'Effacer'},
-  ES:{testo:'Revise el resumen (puede abrir la vista previa en PDF). Con su firma, el cliente acepta sin reservas los trabajos realizados; el servicio se facturará a final de mes.',tec:'Nombre del técnico que firma',cli:'Nombre y apellidos de quien firma por el cliente',canc:'Borrar'},
+  IT:{testo:"Mostra al cliente il riepilogo (puoi aprire l'anteprima PDF). Con la firma il cliente accetta senza riserve i lavori eseguiti; il servizio sarà fatturato a fine mese. Il rapporto verrà aggiornato con il viaggio di ritorno dopo la partenza dal cliente.",tec:'Nome del tecnico che firma',cli:'Nome e cognome di chi firma per il cliente',canc:'Cancella'},
+  EN:{testo:'Please check the summary (the PDF preview is available). By signing, the customer accepts the performed jobs without reservations; the service will be invoiced at the end of the month. The report will be updated with the return trip after leaving the customer.',tec:'Name of the technician signing',cli:'Full name of the person signing for the customer',canc:'Clear'},
+  FR:{testo:"Veuillez vérifier le récapitulatif (l'aperçu PDF est disponible). Par sa signature, le client accepte sans réserve les travaux effectués ; le service sera facturé à la fin du mois. Le rapport sera mis à jour avec le voyage de retour après le départ de chez le client.",tec:'Nom du technicien qui signe',cli:'Nom et prénom du signataire pour le client',canc:'Effacer'},
+  ES:{testo:'Revise el resumen (puede abrir la vista previa en PDF). Con su firma, el cliente acepta sin reservas los trabajos realizados; el servicio se facturará a final de mes. El informe se actualizará con el viaje de regreso tras la salida del cliente.',tec:'Nombre del técnico que firma',cli:'Nombre y apellidos de quien firma por el cliente',canc:'Borrar'},
 };
 /* lingua del modulo proposta dal cliente: quella dell'anagrafica, altrimenti dal paese */
 function linguaCli(c){
@@ -79,7 +79,12 @@ const range=r=>{const d=(r.giorni||[]).map(g=>g.d).filter(Boolean).sort();return
 
 /* ---------- impronta per riconoscere modifiche dopo la firma ---------- */
 const canon=v=>Array.isArray(v)?'['+v.map(canon).join(',')+']':(v&&typeof v==='object')?'{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canon(v[k])).join(',')+'}':JSON.stringify(v??null);
-const content=r=>({num:r.num,tipo:r.tipo,cli:r.cli,matr:r.matr,macDesc:r.macDesc,oreMac:r.oreMac,sacchi:r.sacchi,tecnici:r.tecnici,giorni:r.giorni,ric:r.ric,note:r.note,...(r.lingua?{lingua:r.lingua}:{}),firma:{cli:r.firma&&r.firma.cli,cliNome:r.firma&&r.firma.cliNome,tec:r.firma&&r.firma.tec,tecNome:r.firma&&r.firma.tecNome,ts:r.firma&&r.firma.ts}});
+/* ultima giornata (data più recente): il suo viaggio di ritorno si compila dopo la firma */
+const ultimoG=r=>{const L=r.giorni||[];let k=-1;L.forEach((g,i)=>{if(k<0||String(g.d||'')>=String(L[k].d||''))k=i});return k};
+const senzaRitorno=r=>{const k=ultimoG(r);return (r.giorni||[]).map((g,i)=>i===k?Object.assign({},g,{vr:null}):g)};
+/* dopo la firma, finché non è fatturato, si può ancora compilare il viaggio di ritorno dell'ultima giornata */
+const ritornoAperto=k=>{if(!CUR||!locked()||!CAN_EDIT||!CUR.firma.v||S.fatture[CUR.id])return false;const m=/^giorni\.(\d+)\.vr(\.|$)/.exec(k||'');return !!m&&+m[1]===ultimoG(CUR)};
+const content=r=>({num:r.num,tipo:r.tipo,cli:r.cli,matr:r.matr,macDesc:r.macDesc,oreMac:r.oreMac,sacchi:r.sacchi,tecnici:r.tecnici,giorni:r.firma&&r.firma.v>=2?senzaRitorno(r):r.giorni,ric:r.ric,note:r.note,...(r.lingua?{lingua:r.lingua}:{}),firma:{cli:r.firma&&r.firma.cli,cliNome:r.firma&&r.firma.cliNome,tec:r.firma&&r.firma.tec,tecNome:r.firma&&r.firma.tecNome,ts:r.firma&&r.firma.ts}});
 async function digest(r){if(!(window.crypto&&crypto.subtle))return'';const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canon(content(r))));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
 const INTEG={};
 async function checkInteg(r){if(!r.firma||!r.firma.hash)return;const h=await digest(r);if(!h)return;const ok=h===r.firma.hash;if(INTEG[r.id]!==ok){INTEG[r.id]=ok;render()}}
@@ -141,7 +146,7 @@ function macOpts(){const c=S.clienti[CUR.cli.id];if(!c)return'';return (c.commes
 function vEdit(){
   const r=CUR,lk=locked(),ro=lk||!CAN_EDIT,dis=ro?' disabled':'',t=RI.totals(r),st=stato(r);
   const head=`<div class="top"><button type="button" data-act="back">← Interventi</button><h2>${esc(r.cli.nome||'Nuovo intervento')}</h2><span class="mono" style="color:var(--mut)">${esc(r.num)}${/^P-/.test(r.num||'')?' <small>(provvisorio: il numero definitivo arriva alla firma)</small>':''}</span>${pill(r)}<span class="sp"></span>${(r.giorni||[]).length?`<button type="button" data-act="orepdf">Report ore (PDF)</button>`:''}${lk?`<button type="button" data-act="invia">Invia al cliente</button><button type="button" class="pri" data-act="pdf">Scarica PDF</button>`:''}</div>`;
-  const ban=st==='dafatt'?`<div class="banner warn"><b>Firmato dal cliente il ${RI.fd(r.firma.ts.slice(0,10))} alle ${r.firma.ts.slice(11,16)}.</b> È nella coda «Da fatturare». Il rapporto ora è in sola lettura.${INTEG[r.id]===false?' <b>Attenzione: il contenuto è stato modificato dopo la firma.</b>':''}${ADMIN?' <span class="sp"></span><button type="button" class="sm dng" data-act="riapri">Riapri e annulla la firma</button>':''}</div>`
+  const ban=st==='dafatt'?`<div class="banner warn"><b>Firmato dal cliente il ${RI.fd(r.firma.ts.slice(0,10))} alle ${r.firma.ts.slice(11,16)}.</b> È nella coda «Da fatturare». Il rapporto ora è in sola lettura${r.firma.v&&CAN_EDIT?', tranne il viaggio di ritorno dell\'ultima giornata, da compilare alla partenza dal cliente':''}.${INTEG[r.id]===false?' <b>Attenzione: il contenuto è stato modificato dopo la firma.</b>':''}${ADMIN?' <span class="sp"></span><button type="button" class="sm dng" data-act="riapri">Riapri e annulla la firma</button>':''}</div>`
     :st==='fatturato'?`<div class="banner ok"><b>Fatturato</b>${S.fatture[r.id].nf?' · fattura '+esc(S.fatture[r.id].nf):''}${S.fatture[r.id].df?' del '+RI.fd(S.fatture[r.id].df):''}</div>`:'';
   const dati=`<section class="panel"><h2>Dati intervento</h2>
    <div class="seg" role="radiogroup" aria-label="Tipo di intervento"><label><input type="radio" name="tipo" value="man" data-k="tipo" ${r.tipo!=='inst'?'checked':''}${dis}> MANUTENZIONE</label><label><input type="radio" name="tipo" value="inst" data-k="tipo" ${r.tipo==='inst'?'checked':''}${dis}> INSTALLAZIONE</label></div>
@@ -170,7 +175,7 @@ function vEdit(){
   let fir;
   if(lk){fir=`<section class="panel"><h2>Firme</h2>${sum}<div class="sigw" style="margin-top:12px"><div class="sig"><span class="lab">Firma del tecnico · ${esc(r.firma.tecNome)}</span><img src="${r.firma.tec}" alt="Firma del tecnico"></div><div class="sig"><span class="lab">Firma del cliente · ${esc(r.firma.cliNome)}</span><img src="${r.firma.cli}" alt="Firma del cliente"></div></div><p class="note">Impronta del rapporto: <span class="mono">${esc(r.firma.hash.slice(0,16))}…</span> ${INTEG[r.id]===true?'· contenuto integro':INTEG[r.id]===false?'· <b style="color:var(--bad)">contenuto modificato dopo la firma</b>':''}</p></section>`}
   else if(!CAN_EDIT){fir=`<section class="panel"><h2>Riepilogo</h2>${sum}<p class="note">Rapporto non ancora firmato dal cliente. Hai accesso in sola lettura.</p></section>`}
-  else if(!UI.sign){fir=`<section class="panel"><h2>Chiusura intervento</h2>${sum}<div class="row" style="margin-top:12px"><button type="button" class="pri" data-act="firma">Chiudi l'intervento e fai firmare il cliente</button><button type="button" data-act="anteprima">Anteprima PDF</button></div><p class="note">Dopo la firma il rapporto non si può più modificare e passa in fatturazione.</p></section>`}
+  else if(!UI.sign){fir=`<section class="panel"><h2>Chiusura intervento</h2>${sum}<div class="row" style="margin-top:12px"><button type="button" class="pri" data-act="firma">Chiudi l'intervento e fai firmare il cliente</button><button type="button" data-act="anteprima">Anteprima PDF</button></div><p class="note">Dopo la firma il rapporto non si può più modificare e passa in fatturazione. Resta da compilare solo il viaggio di ritorno, alla partenza dal cliente.</p></section>`}
   else{const miss=[];if(!r.cli.nome)miss.push('la ragione sociale');if(!(r.giorni||[]).length)miss.push('almeno una giornata');if(!r.tecnici)miss.push('il nome dei tecnici');
    fir=`<section class="panel confirm"><h2 style="color:var(--fg);margin:0">Firma del rapporto</h2>${sum}
     ${miss.length?`<div class="banner warn">Prima della firma manca ${miss.join(', ')}.</div>`:''}
@@ -188,7 +193,7 @@ function vDay(g,i,dis){
    <div class="blk"><b>Lavoro presso il cliente</b><div class="fasce">${ft}</div>${lk?'':`<div class="row"><button type="button" class="sm" data-addf="${i}">+ Fascia oraria</button></div>`}
     <div class="g"><label>Nr. tecnici<input id="d${i}nt" type="number" min="1" data-k="giorni.${i}.nt" value="${esc(g.nt)}"${dis}></label><label class="chk" style="align-self:end;padding-bottom:8px"><input id="d${i}g" type="checkbox" data-k="giorni.${i}.gar" ${g.gar?'checked':''}${dis}> Intervento in garanzia</label></div>
     <div class="calc" id="calc${i}">${calcTxt(g)}</div></div>
-   ${vViaggio(g,i,'vr','Viaggio di ritorno',dis)}
+   ${ritornoAperto('giorni.'+i+'.vr')?vViaggio(g,i,'vr','Viaggio di ritorno <small>· da compilare alla partenza dal cliente</small>',''):vViaggio(g,i,'vr','Viaggio di ritorno',dis)}
    <div class="blk"><label class="chk" style="margin-top:8px"><input id="d${i}nf" type="checkbox" data-k="giorni.${i}.notte" ${RI.notte(CUR,g)?'checked':''}${dis}> Notte fuori sede (indennità di trasferta)${g.notte==null?' <span class="note">· proposta automatica</span>':''}</label></div>
    <div class="blk"><b>Training</b><div class="g"><label>Dalle<input id="d${i}ta" type="time" data-k="giorni.${i}.tr.da" value="${esc(tr.da)}"${dis}></label><label>Alle<input id="d${i}tb" type="time" data-k="giorni.${i}.tr.a" value="${esc(tr.a)}"${dis}></label><label class="w2">Nome partecipante<input id="d${i}tn" data-k="giorni.${i}.tr.nome" value="${esc(tr.nome)}"${dis}></label></div></div>
    <div class="blk"><b>Attività svolte</b><textarea id="d${i}at" data-k="giorni.${i}.att" placeholder="Cosa è stato fatto oggi, problemi trovati, prove eseguite"${dis}>${esc(g.att)}</textarea></div></div>`;
@@ -238,7 +243,7 @@ function onField(e){
   if(el.dataset.fk&&UI.fatt){UI.fatt[el.dataset.fk]=el.value;return}
   if(el.dataset.ak&&UI.add){if(e.type==='change')salvaAddebito(UI.add,el.dataset.ak,el.type==='checkbox'?el.checked:el.value);return}
   if(el.dataset.lk){if(e.type==='change')salvaListino(el.dataset.lk,el.value);return}
-  if(!CUR||!el.dataset.k||locked()||!CAN_EDIT)return;
+  if(!CUR||!el.dataset.k||((locked()||!CAN_EDIT)&&!ritornoAperto(el.dataset.k)))return;
   const k=el.dataset.k,v=el.type==='checkbox'?el.checked:el.value;
   if(el.type==='radio'&&!el.checked)return;
   setK(CUR,k,v);
@@ -266,7 +271,7 @@ ROOT.addEventListener('click',async e=>{
   if(d.opencli){UI.cli=d.opencli;UI.cliEdit=null;saveUI();render();return}
   if(d.fatt){UI.fatt={id:d.fatt,nf:'',df:today(),note:''};render();return}
   if(d.add){UI.add=UI.add===d.add?null:d.add;UI.lst=false;render();if(UI.add){const p=ROOT.querySelector('#addebito');if(p)p.scrollIntoView({behavior:'smooth',block:'start'})}return}
-  if((locked()||!CAN_EDIT)&&CUR&&(d.addf||d.delf||d.delday||d.delric||d.ora||d.km)){return}
+  if((locked()||!CAN_EDIT)&&CUR&&(d.addf||d.delf||d.delday||d.delric||d.ora||d.km)&&!ritornoAperto(d.ora||d.km)){return}
   if(d.ora&&CUR){adesso(d.ora);const m=/^(giorni\.\d+\.(?:v|vr))\.da$/.exec(d.ora);if(m){const g=CUR.giorni[+d.ora.split('.')[1]],v=g[d.ora.split('.')[2]]||{};if(!v.km)calcolaKm(m[1],true)}queueSave();render();return}
   if(d.km&&CUR){calcolaKm(d.km);return}
   if(d.addf){const g=CUR.giorni[+d.addf];const last=(g.f||[]).slice(-1)[0];(g.f??=[]).push({da:last&&last.a?last.a:'',a:''});queueSave();render();return}
@@ -335,7 +340,7 @@ async function doSign(b){
       if(!/PGRST202|numero_rapporto|Could not find the function/i.test(m)){b.disabled=false;toast('Non riesco ad assegnare il numero: '+m);return}}
   }
   const now=new Date(),ts=new Date(now.getTime()-now.getTimezoneOffset()*6e4).toISOString().slice(0,19);
-  CUR.firma={cli,cliNome:cn,tec,tecNome:tn,ts,by:ME||''};
+  CUR.firma={cli,cliNome:cn,tec,tecNome:tn,ts,by:ME||'',v:2};
   CUR.firma.hash=await digest(CUR);
   DIRTY=true;await flush();
   if(DIRTY){b.disabled=false;toast('Firma non salvata: controlla la connessione e riprova');return}
