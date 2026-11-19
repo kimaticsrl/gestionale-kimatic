@@ -53,7 +53,7 @@ export function righeReport(rapporti, da, a, paeseDi) {
     for (const g of r.giorni || []) {
       if (!g.d || g.d < da || g.d > a) continue;
       const s = RI.split(g), nt = Math.max(1, +g.nt || 1), vv = RI.viaggi(g).filter((v) => v.da || v.a || v.km);
-      const viaggio = vv.reduce((t, v) => t + RI.DURV(v), 0), km = vv.reduce((t, v) => t + (+v.km || 0), 0), tr = g.tr || {}, training = RI.DUR(tr.da, tr.a);
+      const viaggio = vv.reduce((t, v) => t + RI.DURV(v), 0), km = vv.reduce((t, v) => t + (+v.km || 0), 0), tr = g.tr || {}, training = RI.Q(RI.DUR(tr.da, tr.a));
       const vnt = vv.length ? Math.max(...vv.map((v) => Math.max(1, +v.nt || 1))) : nt;
       const notte = RI.notte(r, g);
       const n = RI.d2n(g.d), dw = RI.dow(n), fest = festivo(g.d);

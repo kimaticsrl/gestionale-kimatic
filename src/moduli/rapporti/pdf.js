@@ -13,10 +13,12 @@ export const RI = (function () {
   const DUR = (a, b) => { a = tm(a); b = tm(b); if (a == null || b == null) return 0; let d = b - a; if (d < 0) d += 1440; return d; };
   /* durata di un viaggio: se partenza e arrivo sono stati presi col tasto «Adesso» in fusi diversi,
      tiene conto della differenza di fuso (daOff / aOff = minuti rispetto a UTC) */
+  /* le ore del rapporto si contano a scaglioni di 15 minuti, arrotondando per eccesso */
+  const Q = (m) => (m > 0 ? Math.ceil(m / 15) * 15 : 0);
   const DURV = (v) => {
     v = v || {}; const a = tm(v.da), b = tm(v.a); if (a == null || b == null) return 0;
     let d = b - a; if (typeof v.daOff === 'number' && typeof v.aOff === 'number') d -= v.aOff - v.daOff;
-    while (d < 0) d += 1440; while (d >= 1440) d -= 1440; return d;
+    while (d < 0) d += 1440; while (d >= 1440) d -= 1440; return Q(d);
   };
   const viaggi = (g) => [g.v || {}, g.vr || {}];
 
@@ -32,7 +34,10 @@ export const RI = (function () {
       used += d;
     });
     const sum = r => r.reduce((s, x) => s + x[1] - x[0], 0);
-    return { ord, ext, tOrd: sum(ord), tExt: sum(ext), tot: used };
+    // lavoro della giornata arrotondato al quarto d'ora successivo: i minuti in più vanno alle ordinarie fino a 8 ore, poi alle extra
+    let tOrd = sum(ord), tExt = sum(ext); const tot = Q(used), add = tot - used, aOrd = Math.min(add, Math.max(0, 480 - tOrd));
+    tOrd += aOrd; tExt += add - aOrd;
+    return { ord, ext, tOrd, tExt, tot, reale: used };
   }
   function totals(r) {
     let ord = 0, ext = 0, ordU = 0, extU = 0, ordG = 0, extG = 0, km = 0, viaggio = 0, viaggioU = 0, training = 0;
@@ -41,7 +46,7 @@ export const RI = (function () {
       ord += s.tOrd; ext += s.tExt; ordU += s.tOrd * nt; extU += s.tExt * nt;
       if (g.gar) { ordG += s.tOrd * nt; extG += s.tExt * nt; }
       viaggi(g).forEach(v => { km += +v.km || 0; const vd = DURV(v); viaggio += vd; viaggioU += vd * Math.max(1, +v.nt || 1); });
-      const t = g.tr || {}; training += DUR(t.da, t.a);
+      const t = g.tr || {}; training += Q(DUR(t.da, t.a));
     });
     return { giorni: (r.giorni || []).length, ord, ext, ordU, extU, ordG, extG, km, viaggio, viaggioU, training, ricambi: (r.ric || []).filter(x => x.cod || x.des).length };
   }
@@ -278,5 +283,5 @@ export const RI = (function () {
     return (r.giorni || []).some(x => d2n(x.d) === n + 1);
   }
 
-  return { build, split, totals, notte, tm, hm, hrs, fd, d2n, n2s, dow, DUR, DURV, viaggi };
+  return { build, split, totals, notte, tm, hm, hrs, fd, d2n, n2s, dow, DUR, DURV, Q, viaggi };
 })();
