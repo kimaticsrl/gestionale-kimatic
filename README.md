@@ -63,6 +63,14 @@ Lettura automatica degli scontrini (`/api/scontrino`, Claude): con `ANTHROPIC_AP
 foto si compilano importo, valuta, data, esercente e categoria; le ultime cifre della carta lette sullo
 scontrino si confrontano con la carta aziendale.
 
+## Rapporti d'intervento: viaggio di ritorno
+
+Il cliente firma prima che il tecnico riparta, quindi il viaggio di ritorno si compila dopo la firma
+(il testo della firma e il PDF lo dicono al cliente). Il rapporto firmato resta bloccato: finché non è
+fatturato si può cambiare solo il viaggio di ritorno dell'ultima giornata, con la funzione
+`ritorno_rapporto` (migrazione 0059). Per i rapporti firmati da allora (`firma.v = 2`) il ritorno
+dell'ultima giornata è fuori dall'impronta SHA-256, quindi il controllo d'integrità resta valido.
+
 ## Mancanti montaggi
 
 Modulo **Mancanti montaggi** (migrazione 0048): i codici ancora da prelevare delle commesse, per commessa,
@@ -94,6 +102,7 @@ npm install
 npm run dev
 node scripts/test-schema.mjs supabase/migrations/0001_base.sql   # prova le regole di accesso
 node scripts/test-rapporti.mjs                                   # prova le regole dei Rapporti d'intervento
+node scripts/test-ritorno.mjs                                    # prova il viaggio di ritorno dopo la firma
 ```
 
 ## Moduli migrati

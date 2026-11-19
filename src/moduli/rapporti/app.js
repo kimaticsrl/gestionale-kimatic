@@ -69,7 +69,7 @@ const S={rapporti:{},clienti:{},fatture:{},listini:{},addebiti:{}};
 const UI={tab:'int',filt:'aperti',q:'',open:null,cli:null,cq:'',sign:false,cliEdit:null,fatt:null,add:null,lst:false};
 try{Object.assign(UI,JSON.parse(localStorage.getItem('ri_ui')||'{}'));UI.sign=false;UI.cliEdit=null;UI.fatt=null}catch(e){}
 const saveUI=()=>{try{localStorage.setItem('ri_ui',JSON.stringify({tab:UI.tab,filt:UI.filt,open:UI.open,cli:UI.cli}))}catch(e){}};
-let CUR=null,DIRTY=false,SAVING=false,ST=null;
+let CUR=null,DIRTY=false,SAVING=false,ST=null,RIT=false;
 
 /* ---------- stato del rapporto ---------- */
 const stato=r=>{if(!r.firma||!r.firma.ts)return'bozza';return S.fatture[r.id]?'fatturato':'dafatt'};
@@ -99,6 +99,14 @@ function newRap(){
 function queueSave(){DIRTY=true;setSync('Modifiche da salvare…');clearTimeout(ST);ST=setTimeout(flush,700)}
 async function flush(){
   if(!CUR||!db||SAVING||!DIRTY)return;SAVING=true;DIRTY=false;
+  /* rapporto firmato: si salva solo il viaggio di ritorno dell'ultima giornata, con la funzione del database */
+  if(RIT&&locked()){const k=ultimoG(CUR),vr=JSON.parse(JSON.stringify(CUR.giorni[k].vr||{}));
+    try{if(!CTX.ritornoRapporto)throw new Error('funzione non disponibile');await CTX.ritornoRapporto(CUR.id,k,vr);RIT=false;S.rapporti[CUR.id].giorni[k].vr=vr;setSync('Salvato '+new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}))}
+    catch(e){const m=String(e&&(e.message||e.code)||'');
+      if(/PGRST202|ritorno_rapporto|Could not find the function/i.test(m)){setSync('Non salvato');toast('Il database non è ancora aggiornato per il ritorno dopo la firma (migrazione 0059)')}
+      else if(/permesso|Non puoi|fatturato|ultima giornata|riaperto|non valido/i.test(m)){RIT=false;setSync('Non salvato');toast(m)}
+      else{DIRTY=true;setSync('Non salvato: controlla la connessione');toast('Salvataggio non riuscito. Riprovo appena torna la connessione.');setTimeout(flush,5000)}}
+    SAVING=false;if(DIRTY)flush();return}
   const r=Object.assign({},CUR,{agg:new Date().toISOString()});delete r.id;
   try{await db.doc('rapporti/'+CUR.id).set(JSON.parse(JSON.stringify(r)));setSync('Salvato '+new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}))}
   catch(e){DIRTY=true;setSync('Non salvato: controlla la connessione');toast('Salvataggio non riuscito. Riprovo appena torna la connessione.');setTimeout(flush,5000)}
@@ -224,7 +232,7 @@ async function calcolaKm(p,silenzioso){
   if(!(c.indirizzo||an.indirizzo)){if(!silenzioso)toast('Manca l\'indirizzo del cliente: inseriscilo nei dati del rapporto');return}
   try{
     if(!KM[ind]){const res=await fetch('/api/km?'+new URLSearchParams({indirizzo:ind,nome:c.nome||''}));const j=await res.json();if(!res.ok)throw new Error(j.errore||'non calcolati');KM[ind]=j}
-    const j=KM[ind];setK(CUR,p+'.km',String(j.km));setK(CUR,p+'.kmAuto',String(j.km));queueSave();render();
+    const j=KM[ind];if(locked())RIT=true;setK(CUR,p+'.km',String(j.km));setK(CUR,p+'.kmAuto',String(j.km));queueSave();render();
     if(!silenzioso)toast(`${j.km} km fino a: ${j.arrivo}`);
   }catch(e){if(!silenzioso)toast('Km non calcolati: '+(e&&e.message||'errore'))}
 }
@@ -246,7 +254,7 @@ function onField(e){
   if(!CUR||!el.dataset.k||((locked()||!CAN_EDIT)&&!ritornoAperto(el.dataset.k)))return;
   const k=el.dataset.k,v=el.type==='checkbox'?el.checked:el.value;
   if(el.type==='radio'&&!el.checked)return;
-  setK(CUR,k,v);
+  setK(CUR,k,v);if(locked())RIT=true;
   if(k==='cli.nome'&&e.type==='change'){const hit=Object.entries(S.clienti).find(([,c])=>c.nome.toLowerCase()===String(v).trim().toLowerCase());
     // cliente cambiato: indirizzo, referente e macchina del cliente precedente non valgono più
     const prima=CUR.cli.id||'',mDi=id=>{const c=S.clienti[id];return c?(c.commesse||[]).flatMap(x=>x.macchine||[]).some(m=>m.matr===CUR.matr):false};
@@ -272,7 +280,7 @@ ROOT.addEventListener('click',async e=>{
   if(d.fatt){UI.fatt={id:d.fatt,nf:'',df:today(),note:''};render();return}
   if(d.add){UI.add=UI.add===d.add?null:d.add;UI.lst=false;render();if(UI.add){const p=ROOT.querySelector('#addebito');if(p)p.scrollIntoView({behavior:'smooth',block:'start'})}return}
   if((locked()||!CAN_EDIT)&&CUR&&(d.addf||d.delf||d.delday||d.delric||d.ora||d.km)&&!ritornoAperto(d.ora||d.km)){return}
-  if(d.ora&&CUR){adesso(d.ora);const m=/^(giorni\.\d+\.(?:v|vr))\.da$/.exec(d.ora);if(m){const g=CUR.giorni[+d.ora.split('.')[1]],v=g[d.ora.split('.')[2]]||{};if(!v.km)calcolaKm(m[1],true)}queueSave();render();return}
+  if(d.ora&&CUR){if(locked())RIT=true;adesso(d.ora);const m=/^(giorni\.\d+\.(?:v|vr))\.da$/.exec(d.ora);if(m){const g=CUR.giorni[+d.ora.split('.')[1]],v=g[d.ora.split('.')[2]]||{};if(!v.km)calcolaKm(m[1],true)}queueSave();render();return}
   if(d.km&&CUR){calcolaKm(d.km);return}
   if(d.addf){const g=CUR.giorni[+d.addf];const last=(g.f||[]).slice(-1)[0];(g.f??=[]).push({da:last&&last.a?last.a:'',a:''});queueSave();render();return}
   if(d.delf){const[i,j]=d.delf.split('.').map(Number);CUR.giorni[i].f.splice(j,1);queueSave();render();return}

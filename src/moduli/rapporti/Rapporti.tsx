@@ -46,6 +46,11 @@ export default function Rapporti({ me, nome, modifica, gestisce, clienti }: Prop
           if (error) throw error;
           return data as string;
         },
+        // viaggio di ritorno dell'ultima giornata, compilato dopo la firma (migrazione 0059)
+        async ritornoRapporto(id: string, giorno: number, vr: unknown) {
+          const { error } = await sb.rpc("ritorno_rapporto", { p_id: id, p_giorno: giorno, p_vr: vr });
+          if (error) throw error;
+        },
         // note spese delle trasferte (per il «Da fatturare»: chi gestisce le note spese le vede tutte)
         async noteSpese() {
           const { noteSpesePerRapporti } = await import("@/moduli/note-spese/perRapporti");
