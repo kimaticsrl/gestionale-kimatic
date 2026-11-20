@@ -760,6 +760,7 @@ export default function Mancanti({ me, gestisce, modifica }: Props) {
         <div className="leg">{STATI.map(([k, l, d]) => <span key={k} title={d}><i className={"b-" + k} />{l}</span>)}<span><i className="b-rit" />in ritardo: data passata o dopo l&apos;inizio montaggio</span></div>
         {Object.keys(colori).length > 0 && <div className="leg">{colori.giacenti && <span><i style={{ background: colori.giacenti }} />giacenti disponibili</span>}{persone.filter((p) => colori[p.id]).map((p) => <span key={p.id}><i style={{ background: colori[p.id] }} />{p.nome}</span>)}</div>}
       </div>
+      {!carico && ult && <p className="agg-mancanti" title={`Origine: ${ult.origine || "—"} · ${ult.righe} righe`}>Ultimo aggiornamento dei mancanti: {new Date(ult.il).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>}
       {carico ? <p className="nota">Carico i mancanti…</p> : corpo}
     </div>
   );
